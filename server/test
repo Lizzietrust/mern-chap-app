@@ -1,0 +1,14 @@
+PORT=5000
+DATABASE_URL="mongodb+srv://ohidaelizabeth3:tkjFIlaLVGfmCi8P@cluster0.q0dqdxb.mongodb.net/"
+JWT_KEY=your-super-secret-jwt-key-change-this-in-production
+ORIGIN=http://localhost:5173
+
+# PORT=5000
+# JW_KEY="my_jw_key_99#$@*"
+# ORIGIN="http://localhost:5173"
+
+
+# tkjFIlaLVGfmCi8P
+# mongodb+srv://ohidaelizabeth3:tkjFIlaLVGfmCi8P@cluster0.q0dqdxb.mongodb.net/
+# https://downloads.mongodb.com/compass/mongodb-compass-1.46.5-darwin-arm64.dmg
+# mongodb+srv://ohidaelizabeth3:<db_password>@cluster0.q0dqdxb.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
