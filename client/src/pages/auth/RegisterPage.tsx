@@ -57,6 +57,9 @@ export function RegisterPage() {
       },
       {
         onSuccess: (response) => {
+          // Console log the response
+          console.log("Registration successful response:", response);
+
           // Convert server response to match our app's user format
           const userData = {
             id:
@@ -66,17 +69,27 @@ export function RegisterPage() {
             email: response.user.email,
           };
 
+          console.log("Processed user data:", userData);
+
           login(userData);
           success("Account created successfully!", "Welcome");
           navigate("/profile");
         },
         onError: (err) => {
           console.error("Registration error:", err);
-          
+
           // Handle specific error messages from server
-          if (err.message && err.message.includes("User with this email already exists")) {
-            error("An account with this email already exists. Please try logging in instead.");
-          } else if (err.message && err.message.includes("Server configuration error")) {
+          if (
+            err.message &&
+            err.message.includes("User with this email already exists")
+          ) {
+            error(
+              "An account with this email already exists. Please try logging in instead."
+            );
+          } else if (
+            err.message &&
+            err.message.includes("Server configuration error")
+          ) {
             error("Server is not properly configured. Please try again later.");
           } else {
             error("Registration failed. Please try again.");
