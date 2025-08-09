@@ -53,6 +53,41 @@
   outline-offset: 2px;
 }
 
+/* Animation classes for notifications */
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutToRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.animate-in {
+  animation: slideInFromRight 0.3s ease-out forwards;
+}
+
+.animate-out {
+  animation: slideOutToRight 0.3s ease-in forwards;
+}
+
+.slide-in-from-right-full {
+  transform: translateX(100%);
+}
+
 /* Custom button styles */
 .btn {
   padding: 0.5rem 1rem;
