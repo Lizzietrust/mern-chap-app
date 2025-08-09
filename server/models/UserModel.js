@@ -23,11 +23,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: false,
   },
-  color: {
-    type: Number,
-    required: false,
-  },
-  color: {
+  profileSetup: {
     type: Boolean,
     default: false,
   },
@@ -38,6 +34,10 @@ userSchema.pre("save", async function (next) {
   this.password = await bcrypt.hash(this.password, salt);
   next();
 });
+
+userSchema.methods.comparePassword = async function (candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.password);
+};
 
 const User = mongoose.model("Users", userSchema);
 
