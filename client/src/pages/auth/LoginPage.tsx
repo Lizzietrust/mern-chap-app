@@ -10,6 +10,9 @@ export function LoginPage() {
     email: "",
     password: "",
   });
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>(
+    {}
+  );
 
   const { login } = useApp();
   const { success, error } = useNotifications();
@@ -18,8 +21,31 @@ export function LoginPage() {
   const location = useLocation();
   const loginMutation = useLogin();
 
+  const validateForm = () => {
+    const newErrors: { email?: string; password?: string } = {};
+
+    if (!formData.email) {
+      newErrors.email = "Email is required";
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    } else if (formData.password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
 
     loginMutation.mutate(
       {
@@ -28,33 +54,60 @@ export function LoginPage() {
       },
       {
         onSuccess: (response) => {
+          console.log("Login successful response:", response);
+
           // Convert server response to match our app's user format
           const userData = {
             id: parseInt(response.user._id) || 1,
-            name: "Demo User", // We'll use a default name since server doesn't return it
+            name:
+              response.user.firstName && response.user.lastName
+                ? `${response.user.firstName} ${response.user.lastName}`
+                : response.user.email.split("@")[0], // Use email prefix as fallback name
             email: response.user.email,
           };
+
+          console.log("Processed user data:", userData);
 
           login(userData);
           success("Successfully logged in!", "Welcome back");
 
-          // Navigate to the intended destination or profile page
-          const from = location.state?.from?.pathname || "/profile";
-          navigate(from, { replace: true });
+          // Check if profile setup is needed
+          if (!response.user.profileSetup) {
+            // Redirect to profile setup page
+            navigate("/profile-setup", { replace: true });
+          } else {
+            // Navigate to the intended destination or profile page
+            const from = location.state?.from?.pathname || "/profile";
+            navigate(from, { replace: true });
+          }
         },
         onError: (err) => {
           console.error("Login error:", err);
-          error("Login failed. Please check your credentials.");
+          // Handle specific error messages from the server
+          const errorMessage =
+            err instanceof Error
+              ? err.message
+              : "Login failed. Please check your credentials.";
+          error(errorMessage);
         },
       }
     );
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value,
+      [name]: value,
     }));
+
+    // Clear error when user starts typing
+    if (errors[name as keyof typeof errors]) {
+      setErrors((prev) => ({
+        ...prev,
+        [name]: undefined,
+      }));
+    }
   };
 
   return (
@@ -115,6 +168,9 @@ export function LoginPage() {
                 }`}
                 placeholder="Enter your email"
               />
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-500">{errors.email}</p>
+              )}
             </div>
 
             <div>
@@ -139,6 +195,9 @@ export function LoginPage() {
                 }`}
                 placeholder="Enter your password"
               />
+              {errors.password && (
+                <p className="mt-1 text-sm text-red-500">{errors.password}</p>
+              )}
             </div>
           </div>
 
