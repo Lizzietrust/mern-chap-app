@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   authApi,
   type RegisterRequest,
@@ -41,12 +42,21 @@ export function useLogin() {
 // Hook to logout user
 export function useLogout() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   return useMutation({
     mutationFn: authApi.logout,
     onSuccess: () => {
       // Clear user data from cache
       queryClient.removeQueries({ queryKey: authKeys.user() });
+      // Redirect to login page
+      navigate("/login", { replace: true });
+    },
+    onError: (error) => {
+      console.error("Logout error:", error);
+      // Even if logout fails on server, clear local state
+      queryClient.removeQueries({ queryKey: authKeys.user() });
+      navigate("/login", { replace: true });
     },
   });
 }
