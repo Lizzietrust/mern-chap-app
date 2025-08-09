@@ -1,81 +1,120 @@
+import axios from "axios";
+import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+
 // Base API configuration
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
-// Generic API client
+// Create Axios instance with default configuration
+const axiosInstance: AxiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    "Content-Type": "application/json",
+  },
+  withCredentials: true, // For handling cookies/sessions
+});
+
+// Request interceptor for adding auth tokens
+axiosInstance.interceptors.request.use(
+  (config) => {
+    // You can add auth token here if needed
+    // const token = localStorage.getItem('token');
+    // if (token) {
+    //   config.headers.Authorization = `Bearer ${token}`;
+    // }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor for error handling
+axiosInstance.interceptors.response.use(
+  (response: AxiosResponse) => {
+    return response;
+  },
+  (error) => {
+    // Handle common errors
+    if (error.response) {
+      // Server responded with error status
+      const { status, data } = error.response;
+      const message = data?.message || `API Error: ${status}`;
+      throw new Error(message);
+    } else if (error.request) {
+      // Request was made but no response received
+      throw new Error("Network error: No response received");
+    } else {
+      // Something else happened
+      throw new Error(`Request error: ${error.message}`);
+    }
+  }
+);
+
+// Generic API client using Axios
 class ApiClient {
-  private baseURL: string;
+  private axiosInstance: AxiosInstance;
 
-  constructor(baseURL: string) {
-    this.baseURL = baseURL;
+  constructor(axiosInstance: AxiosInstance) {
+    this.axiosInstance = axiosInstance;
   }
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    config: AxiosRequestConfig = {}
   ): Promise<T> {
-    const url = `${this.baseURL}${endpoint}`;
-
-    const config: RequestInit = {
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-      ...options,
-    };
-
-    const response = await fetch(url, config);
-
-    if (!response.ok) {
-      // Try to parse error response
-      try {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.message ||
-            `API Error: ${response.status} ${response.statusText}`
-        );
-      } catch (parseError) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
-      }
-    }
-
-    return response.json();
+    const response = await this.axiosInstance.request<T>({
+      url: endpoint,
+      ...config,
+    });
+    return response.data;
   }
 
-  async get<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "GET" });
+  async get<T>(endpoint: string, config?: AxiosRequestConfig): Promise<T> {
+    return this.request<T>(endpoint, { ...config, method: "GET" });
   }
 
   async post<T>(
     endpoint: string,
     data?: any,
-    options?: RequestInit
+    config?: AxiosRequestConfig
   ): Promise<T> {
     return this.request<T>(endpoint, {
-      ...options,
+      ...config,
       method: "POST",
-      body: data ? JSON.stringify(data) : undefined,
+      data,
     });
   }
 
   async put<T>(
     endpoint: string,
     data?: any,
-    options?: RequestInit
+    config?: AxiosRequestConfig
   ): Promise<T> {
     return this.request<T>(endpoint, {
-      ...options,
+      ...config,
       method: "PUT",
-      body: data ? JSON.stringify(data) : undefined,
+      data,
     });
   }
 
-  async delete<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "DELETE" });
+  async delete<T>(endpoint: string, config?: AxiosRequestConfig): Promise<T> {
+    return this.request<T>(endpoint, { ...config, method: "DELETE" });
+  }
+
+  async patch<T>(
+    endpoint: string,
+    data?: any,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
+    return this.request<T>(endpoint, {
+      ...config,
+      method: "PATCH",
+      data,
+    });
   }
 }
 
-export const apiClient = new ApiClient(API_BASE_URL);
+export const apiClient = new ApiClient(axiosInstance);
 
 // Example API functions
 export interface User {
@@ -128,6 +167,8 @@ export interface AuthResponse {
   user: {
     _id: string;
     email: string;
+    firstName?: string;
+    lastName?: string;
     profileSetup: boolean;
   };
 }
@@ -140,3 +181,6 @@ export const authApi = {
     apiClient.post<AuthResponse>("/api/auth/login", data),
   logout: () => apiClient.post("/api/auth/logout"),
 };
+
+// Export axios instance for direct use if needed
+export { axiosInstance };
