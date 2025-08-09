@@ -2,15 +2,12 @@ import { Link, useLocation } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { ThemeToggle } from './ThemeToggle'
+import { LogoutButton } from './LogoutButton'
 
 export function Navigation() {
-  const { state, logout } = useApp()
+  const { state } = useApp()
   const { isDark } = useTheme()
   const location = useLocation()
-
-  const handleLogout = () => {
-    logout()
-  }
 
   const isActive = (path: string) => {
     return location.pathname === path
@@ -69,12 +66,7 @@ export function Navigation() {
               Welcome, {state.user?.name}
             </div>
             <ThemeToggle />
-            <button
-              onClick={handleLogout}
-              className="px-3 py-2 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-            >
-              Logout
-            </button>
+            <LogoutButton />
           </div>
         </div>
       </div>
