@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { LoginPage } from '../pages/auth/LoginPage'
 import { RegisterPage } from '../pages/auth/RegisterPage'
 import { ProfilePage } from '../pages/ProfilePage'
+import { ProfileSetupPage } from '../pages/ProfileSetupPage'
 import { ChatPage } from '../pages/ChatPage'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { useApp } from '../contexts/AppContext'
@@ -35,6 +36,14 @@ export function AppRouter() {
         />
 
         {/* Protected routes */}
+        <Route
+          path="/profile-setup"
+          element={
+            <ProtectedRoute>
+              <ProfileSetupPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/profile"
           element={
