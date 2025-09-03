@@ -169,7 +169,14 @@ export interface AuthResponse {
     email: string;
     firstName?: string;
     lastName?: string;
+    image?: string;
+    bio?: string;
+    phone?: string;
+    location?: string;
+    website?: string;
     profileSetup: boolean;
+    createdAt?: string;
+    updatedAt?: string;
   };
 }
 
@@ -180,6 +187,17 @@ export const authApi = {
   login: (data: LoginRequest) =>
     apiClient.post<AuthResponse>("/api/auth/login", data),
   logout: () => apiClient.post("/api/auth/logout"),
+  me: () => apiClient.get<AuthResponse>("/api/auth/user-info"),
+  updateProfile: (data: { 
+    firstName?: string; 
+    lastName?: string; 
+    image?: string;
+    bio?: string;
+    phone?: string;
+    location?: string;
+    website?: string;
+  }) =>
+    apiClient.put<AuthResponse>("/api/auth/update-profile", data),
 };
 
 // Export axios instance for direct use if needed
