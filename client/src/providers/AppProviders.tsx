@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
-import { QueryProvider } from './QueryProvider'
 import { AppProvider } from '../contexts/AppContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { NotificationProvider } from '../contexts/NotificationContext'
+import { QueryProvider } from './QueryProvider'
 
 interface AppProvidersProps {
   children: ReactNode
@@ -10,14 +10,14 @@ interface AppProvidersProps {
 
 export function AppProviders({ children }: AppProvidersProps) {
   return (
-    <ThemeProvider>
-      <NotificationProvider>
-        <AppProvider>
-          <QueryProvider>
+    <QueryProvider>
+      <ThemeProvider>
+        <NotificationProvider>
+          <AppProvider>
             {children}
-          </QueryProvider>
-        </AppProvider>
-      </NotificationProvider>
-    </ThemeProvider>
+          </AppProvider>
+        </NotificationProvider>
+      </ThemeProvider>
+    </QueryProvider>
   )
 } 
