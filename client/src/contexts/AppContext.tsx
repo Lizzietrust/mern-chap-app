@@ -1,11 +1,19 @@
-import { createContext, useContext, useReducer } from 'react'
+import { createContext, useContext, useReducer, useEffect } from 'react'
 import type { ReactNode } from 'react'
+import { authApi } from '../lib/api'
+import { useMe } from '../hooks/useAuth'
 
 // Types
 export interface User {
   id: number
   name: string
   email: string
+  profileSetup: boolean
+  avatar?: string
+  bio?: string
+  phone?: string
+  location?: string
+  website?: string
 }
 
 export interface AppState {
@@ -135,13 +143,55 @@ interface AppProviderProps {
 export function AppProvider({ children }: AppProviderProps) {
   const [state, dispatch] = useReducer(appReducer, initialState)
 
+  // Bootstrap auth from cookie using TanStack Query
+  const meQuery = useMe(true)
+
+  useEffect(() => {
+    dispatch({ type: 'SET_LOADING', payload: meQuery.isFetching })
+  }, [meQuery.isFetching])
+
+  useEffect(() => {
+    if (meQuery.data?.user) {
+      const response = meQuery.data
+      const userData: User = {
+        id:
+          parseInt(response.user._id) ||
+          Math.floor(Math.random() * 1000) + 1,
+        name:
+          response.user.firstName && response.user.lastName
+            ? `${response.user.firstName} ${response.user.lastName}`
+            : response.user.email.split('@')[0],
+        email: response.user.email,
+        profileSetup: response.user.profileSetup,
+        avatar: response.user.image,
+        bio: response.user.bio,
+        phone: response.user.phone,
+        location: response.user.location,
+        website: response.user.website,
+      }
+      dispatch({ type: 'SET_USER', payload: userData })
+    }
+  }, [meQuery.data])
+
+  useEffect(() => {
+    if (meQuery.isError) {
+      dispatch({ type: 'SET_USER', payload: null })
+    }
+  }, [meQuery.isError])
+
   // Convenience methods
   const login = (user: User) => {
     dispatch({ type: 'SET_USER', payload: user })
   }
 
   const logout = () => {
-    dispatch({ type: 'LOGOUT' })
+    try {
+      authApi.logout().finally(() => {
+        dispatch({ type: 'LOGOUT' })
+      })
+    } catch {
+      dispatch({ type: 'LOGOUT' })
+    }
   }
 
   const toggleTheme = () => {
