@@ -65,15 +65,21 @@ export function RegisterPage() {
             id:
               parseInt(response.user._id) ||
               Math.floor(Math.random() * 1000) + 1,
-            name: formData.name, // We'll use the name from form since server doesn't return it
+            name: formData.name,
             email: response.user.email,
+            profileSetup: response.user.profileSetup,
+            avatar: response.user.image,
+            bio: response.user.bio,
+            phone: response.user.phone,
+            location: response.user.location,
+            website: response.user.website,
           };
 
           console.log("Processed user data:", userData);
 
           login(userData);
           success("Account created successfully!", "Welcome");
-          navigate("/profile");
+          navigate("/profile", { replace: true });
         },
         onError: (err) => {
           console.error("Registration error:", err);
@@ -116,7 +122,7 @@ export function RegisterPage() {
 
   return (
     <div
-      className={`min-h-screen flex items-center justify-center ${
+      className={`min-h-screen flex items-center justify-center px-3 md:px-0 ${
         isDark ? "bg-gray-900" : "bg-gray-50"
       }`}
     >
