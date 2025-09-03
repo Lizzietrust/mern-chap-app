@@ -29,11 +29,20 @@ app.use(cookieParser());
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 
-const server = app.listen(port, () => {
-  console.log(`Server is running at port ${port}`);
-});
-
 mongoose
-  .connect(databaseURL)
-  .then(() => console.log("Database connection successful"))
-  .catch((err) => console.log(err.message));
+  .connect(databaseURL, {
+    serverSelectionTimeoutMS: 30000,
+  })
+  .then(() => {
+    console.log("Database connection successful");
+    app.listen(port, () => {
+      console.log(`Server is running at port ${port}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to connect to database:", err.message);
+    console.error(
+      "Tip: Ensure your IP is allowed in MongoDB Atlas Network Access and that your connection string has the correct username/password and a database name."
+    );
+    process.exit(1);
+  });
