@@ -23,10 +23,29 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: false,
   },
+  bio: {
+    type: String,
+    required: false,
+    maxlength: 500,
+  },
+  phone: {
+    type: String,
+    required: false,
+  },
+  location: {
+    type: String,
+    required: false,
+  },
+  website: {
+    type: String,
+    required: false,
+  },
   profileSetup: {
     type: Boolean,
     default: false,
   },
+}, {
+  timestamps: true, // Add createdAt and updatedAt fields
 });
 
 userSchema.pre("save", async function (next) {
