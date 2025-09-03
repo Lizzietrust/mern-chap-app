@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   authApi,
@@ -57,6 +57,36 @@ export function useLogout() {
       // Even if logout fails on server, clear local state
       queryClient.removeQueries({ queryKey: authKeys.user() });
       navigate("/login", { replace: true });
+    },
+  });
+}
+
+// Hook to fetch current authenticated user (from cookie/session)
+export function useMe(enabled: boolean = true) {
+  return useQuery({
+    queryKey: authKeys.user(),
+    queryFn: authApi.me,
+    enabled,
+  });
+}
+
+// Hook to update user profile
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      firstName?: string;
+      lastName?: string;
+      image?: string;
+      bio?: string;
+      phone?: string;
+      location?: string;
+      website?: string;
+    }) => authApi.updateProfile(data),
+    onSuccess: (response: AuthResponse) => {
+      // Update cached user info
+      queryClient.setQueryData(authKeys.user(), response.user);
     },
   });
 }
