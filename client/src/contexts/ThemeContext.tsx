@@ -2,12 +2,15 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
 type Theme = 'light' | 'dark' | 'system'
+type Accent = 'blue' | 'emerald' | 'violet' | 'rose' | 'amber'
 
 interface ThemeContextType {
   theme: Theme
   setTheme: (theme: Theme) => void
   toggleTheme: () => void
   isDark: boolean
+  accent: Accent
+  setAccent: (accent: Accent) => void
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
@@ -15,9 +18,10 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 interface ThemeProviderProps {
   children: ReactNode
   defaultTheme?: Theme
+  defaultAccent?: Accent
 }
 
-export function ThemeProvider({ children, defaultTheme = 'light' }: ThemeProviderProps) {
+export function ThemeProvider({ children, defaultTheme = 'light', defaultAccent = 'blue' }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(() => {
     // Check localStorage first, then system preference, then default
     const saved = localStorage.getItem('theme') as Theme
@@ -32,6 +36,14 @@ export function ThemeProvider({ children, defaultTheme = 'light' }: ThemeProvide
     return defaultTheme
   })
 
+  const [accent, setAccentState] = useState<Accent>(() => {
+    const saved = localStorage.getItem('accent') as Accent
+    if (saved && ['blue','emerald','violet','rose','amber'].includes(saved)) {
+      return saved
+    }
+    return defaultAccent
+  })
+
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme)
     localStorage.setItem('theme', newTheme)
@@ -39,6 +51,11 @@ export function ThemeProvider({ children, defaultTheme = 'light' }: ThemeProvide
 
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light')
+  }
+
+  const setAccent = (newAccent: Accent) => {
+    setAccentState(newAccent)
+    localStorage.setItem('accent', newAccent)
   }
 
   // Apply theme to document
@@ -56,6 +73,14 @@ export function ThemeProvider({ children, defaultTheme = 'light' }: ThemeProvide
       )
     }
   }, [theme])
+
+  // Apply accent class to document
+  useEffect(() => {
+    const root = document.documentElement
+    const accents: Accent[] = ['blue','emerald','violet','rose','amber']
+    root.classList.remove(...accents.map(a => `accent-${a}`))
+    root.classList.add(`accent-${accent}`)
+  }, [accent])
 
   // Listen for system theme changes
   useEffect(() => {
@@ -78,6 +103,8 @@ export function ThemeProvider({ children, defaultTheme = 'light' }: ThemeProvide
     setTheme,
     toggleTheme,
     isDark: theme === 'dark',
+    accent,
+    setAccent,
   }
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
