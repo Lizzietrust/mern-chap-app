@@ -54,16 +54,24 @@ export function LoginPage() {
       },
       {
         onSuccess: (response) => {
-          console.log("Login successful response:", response);
+          console.log({ response });
 
           // Convert server response to match our app's user format
           const userData = {
-            id: parseInt(response.user._id) || 1,
+            id:
+              parseInt(response.user._id) ||
+              Math.floor(Math.random() * 1000) + 1,
             name:
               response.user.firstName && response.user.lastName
                 ? `${response.user.firstName} ${response.user.lastName}`
-                : response.user.email.split("@")[0], // Use email prefix as fallback name
+                : response.user.email.split("@")[0],
             email: response.user.email,
+            profileSetup: response.user.profileSetup,
+            avatar: response.user.image,
+            bio: response.user.bio,
+            phone: response.user.phone,
+            location: response.user.location,
+            website: response.user.website,
           };
 
           console.log("Processed user data:", userData);
@@ -73,8 +81,8 @@ export function LoginPage() {
 
           // Check if profile setup is needed
           if (!response.user.profileSetup) {
-            // Redirect to profile setup page
-            navigate("/profile-setup", { replace: true });
+            // Go to profile where setup is embedded
+            navigate("/profile", { replace: true });
           } else {
             // Navigate to the intended destination or profile page
             const from = location.state?.from?.pathname || "/profile";
@@ -112,7 +120,7 @@ export function LoginPage() {
 
   return (
     <div
-      className={`min-h-screen flex items-center justify-center ${
+      className={`min-h-screen flex items-center justify-center px-3 md:px-0 ${
         isDark ? "bg-gray-900" : "bg-gray-50"
       }`}
     >
@@ -219,21 +227,21 @@ export function LoginPage() {
               </label>
             </div>
 
-            <div className="text-sm">
+            {/* <div className="text-sm">
               <a
                 href="#"
                 className="font-medium text-blue-600 hover:text-blue-500"
               >
                 Forgot your password?
               </a>
-            </div>
+            </div> */}
           </div>
 
           <div>
             <button
               type="submit"
               disabled={loginMutation.isPending}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {loginMutation.isPending ? (
                 <div className="flex items-center">

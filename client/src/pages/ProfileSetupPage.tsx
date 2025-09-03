@@ -24,6 +24,7 @@ export function ProfileSetupPage() {
       const updatedUser = {
         ...state.user!,
         name: `${formData.firstName} ${formData.lastName}`,
+        profileSetup: true,
       };
 
       dispatch({ type: "SET_USER", payload: updatedUser });
