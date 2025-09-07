@@ -8,7 +8,7 @@ const Sidebar = ({ isDark, selectedChat, users, setSelectedChat, channels }) => 
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
     const [showModal, setShowModal] = useState(false)
     const [activeTab, setActiveTab] = useState<'dms' | 'channels'>('dms')
-      const { data: authUser, isLoading, isError } = useMe()
+    const { data: authUser, isLoading, isError } = useMe()
       
   return (
     <>
@@ -81,12 +81,12 @@ const Sidebar = ({ isDark, selectedChat, users, setSelectedChat, channels }) => 
               <>
                 {activeTab === 'dms' && (
                   <div className="p-2">
-                    {users.map((user) => (
+                    {selectedChat?.users?.map((user) => (
                       <button
-                        key={user.id}
-                        onClick={() => setSelectedChat({ type: 'user', id: user.id })}
+                        key={user?._id}
+                        onClick={() => setSelectedChat({ type: 'user', id: user?._id })}
                         className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
-                          selectedChat?.type === 'user' && selectedChat?.id === user.id
+                          selectedChat?.type === 'user' && selectedChat?._id === user?._id
                             ? isDark ? 'bg-gray-700' : 'bg-gray-100'
                             : ''
                         }`}
@@ -94,7 +94,7 @@ const Sidebar = ({ isDark, selectedChat, users, setSelectedChat, channels }) => 
                         <div className="flex items-center space-x-3">
                           <div className="relative">
                             <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
-                              {user.avatar || user.name.charAt(0)}
+                              {user?.image || user?.firstname?.charAt(0)}
                             </div>
                             {user.isOnline && (
                               <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></div>
@@ -103,7 +103,7 @@ const Sidebar = ({ isDark, selectedChat, users, setSelectedChat, channels }) => 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
                               <p className={`font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                {user.name}
+                                {user?.firstName}
                               </p>
                               {user.unreadCount && (
                                 <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
@@ -194,7 +194,7 @@ const Sidebar = ({ isDark, selectedChat, users, setSelectedChat, channels }) => 
             )}
           </div>
         </div>
-        {showModal && <NewChatModal isDark={isDark} onClose={() => setShowModal(false)} />}
+        {showModal && <NewChatModal isDark={isDark} onClose={() => setShowModal(false)} setSelectedChat={setSelectedChat} />}
         </>
   )
 }
