@@ -206,5 +206,10 @@ export const authApi = {
     apiClient.put<AuthResponse>("/api/auth/update-profile", data),
 };
 
+export const chatApi = {
+  createChat: (userId: string) => apiClient.post("/api/messages/create-chat", { userId }),
+};
+
+
 // Export axios instance for direct use if needed
 export { axiosInstance };
