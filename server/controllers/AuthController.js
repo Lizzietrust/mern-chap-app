@@ -1,7 +1,7 @@
 import User from "../models/UserModel.js";
 import jwt from "jsonwebtoken";
 
-const maxAge = 3 * 24 * 60 * 60 * 1000;
+const maxAge = 1 * 24 * 60 * 60 * 1000;
 
 const createToken = ({ email, userId }) => {
   // Check if JWT_KEY is set
@@ -271,3 +271,4 @@ export const updateProfile = async (req, res, next) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
