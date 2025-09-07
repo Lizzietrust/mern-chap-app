@@ -3,12 +3,16 @@ import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import mongoose from "mongoose";
+import http from "http";
 import authRoutes from "./routes/AuthRoutes.js";
 import userRoutes from "./routes/UserRoute.js";
+import messageRoutes from "./routes/MessageRoutes.js";
+import setupSocket from "./socket.js";
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
 const port = process.env.PORT || 5000;
 const databaseURL = process.env.DATABASE_URL;
 
@@ -30,7 +34,9 @@ app.use(cookieParser());
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
+app.use("/api/messages", messageRoutes);
 
+setupSocket(server);
 
 mongoose
   .connect(databaseURL, {
@@ -38,7 +44,7 @@ mongoose
   })
   .then(() => {
     console.log("Database connection successful");
-    app.listen(port, () => {
+    server.listen(port, () => {
       console.log(`Server is running at port ${port}`);
     });
   })
