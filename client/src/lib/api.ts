@@ -132,7 +132,13 @@ export interface Post {
 
 // User API functions
 export const userApi = {
-  getUsers: () => apiClient.get<User[]>("/users"),
+  getUsers: (page?: number, limit?: number, search?: string) => {
+    const params = new URLSearchParams();
+    if (page) params.append('page', page.toString());
+    if (limit) params.append('limit', limit.toString());
+    if (search) params.append('search', search);
+    return apiClient.get<User[]>(`/api/user/fetch-all-users?${params.toString()}`);
+  },
   getUser: (id: number) => apiClient.get<User>(`/users/${id}`),
   createUser: (user: Omit<User, "id">) => apiClient.post<User>("/users", user),
   updateUser: (id: number, user: Partial<User>) =>
