@@ -4,6 +4,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import mongoose from "mongoose";
 import authRoutes from "./routes/AuthRoutes.js";
+import userRoutes from "./routes/UserRoute.js";
 
 dotenv.config();
 
@@ -28,6 +29,8 @@ app.use(
 app.use(cookieParser());
 app.use(express.json());
 app.use("/api/auth", authRoutes);
+app.use("/api/user", userRoutes);
+
 
 mongoose
   .connect(databaseURL, {
