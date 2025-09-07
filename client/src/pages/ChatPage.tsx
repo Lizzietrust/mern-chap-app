@@ -5,8 +5,10 @@ import { useNotifications } from '../contexts/NotificationContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { Layout } from '../components/Layout'
 import { useMe } from '../hooks/useAuth'
-import Sidebar from '../components/chat/Sidebar'
+
 import ChatContainer from '../components/chat/ChatContainer'
+import { useUsers } from '../hooks/useUsers'
+import Sidebar from '../components/chat/Sidebar'
 
 interface Message {
   id: string
@@ -44,34 +46,16 @@ export function ChatPage() {
 
   const [selectedChat, setSelectedChat] = useState<{ type: 'user' | 'channel', id: string } | null>(null)
 
-  // Mock data
-  const [users] = useState<User[]>([
-    {
-      id: '1',
-      name: 'Alice Johnson',
-      avatar: '👩‍💻',
-      isOnline: true,
-      lastMessage: 'Hey, how are you doing?',
-      unreadCount: 2,
-    },
-    {
-      id: '2',
-      name: 'Bob Smith',
-      avatar: '👨‍🎨',
-      isOnline: false,
-      lastMessage: 'Thanks for your help earlier!',
-      lastSeen: new Date(Date.now() - 3600000),
-    },
-    {
-      id: '3',
-      name: 'Carol Davis',
-      avatar: '👩‍🔬',
-      isOnline: true,
-      lastMessage: "Let's schedule that meeting",
-      unreadCount: 1,
-    },
-  ])
+    const { data: users, isLoading, isError } = useUsers(1, 10, "");
 
+  console.log({ users });
+  console.log({selectedChat});
+  
+  
+  
+
+  // Mock data
+ 
   const [channels] = useState<Channel[]>([
     {
       id: 'general',
@@ -194,10 +178,10 @@ export function ChatPage() {
     if (!selectedChat) return 'Select a chat'
     
     if (selectedChat.type === 'user') {
-      const user = users.find(u => u.id === selectedChat.id)
-      return user?.name || 'Unknown User'
+      const user = users?.users?.find(u => u?._id === selectedChat?._id)
+      return user?.firstName || 'Unknown User'
     } else {
-      const channel = channels.find(c => c.id === selectedChat.id)
+      const channel = channels.find(c => c?._id === selectedChat?._id)
       return channel?.name || 'unknown'
     }
   }
@@ -206,12 +190,12 @@ export function ChatPage() {
     if (!selectedChat) return ''
     
     if (selectedChat.type === 'user') {
-      const user = users.find(u => u.id === selectedChat.id)
+      const user = users?.users?.find(u => u?._id === selectedChat?._id)
       if (user?.isOnline) return 'Online'
       if (user?.lastSeen) return `Last seen ${formatTime(user.lastSeen)}`
       return 'Offline'
     } else {
-      const channel = channels.find(c => c.id === selectedChat.id)
+      const channel = channels.find(c => c?._id === selectedChat?._id)
       return `${channel?.memberCount || 0} members`
     }
   }
