@@ -12,11 +12,11 @@ export const userKeys = {
 }
 
 // Hook to get all users
-export function useUsers() {
+export function useUsers(page?: number, limit?: number, search?: string) {
   return useQuery({
-    queryKey: userKeys.lists(),
-    queryFn: userApi.getUsers,
-  })
+    queryKey: userKeys.list(`${page}-${limit}-${search}`),
+    queryFn: () => userApi.getUsers(page, limit, search),
+  });
 }
 
 // Hook to get a single user
