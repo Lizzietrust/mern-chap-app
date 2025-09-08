@@ -3,6 +3,7 @@ import { AppProvider } from '../contexts/AppContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { NotificationProvider } from '../contexts/NotificationContext'
 import { QueryProvider } from './QueryProvider'
+import { SocketProvider } from '../contexts/SocketContext'
 
 interface AppProvidersProps {
   children: ReactNode
@@ -14,7 +15,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       <ThemeProvider>
         <NotificationProvider>
           <AppProvider>
-            {children}
+            <SocketProvider>{children}</SocketProvider>
           </AppProvider>
         </NotificationProvider>
       </ThemeProvider>
