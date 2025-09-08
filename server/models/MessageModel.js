@@ -4,22 +4,38 @@ const messageSchema = new mongoose.Schema(
   {
     sender: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Users",
       required: true,
     },
     recipient: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+      ref: "Users",
+      required: false,
     },
     message: {
       type: String,
+      enum: ["text", "image", "file"],
       required: true,
     },
-  },
-  { timestamps: true }
+    content: {
+      type: String,
+      required: function() {
+        return this.message === "text";
+      }
+    },
+    fileUrl: {
+      type: String,
+      required: function() {
+        return this.message === "image" || this.message === "file";
+      }
+    },
+    timestamps: {
+      type: Date,
+      default: Date.now,
+    },
+  }
 );
 
-const Message = mongoose.model("Message", messageSchema);
+const Message = mongoose.model("Messages", messageSchema);
 
 export default Message;
