@@ -2,6 +2,7 @@ import { createContext, useContext, useReducer, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { authApi } from '../lib/api'
 import { useMe } from '../hooks/useAuth'
+import { SelectedChatProvider } from './SelectedChatContext'
 
 // Types
 export interface User {
@@ -236,7 +237,7 @@ export function AppProvider({ children }: AppProviderProps) {
     setLoading,
   }
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>
+  return <AppContext.Provider value={value}><SelectedChatProvider>{children}</SelectedChatProvider></AppContext.Provider>
 }
 
 // Hook to use the context
