@@ -2,7 +2,7 @@ import axios from "axios";
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 
 // Base API configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+export const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 // Create Axios instance with default configuration
 const axiosInstance: AxiosInstance = axios.create({
