@@ -6,7 +6,7 @@ import { SelectedChatProvider } from './SelectedChatContext'
 
 // Types
 export interface User {
-  id: number
+  _id: string
   name: string
   email: string
   profileSetup: boolean
@@ -52,7 +52,7 @@ const initialState: AppState = {
   theme: 'light',
   sidebarOpen: false,
   notifications: [],
-  loading: false,
+  loading: true,
 }
 
 // Reducer
@@ -155,9 +155,7 @@ export function AppProvider({ children }: AppProviderProps) {
     if (meQuery.data?.user) {
       const response = meQuery.data
       const userData: User = {
-        id:
-          parseInt(response.user._id) ||
-          Math.floor(Math.random() * 1000) + 1,
+        _id: response.user._id,
         name:
           response.user.firstName && response.user.lastName
             ? `${response.user.firstName} ${response.user.lastName}`
