@@ -1,398 +1,256 @@
-import { useState, useRef, useEffect, useContext } from 'react'
-import { useApp } from '../contexts/AppContext'
-import { useNotifications } from '../contexts/NotificationContext'
-import { useTheme } from '../contexts/ThemeContext'
-import { Layout } from '../components/Layout'
-import { useMe } from '../hooks/useAuth'
-import { SelectedChatContext } from '../contexts/SelectedChatContext'
-import { Message, Channel } from '../types'
-
-import ChatContainer from '../components/chat/ChatContainer'
-import { useUsers } from '../hooks/useUsers'
-import Sidebar from '../components/chat/Sidebar'
+import { useState, useRef, useEffect, useContext } from "react";
+import { useApp } from "../contexts/AppContext";
+import { useNotifications } from "../contexts/NotificationContext";
+import { useTheme } from "../contexts/ThemeContext";
+import { Layout } from "../components/Layout";
+import { SelectedChatContext } from "../contexts/SelectedChatContext";
+import { useSocket } from "../contexts/SocketContext";
+import type { Message } from "../types";
+import ChatContainer from "../components/chat/ChatContainer";
+import { useUsers } from "../hooks/useUsers";
+import {
+  useUserChats,
+  useMessages,
+  useCreateChat,
+  messageKeys,
+} from "../hooks/useChat";
+import Sidebar from "../components/chat/Sidebar";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function ChatPage() {
-  const { state } = useApp()
-  const { success } = useNotifications()
-  const { isDark } = useTheme()
-  const { selectedChat, setSelectedChat } = useContext(SelectedChatContext)
+  const { state } = useApp();
+  const { success } = useNotifications();
+  const { isDark } = useTheme();
+  const { selectedChat, setSelectedChat } = useContext(SelectedChatContext);
+  const { sendMessage } = useSocket();
+  const queryClient = useQueryClient();
+  const [isSending, setIsSending] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const { data: users, isLoading, isError } = useUsers(1, 10, "");
+  const {
+    data: users,
+    isLoading: usersLoading,
+    isError: usersError,
+  } = useUsers(1, 10, "");
+  const {
+    data: chats,
+    isLoading: chatsLoading,
+    isError: chatsError,
+  } = useUserChats();
+  const {
+    data: messages,
+    isLoading: messagesLoading,
+    isError: messagesError,
+  } = useMessages(selectedChat?._id);
+
+  const createChatMutation = useCreateChat();
 
   console.log({ users });
-  console.log({selectedChat});
-  
-  
-  
+  console.log({ selectedChat });
 
-  // Mock data
- 
-  const [channels] = useState<Channel[]>([
-    {
-      id: 'general',
-      name: 'general',
-      description: 'General discussion',
-      memberCount: 156,
-      unreadCount: 5,
-    },
-    {
-      id: 'random',
-      name: 'random',
-      description: 'Random conversations',
-      memberCount: 89,
-    },
-    {
-      id: 'dev-team',
-      name: 'dev-team',
-      description: 'Development discussions',
-      memberCount: 12,
-      isPrivate: true,
-      unreadCount: 3,
-    },
-  ])
-
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: 'Hello! Welcome to the chat. How can I help you today?',
-      sender: 'other',
-      timestamp: new Date(Date.now() - 60000),
-    },
-    {
-      id: '2',
-      text: 'Hi! Thanks for the welcome message.',
-      sender: 'user',
-      timestamp: new Date(Date.now() - 30000),
-    },
-  ])
-  const [newMessage, setNewMessage] = useState('')
-  const [isTyping, setIsTyping] = useState(false)
+  const [newMessage, setNewMessage] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    const fileMessage: Message = {
-      id: Date.now().toString(),
-      text: `File selected: ${file.name}`,
-      sender: 'user',
-      timestamp: new Date(),
-    }
-    setMessages(prev => [...prev, fileMessage])
-    success(`You selected ${file.name}`)
+    success(`You selected ${file.name}`);
     if (e.target) {
-      e.target.value = ''
+      e.target.value = "";
     }
-  }
+  };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-  
+    scrollToBottom();
+  }, [messages]);
+
   useEffect(() => {
     if (selectedChat) {
-      const welcomeText = selectedChat.type === 'user' 
-        ? `You are now chatting with ${getChatTitle()}.`
-        : `You have joined the #${getChatTitle()} channel.`
-      
-      setMessages([
-        {
-          id: 'welcome',
-          text: welcomeText,
-          sender: 'other',
-          timestamp: new Date()
-        }
-      ])
+      // No longer setting local messages state for welcome message
     }
-  }, [selectedChat])
+  }, [selectedChat]);
 
+  const handleSelectUser = async (userId: string) => {
+    try {
+      const chat = await createChatMutation.mutateAsync(userId);
+      setSelectedChat(chat);
+    } catch (error) {
+      console.error("Error creating or fetching chat:", error);
+    }
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!newMessage.trim()) return
+    e.preventDefault();
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: newMessage,
-      sender: 'user',
+    if (!newMessage.trim() || !state.user || !selectedChat) return;
+
+    const senderId = state.user._id;
+    const chatId = selectedChat._id;
+    const content = newMessage.trim();
+
+    // Optimistically update the UI
+    const tempMessage: Message = {
+      id: `temp-${Date.now()}`, // Use a prefix to avoid conflicts with real IDs
+      text: content,
+      sender: "user",
       timestamp: new Date(),
+    };
+
+    const messagesQueryKey = messageKeys.list(chatId);
+
+    // Optimistically update the messages cache
+    queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
+      if (!oldMessages) return [tempMessage];
+      return [...oldMessages, tempMessage];
+    });
+
+    // Clear input immediately for better UX
+    setNewMessage("");
+
+    try {
+      // Call the socket function with correct parameters
+      sendMessage(chatId, senderId, content);
+
+      // Show typing indicator
+      setIsTyping(true);
+      setTimeout(() => {
+        setIsTyping(false);
+      }, 1500);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+
+      // Revert optimistic update on error
+      queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
+        if (!oldMessages) return [];
+        return oldMessages.filter((msg) => msg.id !== tempMessage.id);
+      });
+
+      // Restore the message if sending failed
+      setNewMessage(content);
+    } finally {
+      setIsSending(false);
     }
-
-    setMessages(prev => [...prev, userMessage])
-    setNewMessage('')
-
-    setIsTyping(true)
-    setTimeout(() => {
-      setIsTyping(false)
-      
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: `Thanks for your message: "${newMessage}". This is a demo response.`,
-        sender: 'other',
-        timestamp: new Date(),
-      }
-      
-      setMessages(prev => [...prev, botMessage])
-    }, 1500)
-  }
+  };
 
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
+    return date?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
 
   const getChatTitle = () => {
-    if (!selectedChat) return 'Select a chat'
-    
-    if (selectedChat.type === 'user') {
-      const user = users?.users?.find(u => u?._id === selectedChat?._id)
-      return user?.firstName || 'Unknown User'
-    } else {
-      const channel = channels.find(c => c?._id === selectedChat?._id)
-      return channel?.name || 'unknown'
+    if (!selectedChat) return "Select a chat";
+    console.log({ selectedChat });
+
+    if (selectedChat?.participants) {
+      // This indicates a chat object
+      const otherUserId = selectedChat?.participants.find(
+        (p) => p._id !== state.user._id
+      );
+
+      const chatUserName =
+        otherUserId?.firstName && otherUserId?.lastName
+          ? `${otherUserId.firstName} ${otherUserId.lastName}`
+          : otherUserId?.email || "Unknown User";
+
+      return chatUserName || "Unknown User";
     }
-  }
+
+    if (selectedChat.name) {
+      // for group chats
+      return selectedChat.name;
+    }
+
+    return "Select a chat";
+  };
 
   const getChatSubtitle = () => {
-    if (!selectedChat) return ''
-    
-    if (selectedChat.type === 'user') {
-      const user = users?.users?.find(u => u?._id === selectedChat?._id)
-      if (user?.isOnline) return 'Online'
-      if (user?.lastSeen) return `Last seen ${formatTime(user.lastSeen)}`
-      return 'Offline'
-    } else {
-      const channel = channels.find(c => c?._id === selectedChat?._id)
-      return `${channel?.memberCount || 0} members`
+    if (!selectedChat) return "";
+
+    if (selectedChat.participants) {
+      const otherUserId = selectedChat.participants.find(
+        (p) => p !== state.user._id
+      );
+      const otherUser = users?.users?.find((u) => u._id === otherUserId);
+      if (otherUser?.isOnline) return "Online";
+      if (otherUser?.lastSeen)
+        return `Last seen ${formatTime(otherUser.lastSeen)}`;
+      return "Offline";
     }
-  }
+
+    if (selectedChat.memberCount) {
+      return `${selectedChat.memberCount || 0} members`;
+    }
+
+    return "";
+  };
 
   if (!state.user) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div
+        className={`min-h-screen flex items-center justify-center ${
+          isDark ? "bg-gray-900" : "bg-gray-50"
+        }`}
+      >
         <div className="text-center">
-          <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+          <h2
+            className={`text-2xl font-bold ${
+              isDark ? "text-white" : "text-gray-900"
+            }`}
+          >
             Please log in to access the chat
           </h2>
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <Layout>
-      <div className={`h-screen flex overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div
+        className={`h-screen flex overflow-hidden ${
+          isDark ? "bg-gray-900" : "bg-gray-50"
+        }`}
+      >
         {/* Sidebar */}
-        <Sidebar isDark={isDark} selectedChat={selectedChat} users={users} setSelectedChat={setSelectedChat} channels={channels} />
+        {chatsLoading ? (
+          <div>Loading chats...</div>
+        ) : (
+          <Sidebar
+            isDark={isDark}
+            selectedChat={selectedChat}
+            users={users}
+            chats={chats}
+            setSelectedChat={setSelectedChat}
+            handleSelectUser={handleSelectUser}
+          />
+        )}
 
         {/* Main Chat Area */}
-        <ChatContainer selectedChat={selectedChat} isDark={isDark} setSelectedChat={setSelectedChat} getChatTitle={getChatTitle} getChatSubtitle={getChatSubtitle} messages={messages} formatTime={formatTime} isTyping={isTyping} messagesEndRef={messagesEndRef} handleSendMessage={handleSendMessage} handleFileSelect={handleFileSelect} newMessage={newMessage} setNewMessage={setNewMessage}  />
+        {messagesLoading ? (
+          <div>Loading messages...</div>
+        ) : (
+          <ChatContainer
+            selectedChat={selectedChat}
+            isDark={isDark}
+            setSelectedChat={setSelectedChat}
+            getChatTitle={getChatTitle}
+            getChatSubtitle={getChatSubtitle}
+            messages={messages}
+            formatTime={formatTime}
+            isTyping={isTyping}
+            messagesEndRef={messagesEndRef}
+            handleSendMessage={handleSendMessage}
+            handleFileSelect={handleFileSelect}
+            newMessage={newMessage}
+            setNewMessage={setNewMessage}
+          />
+        )}
       </div>
     </Layout>
-  )
-}
-import { useState, useRef, useEffect, useContext } from 'react'
-import { useApp } from '../contexts/AppContext'
-import { useNotifications } from '../contexts/NotificationContext'
-import { useTheme } from '../contexts/ThemeContext'
-import { Layout } from '../components/Layout'
-import { useMe } from '../hooks/useAuth'
-import { SelectedChatContext } from '../contexts/SelectedChatContext'
-import { Message, Channel } from '../types'
-
-import ChatContainer from '../components/chat/ChatContainer'
-import { useUsers } from '../hooks/useUsers'
-import Sidebar from '../components/chat/Sidebar'
-
-export function ChatPage() {
-  const { state } = useApp()
-  const { success } = useNotifications()
-  const { isDark } = useTheme()
-  const { selectedChat, setSelectedChat } = useContext(SelectedChatContext)
-
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-    const { data: users, isLoading, isError } = useUsers(1, 10, "");
-
-  console.log({ users });
-  console.log({selectedChat});
-  
-  
-  
-
-  // Mock data
- 
-  const [channels] = useState<Channel[]>([
-    {
-      id: 'general',
-      name: 'general',
-      description: 'General discussion',
-      memberCount: 156,
-      unreadCount: 5,
-    },
-    {
-      id: 'random',
-      name: 'random',
-      description: 'Random conversations',
-      memberCount: 89,
-    },
-    {
-      id: 'dev-team',
-      name: 'dev-team',
-      description: 'Development discussions',
-      memberCount: 12,
-      isPrivate: true,
-      unreadCount: 3,
-    },
-  ])
-
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: 'Hello! Welcome to the chat. How can I help you today?',
-      sender: 'other',
-      timestamp: new Date(Date.now() - 60000),
-    },
-    {
-      id: '2',
-      text: 'Hi! Thanks for the welcome message.',
-      sender: 'user',
-      timestamp: new Date(Date.now() - 30000),
-    },
-  ])
-  const [newMessage, setNewMessage] = useState('')
-  const [isTyping, setIsTyping] = useState(false)
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const fileMessage: Message = {
-      id: Date.now().toString(),
-      text: `File selected: ${file.name}`,
-      sender: 'user',
-      timestamp: new Date(),
-    }
-    setMessages(prev => [...prev, fileMessage])
-    success(`You selected ${file.name}`)
-    if (e.target) {
-      e.target.value = ''
-    }
-  }
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-  
-  useEffect(() => {
-    if (selectedChat) {
-      const welcomeText = selectedChat.type === 'user' 
-        ? `You are now chatting with ${getChatTitle()}.`
-        : `You have joined the #${getChatTitle()} channel.`
-      
-      setMessages([
-        {
-          id: 'welcome',
-          text: welcomeText,
-          sender: 'other',
-          timestamp: new Date()
-        }
-      ])
-    }
-  }, [selectedChat])
-
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!newMessage.trim()) return
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: newMessage,
-      sender: 'user',
-      timestamp: new Date(),
-    }
-
-    setMessages(prev => [...prev, userMessage])
-    setNewMessage('')
-
-    setIsTyping(true)
-    setTimeout(() => {
-      setIsTyping(false)
-      
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: `Thanks for your message: "${newMessage}". This is a demo response.`,
-        sender: 'other',
-        timestamp: new Date(),
-      }
-      
-      setMessages(prev => [...prev, botMessage])
-    }, 1500)
-  }
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-
-  const getChatTitle = () => {
-    if (!selectedChat) return 'Select a chat'
-    
-    if (selectedChat.type === 'user') {
-      const user = users?.users?.find(u => u?._id === selectedChat?._id)
-      return user?.firstName || 'Unknown User'
-    } else {
-      const channel = channels.find(c => c?._id === selectedChat?._id)
-      return channel?.name || 'unknown'
-    }
-  }
-
-  const getChatSubtitle = () => {
-    if (!selectedChat) return ''
-    
-    if (selectedChat.type === 'user') {
-      const user = users?.users?.find(u => u?._id === selectedChat?._id)
-      if (user?.isOnline) return 'Online'
-      if (user?.lastSeen) return `Last seen ${formatTime(user.lastSeen)}`
-      return 'Offline'
-    } else {
-      const channel = channels.find(c => c?._id === selectedChat?._id)
-      return `${channel?.memberCount || 0} members`
-    }
-  }
-
-  if (!state.user) {
-    return (
-      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
-        <div className="text-center">
-          <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Please log in to access the chat
-          </h2>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <Layout>
-      <div className={`h-screen flex overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
-        {/* Sidebar */}
-        <Sidebar isDark={isDark} selectedChat={selectedChat} users={users} setSelectedChat={setSelectedChat} channels={channels} />
-
-        {/* Main Chat Area */}
-        <ChatContainer selectedChat={selectedChat} isDark={isDark} setSelectedChat={setSelectedChat} getChatTitle={getChatTitle} getChatSubtitle={getChatSubtitle} messages={messages} formatTime={formatTime} isTyping={isTyping} messagesEndRef={messagesEndRef} handleSendMessage={handleSendMessage} handleFileSelect={handleFileSelect} newMessage={newMessage} setNewMessage={setNewMessage}  />
-      </div>
-    </Layout>
-  )
+  );
 }
