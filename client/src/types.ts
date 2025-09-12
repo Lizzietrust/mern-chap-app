@@ -27,5 +27,5 @@ export interface Channel {
 
 export type Chat = {
   type: 'user' | 'channel';
-  id: string;
+  _id: string;
 } | null;
