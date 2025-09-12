@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import { useUsers } from '../../hooks/useUsers';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useCreateChat } from '../../hooks/useChat';
+import { SelectedChatContext } from '../../contexts/SelectedChatContext';
 
-const NewChatModal = ({ isDark, onClose, setSelectedChat, selectedChat }) => {
+const NewChatModal = ({ isDark, onClose }) => {
+    const { selectedChat, setSelectedChat } = useContext(SelectedChatContext)
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebounce(search, 500);
@@ -12,8 +14,8 @@ const NewChatModal = ({ isDark, onClose, setSelectedChat, selectedChat }) => {
 
   const handleUserClick = async (user) => {
     try {
-      await createChatMutation.mutateAsync(user._id);
-      setSelectedChat({ type: 'user', ...user });
+      const chat = await createChatMutation.mutateAsync(user._id);
+      setSelectedChat(chat);
       onClose();
     } catch (error) {
       console.error("Error creating chat:", error);
