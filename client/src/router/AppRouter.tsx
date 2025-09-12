@@ -44,7 +44,7 @@ export function AppRouter() {
           }
         />
         <Route
-          path="/chat"
+          path="/chat/:chatId?"
           element={
             <ProtectedRoute>
               <ChatPage />
@@ -57,7 +57,7 @@ export function AppRouter() {
           path="/"
           element={
             state.loading ? null : state.isAuthenticated ? (
-              <Navigate to="/profile" replace />
+              <Navigate to="/chat" replace />
             ) : (
               <Navigate to="/login" replace />
             )
@@ -78,4 +78,4 @@ export function AppRouter() {
       </Routes>
     </BrowserRouter>
   )
-} 
+}
