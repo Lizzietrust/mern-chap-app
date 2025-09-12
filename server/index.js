@@ -8,6 +8,8 @@ import authRoutes from "./routes/AuthRoutes.js";
 import userRoutes from "./routes/UserRoute.js";
 import messageRoutes from "./routes/MessageRoutes.js";
 import setupSocket from "./socket.js";
+import './models/UserModel.js'; // Import the User model to ensure it's registered
+import './models/MessageModel.js'; // Import the Message model to ensure it's registered
 
 dotenv.config();
 
