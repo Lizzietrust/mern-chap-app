@@ -1,13 +1,21 @@
 export interface Message {
   _id?: string;
-  id?: string; 
-  sender: string | { _id: string; firstName: string; lastName: string; email: string; image?: string };
+  id?: string;
+  sender:
+    | string
+    | {
+        _id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+        image?: string;
+      };
   messageType: "text" | "image" | "file";
   content: string;
   chatId: string;
   createdAt?: Date;
-  timestamp?: Date; 
-  text?: string; 
+  timestamp?: Date;
+  text?: string;
 }
 
 export interface User {
@@ -30,6 +38,6 @@ export interface Channel {
 }
 
 export type Chat = {
-  type: 'user' | 'channel';
+  type: "user" | "channel";
   _id: string;
 } | null;
