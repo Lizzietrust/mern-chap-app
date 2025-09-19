@@ -19,10 +19,10 @@ import { useQueryClient } from "@tanstack/react-query";
 
 export function ChatPage() {
   const { state } = useApp();
-  const { success } = useNotifications();
+  const { success, error } = useNotifications();
   const { isDark } = useTheme();
   const { selectedChat, setSelectedChat } = useContext(SelectedChatContext);
-  const { sendMessage } = useSocket();
+  const { sendMessage, socket } = useSocket();
   const queryClient = useQueryClient();
   const [isSending, setIsSending] = useState(false);
 
@@ -33,21 +33,32 @@ export function ChatPage() {
     isLoading: usersLoading,
     isError: usersError,
   } = useUsers(1, 10, "");
+
   const {
     data: chats,
     isLoading: chatsLoading,
     isError: chatsError,
   } = useUserChats();
+
   const {
     data: messages,
     isLoading: messagesLoading,
     isError: messagesError,
+    refetch: refetchMessages,
   } = useMessages(selectedChat?._id);
 
   const createChatMutation = useCreateChat();
 
+  useEffect(() => {
+    if (createChatMutation.isError) {
+      console.error("Chat creation error:", createChatMutation.error);
+      error("Failed to create chat");
+    }
+  }, [createChatMutation.isError, createChatMutation.error, error]);
+
   console.log({ users });
   console.log({ selectedChat });
+  console.log({ messages });
 
   const [newMessage, setNewMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -70,36 +81,54 @@ export function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
+  // Join chat room when selectedChat changes
   useEffect(() => {
-    if (selectedChat) {
-      // No longer setting local messages state for welcome message
+    if (selectedChat && socket) {
+      socket.emit("joinChat", selectedChat._id);
+      // Refetch messages when switching chats
+      refetchMessages();
+
+      return () => {
+        socket.emit("leaveChat", selectedChat._id);
+      };
     }
-  }, [selectedChat]);
+  }, [selectedChat, socket, refetchMessages]);
 
   const handleSelectUser = async (userId: string) => {
     try {
       const chat = await createChatMutation.mutateAsync(userId);
       setSelectedChat(chat);
+      console.log("Chat created/selected:", chat);
     } catch (error) {
       console.error("Error creating or fetching chat:", error);
+      error("Failed to create or open chat");
     }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newMessage.trim() || !state.user || !selectedChat) return;
+    if (!newMessage.trim() || !state.user || !selectedChat || isSending) {
+      return;
+    }
 
     const senderId = state.user._id;
     const chatId = selectedChat._id;
     const content = newMessage.trim();
 
+    console.log("Sending message:", { chatId, senderId, content });
+
+    setIsSending(true);
+
     // Optimistically update the UI
     const tempMessage: Message = {
-      id: `temp-${Date.now()}`, // Use a prefix to avoid conflicts with real IDs
-      text: content,
-      sender: "user",
+      id: `temp-${Date.now()}`,
+      sender: state.user._id, 
+      messageType: "text",
+      content: content,
+      chatId: chatId,
       timestamp: new Date(),
+      text: content, 
     };
 
     const messagesQueryKey = messageKeys.list(chatId);
@@ -114,16 +143,18 @@ export function ChatPage() {
     setNewMessage("");
 
     try {
-      // Call the socket function with correct parameters
+      // Send message via socket
       sendMessage(chatId, senderId, content);
 
-      // Show typing indicator
+      // Show typing indicator briefly
       setIsTyping(true);
       setTimeout(() => {
         setIsTyping(false);
       }, 1500);
-    } catch (error) {
-      console.error("Failed to send message:", error);
+
+      console.log("Message sent successfully");
+    } catch (err) {
+      console.error("Failed to send message:", err);
 
       // Revert optimistic update on error
       queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
@@ -133,13 +164,18 @@ export function ChatPage() {
 
       // Restore the message if sending failed
       setNewMessage(content);
+      error("Failed to send message. Please try again.");
     } finally {
       setIsSending(false);
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const formatTime = (date: Date | string) => {
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    return dateObj?.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   const getChatTitle = () => {
@@ -173,9 +209,9 @@ export function ChatPage() {
 
     if (selectedChat.participants) {
       const otherUserId = selectedChat.participants.find(
-        (p) => p !== state.user._id
+        (p) => p._id !== state.user._id
       );
-      const otherUser = users?.users?.find((u) => u._id === otherUserId);
+      const otherUser = users?.users?.find((u) => u._id === otherUserId?._id);
       if (otherUser?.isOnline) return "Online";
       if (otherUser?.lastSeen)
         return `Last seen ${formatTime(otherUser.lastSeen)}`;
@@ -218,13 +254,20 @@ export function ChatPage() {
       >
         {/* Sidebar */}
         {chatsLoading ? (
-          <div>Loading chats...</div>
+          <div
+            className={`flex items-center justify-center w-80 ${
+              isDark ? "text-white" : "text-black"
+            }`}
+          >
+            <div>Loading chats...</div>
+          </div>
         ) : (
           <Sidebar
             isDark={isDark}
             selectedChat={selectedChat}
             users={users}
             chats={chats}
+            channels={[]}
             setSelectedChat={setSelectedChat}
             handleSelectUser={handleSelectUser}
           />
@@ -232,7 +275,13 @@ export function ChatPage() {
 
         {/* Main Chat Area */}
         {messagesLoading ? (
-          <div>Loading messages...</div>
+          <div
+            className={`flex-1 flex items-center justify-center ${
+              isDark ? "text-white" : "text-black"
+            }`}
+          >
+            <div>Loading messages...</div>
+          </div>
         ) : (
           <ChatContainer
             selectedChat={selectedChat}
@@ -248,6 +297,7 @@ export function ChatPage() {
             handleFileSelect={handleFileSelect}
             newMessage={newMessage}
             setNewMessage={setNewMessage}
+            isSending={isSending}
           />
         )}
       </div>
