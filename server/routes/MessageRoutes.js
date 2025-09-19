@@ -1,5 +1,10 @@
 import express from "express";
-import { createChat, sendMessage, getMessages, getUserChats } from "../controllers/MessageController.js";
+import {
+  createChat,
+  sendMessage,
+  getMessages,
+  getUserChats,
+} from "../controllers/MessageController.js";
 import { verifyToken } from "../middlewares/AuthMiddleware.js";
 
 const messageRoutes = express.Router();
