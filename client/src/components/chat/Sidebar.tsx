@@ -156,9 +156,10 @@ const Sidebar = ({
                                   isDark ? "text-white" : "text-gray-900"
                                 }`}
                               >
-                                {otherParticipant?.firstName} {otherParticipant?.lastName}
+                                {otherParticipant?.firstName}{" "}
+                                {otherParticipant?.lastName}
                               </p>
-                              {chat.unreadCount && (
+                              {chat.unreadCount > 0 && (
                                 <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
                                   {chat.unreadCount}
                                 </span>
