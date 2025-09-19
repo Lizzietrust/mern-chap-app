@@ -1,9 +1,13 @@
 export interface Message {
-  id: string;
-  text: string;
-  sender: 'user' | 'other';
-  timestamp: Date;
-  isTyping?: boolean;
+  _id?: string;
+  id?: string; 
+  sender: string | { _id: string; firstName: string; lastName: string; email: string; image?: string };
+  messageType: "text" | "image" | "file";
+  content: string;
+  chatId: string;
+  createdAt?: Date;
+  timestamp?: Date; 
+  text?: string; 
 }
 
 export interface User {
