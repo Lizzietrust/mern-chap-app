@@ -3,16 +3,23 @@ import { useUsers } from '../../hooks/useUsers';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useCreateChat } from '../../hooks/useChat';
 import { SelectedChatContext } from '../../contexts/SelectedChatContext';
+import type { User, Chat } from '../../types';
 
-const NewChatModal = ({ isDark, onClose }) => {
-    const { selectedChat, setSelectedChat } = useContext(SelectedChatContext)
+interface NewChatModalProps {
+    isDark: boolean;
+    onClose: () => void;
+}
+
+const NewChatModal: React.FC<NewChatModalProps> = ({ isDark, onClose }) => {
+    const { setSelectedChat } = useContext(SelectedChatContext) as { setSelectedChat: (chat: Chat | null) => void; };
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebounce(search, 500);
-  const { data: users, isLoading, isError } = useUsers(page, 10, debouncedSearch);
+  const { data, isLoading, isError } = useUsers(page, 10, debouncedSearch);
+  const { users, hasNextPage } = data || {};
   const createChatMutation = useCreateChat();
 
-  const handleUserClick = async (user) => {
+  const handleUserClick = async (user: User) => {
     try {
       const chat = await createChatMutation.mutateAsync(user._id);
       setSelectedChat(chat);
@@ -22,12 +29,8 @@ const NewChatModal = ({ isDark, onClose }) => {
     }
   };
 
-  const handleClearSelection = () => {
-    setSelectedChat(null);
-  };
-
   const handleNext = () => {
-    if (users && users.hasNextPage) {
+    if (hasNextPage) {
       setPage(prevPage => prevPage + 1);
     }
   };
@@ -53,15 +56,15 @@ const NewChatModal = ({ isDark, onClose }) => {
         {isError && <p className="text-red-500">Error loading users.</p>}
 
         <div className="max-h-60 overflow-y-auto">
-          {users && users?.users.map((user) => (
-            <div key={user?._id} className={`p-2 rounded-lg mb-2 flex items-center space-x-3 cursor-pointer hover:bg-gray-700`} onClick={() => handleUserClick(user)}>
-              {user?.image ? (<img src={user?.image} alt={user?.firstName || user?.email} className='w-10 h-10 rounded-full' />) : (
+          {users && users.map((user: User) => (
+            <div key={user._id} className={`p-2 rounded-lg mb-2 flex items-center space-x-3 cursor-pointer hover:bg-gray-700`} onClick={() => handleUserClick(user)}>
+              {user.image ? (<img src={user.image} alt={user.firstName || user.email} className='w-10 h-10 rounded-full' />) : (
                 <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
-                  {user?.firstName?.charAt(0)}
+                  {user.firstName?.charAt(0)}
                 </div>
               )}
               <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {user?.firstName} {user?.lastName}
+                {user.firstName} {user.lastName}
               </p>
             </div>
           ))}
@@ -78,21 +81,12 @@ const NewChatModal = ({ isDark, onClose }) => {
           <span className={`${isDark ? 'text-white' : 'text-black'}`}>Page {page}</span>
           <button
             onClick={handleNext}
-            disabled={!users?.hasNextPage}
+            disabled={!hasNextPage}
             className={`py-2 px-4 rounded-lg ${isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-800'} disabled:opacity-50`}
           >
             Next
           </button>
         </div>
-
-        {selectedChat && (
-          <button
-            onClick={handleClearSelection}
-            className={`mt-4 w-full py-2 px-4 rounded-lg bg-red-500 text-white`}
-          >
-            Clear Selection
-          </button>
-        )}
 
         <button
           onClick={onClose}
