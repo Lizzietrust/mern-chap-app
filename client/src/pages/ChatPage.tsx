@@ -123,12 +123,12 @@ export function ChatPage() {
     // Optimistically update the UI
     const tempMessage: Message = {
       id: `temp-${Date.now()}`,
-      sender: state.user._id, 
+      sender: state.user._id,
       messageType: "text",
       content: content,
       chatId: chatId,
       timestamp: new Date(),
-      text: content, 
+      text: content,
     };
 
     const messagesQueryKey = messageKeys.list(chatId);
