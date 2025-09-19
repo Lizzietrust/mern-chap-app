@@ -1,4 +1,23 @@
-import React, { useRef } from "react";
+import { useRef } from "react";
+import type { Message, Chat } from "../../types";
+import { useApp } from "../../contexts/AppContext";
+
+interface Props {
+  selectedChat: Chat;
+  isDark: boolean;
+  setSelectedChat: (chat: Chat | null) => void;
+  getChatTitle: () => string;
+  getChatSubtitle: () => string;
+  messages: Message[];
+  formatTime: (timestamp: Date | string) => string;
+  isTyping: boolean;
+  messagesEndRef: React.RefObject<HTMLDivElement>;
+  handleSendMessage: (e: React.FormEvent<HTMLFormElement>) => void;
+  handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  newMessage: string;
+  setNewMessage: (message: string) => void;
+  isSending?: boolean;
+}
 
 const ChatContainer = ({
   selectedChat,
@@ -14,9 +33,11 @@ const ChatContainer = ({
   handleFileSelect,
   newMessage,
   setNewMessage,
-}) => {
+  isSending = false,
+}: Props) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { state } = useApp();
 
   console.log({ messages });
 
@@ -64,7 +85,8 @@ const ChatContainer = ({
                       isDark ? "text-white" : "text-gray-900"
                     }`}
                   >
-                    {getChatTitle()}
+                    {state?.user?.name}
+                    {/* {getChatTitle()} */}
                   </h1>
                   <p
                     className={`text-sm ${
@@ -103,37 +125,60 @@ const ChatContainer = ({
 
           {/* Messages Container */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages?.map((message) => (
+            {!messages || messages.length === 0 ? (
               <div
-                key={message?._id || message?.id}
-                className={`flex ${
-                  message.sender === "user" ? "justify-end" : "justify-start"
+                className={`text-center py-8 ${
+                  isDark ? "text-gray-400" : "text-gray-500"
                 }`}
               >
-                <div
-                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                    message.sender === "user"
-                      ? "bg-blue-500 text-white"
-                      : isDark
-                      ? "bg-gray-700 text-white"
-                      : "bg-white text-gray-900 border border-gray-200"
-                  }`}
-                >
-                  <p className="text-sm break-words">{message?.text}</p>
-                  <p
-                    className={`text-xs mt-1 text-right ${
-                      message.sender === "user"
-                        ? "text-blue-100"
-                        : isDark
-                        ? "text-gray-400"
-                        : "text-gray-500"
+                <div className="text-4xl mb-4">💬</div>
+                <p>No messages yet. Start the conversation!</p>
+              </div>
+            ) : (
+              messages.map((message) => {
+                const isCurrentUser =
+                  message.sender === state.user._id ||
+                  (typeof message.sender === "object" &&
+                    message.sender._id === state.user._id);
+
+                return (
+                  <div
+                    key={message._id || message.id}
+                    className={`flex ${
+                      isCurrentUser ? "justify-end" : "justify-start"
                     }`}
                   >
-                    {formatTime(message.timestamp)}
-                  </p>
-                </div>
-              </div>
-            ))}
+                    <div
+                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                        isCurrentUser
+                          ? "bg-blue-500 text-white"
+                          : isDark
+                          ? "bg-gray-700 text-white"
+                          : "bg-white text-gray-900 border border-gray-200"
+                      } ${message.id?.startsWith("temp-") ? "opacity-70" : ""}`}
+                    >
+                      <p className="text-sm break-words">
+                        {message.content || message.text}
+                      </p>
+                      <p
+                        className={`text-xs mt-1 text-right ${
+                          isCurrentUser
+                            ? "text-blue-100"
+                            : isDark
+                            ? "text-gray-400"
+                            : "text-gray-500"
+                        }`}
+                      >
+                        {formatTime(message?.createdAt || message?.timestamp)}
+                        {message.id?.startsWith("temp-") && (
+                          <span className="ml-1">⏳</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
 
             {isTyping && (
               <div className="flex justify-start">
@@ -209,7 +254,8 @@ const ChatContainer = ({
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     placeholder={`Message ${getChatTitle()}`}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    disabled={isSending}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${
                       isDark
                         ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
                         : "bg-white border-gray-300 text-gray-900 placeholder-gray-500"
@@ -218,10 +264,17 @@ const ChatContainer = ({
                 </div>
                 <button
                   type="submit"
-                  disabled={!newMessage.trim()}
-                  className="px-4 md:px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  disabled={!newMessage.trim() || isSending}
+                  className="px-4 md:px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors cursor-pointer flex items-center gap-2"
                 >
-                  Send
+                  {isSending ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span className="hidden md:inline">Sending...</span>
+                    </>
+                  ) : (
+                    "Send"
+                  )}
                 </button>
               </div>
             </form>
