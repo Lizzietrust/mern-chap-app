@@ -1,4 +1,10 @@
-import { createContext, useState, useEffect, useContext, ReactNode } from "react";
+import {
+  createContext,
+  useState,
+  useEffect,
+  useContext,
+  ReactNode,
+} from "react";
 import { useApp } from "./AppContext";
 import type { User } from "./AppContext";
 import io, { Socket } from "socket.io-client";
@@ -11,11 +17,12 @@ import { messageKeys } from "../hooks/useChat";
 export interface ServerMessage {
   _id: string;
   sender: User;
-  messageType: 'text' | 'image' | 'file'; // Consider renaming from 'message'
+  messageType: "text" | "image" | "file";
   content?: string;
   fileUrl?: string;
-  timestamp: Date; // Use Date type instead of string
+  timestamp: Date;
   chatId: string;
+  createdAt: string;
 }
 
 interface SocketContextType {
@@ -44,68 +51,109 @@ export function SocketProvider({ children }: SocketProviderProps) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    let newSocket: Socket | null = null;
+
     if (isAuthenticated && user) {
-      const newSocket: Socket = io(API_BASE_URL, {
+      console.log("Connecting socket for user:", user._id);
+      newSocket = io(API_BASE_URL, {
         query: { userId: user._id },
       });
 
       setSocket(newSocket);
 
       newSocket.on("connect", () => {
-        console.log("Socket connected:", newSocket.id);
+        console.log("Socket connected:", newSocket?.id);
       });
 
       newSocket.on("getOnlineUsers", (users: User[]) => {
+        console.log("Online users:", users);
         setOnlineUsers(users);
       });
-      
 
-      const transformMessage = (serverMessage: ServerMessage): ClientMessage => {
-        return {
-          id: serverMessage._id,
-          text: serverMessage.content || '',
-          sender: serverMessage.sender._id === user?._id ? 'user' : 'other',
-          timestamp: new Date(serverMessage.timestamps),
-        };
-      };
-
-      const handleNewMessage = (message: ServerMessage) => {
-        const transformedMessage = transformMessage(message);
-        const messagesQueryKey = messageKeys.list(message.chatId);
+      // Handle incoming messages
+      newSocket.on("newMessage", (serverMessage: ServerMessage) => {
+        console.log("Received new message:", serverMessage);
         
-        queryClient.setQueryData<ClientMessage[]>(messagesQueryKey, (oldMessages) => {
-          if (!oldMessages) return [transformedMessage];
-          // Avoid duplicates
-          if (oldMessages.some(m => m.id === transformedMessage.id)) return oldMessages;
-          return [...oldMessages, transformedMessage];
+        // Transform server message to client message format
+        const clientMessage: ClientMessage = {
+          id: serverMessage._id,
+          text: serverMessage.content || "",
+          sender: serverMessage.sender._id === user._id ? "user" : "other",
+          timestamp: new Date(serverMessage.createdAt || serverMessage.timestamp),
+          // Add any other required fields from your ClientMessage type
+        };
+
+        const messagesQueryKey = messageKeys.list(serverMessage.chatId);
+
+        queryClient.setQueryData<ClientMessage[]>(messagesQueryKey, (oldMessages = []) => {
+          // Remove any temporary messages and add the real one
+          const filteredMessages = oldMessages.filter(
+            (msg) => !msg.id?.startsWith("temp-")
+          );
+          return [...filteredMessages, clientMessage];
         });
-      }
+      });
 
-      newSocket.on("newMessage", handleNewMessage);
+      newSocket.on("messageError", (error: any) => {
+        console.error("Message sending error:", error);
+        // You might want to show a notification to the user here
+      });
 
-      return () => {
-        newSocket.off("getOnlineUsers");
-        newSocket.off("newMessage");
-        newSocket.close();
-        setSocket(null);
+      newSocket.on("disconnect", () => {
         console.log("Socket disconnected");
-      };
+      });
+
+      newSocket.on("error", (error) => {
+        console.error("Socket error:", error);
+      });
+
     } else {
+      // Disconnect if not authenticated
       if (socket) {
+        console.log("Disconnecting socket - user not authenticated");
         socket.close();
         setSocket(null);
       }
     }
-  }, [isAuthenticated, user, queryClient]);
+
+    // Cleanup function
+    return () => {
+      if (newSocket) {
+        console.log("Cleaning up socket");
+        newSocket.off("connect");
+        newSocket.off("getOnlineUsers");
+        newSocket.off("newMessage");
+        newSocket.off("messageError");
+        newSocket.off("disconnect");
+        newSocket.off("error");
+        newSocket.close();
+      }
+    };
+  }, [isAuthenticated, user, queryClient]); // Remove socket from dependencies
 
   const sendMessage = (chatId: string, senderId: string, content: string) => {
-    if (socket) {
+    if (socket && chatId && senderId && content.trim()) {
+      console.log("Sending message via socket:", { chatId, senderId, content });
       socket.emit("sendMessage", { chatId, senderId, content });
+    } else {
+      console.error("Cannot send message - missing required data or socket not connected:", {
+        hasSocket: !!socket,
+        isSocketConnected: socket?.connected,
+        chatId,
+        senderId,
+        content,
+      });
     }
   };
 
+  const value: SocketContextType = {
+    socket,
+    onlineUsers,
+    sendMessage,
+  };
+
   return (
-    <SocketContext.Provider value={{ socket, onlineUsers, sendMessage }}>
+    <SocketContext.Provider value={value}>
       {children}
     </SocketContext.Provider>
   );
