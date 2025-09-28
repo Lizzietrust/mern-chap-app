@@ -71,27 +71,43 @@ export function SocketProvider({ children }: SocketProviderProps) {
       });
 
       // Handle incoming messages
+      // In the newMessage event handler
       newSocket.on("newMessage", (serverMessage: ServerMessage) => {
         console.log("Received new message:", serverMessage);
-        
-        // Transform server message to client message format
+
+        // Transform server message to match your ClientMessage type
         const clientMessage: ClientMessage = {
           id: serverMessage._id,
-          text: serverMessage.content || "",
-          sender: serverMessage.sender._id === user._id ? "user" : "other",
-          timestamp: new Date(serverMessage.createdAt || serverMessage.timestamp),
-          // Add any other required fields from your ClientMessage type
+          _id: serverMessage._id,
+          sender: serverMessage.sender._id,
+          messageType: serverMessage.messageType,
+          content: serverMessage.content,
+          chatId: serverMessage.chatId,
+          timestamp: new Date(serverMessage.createdAt),
+          createdAt: new Date(serverMessage.createdAt),
+          text: serverMessage.content, // Ensure this matches your type
         };
 
         const messagesQueryKey = messageKeys.list(serverMessage.chatId);
 
-        queryClient.setQueryData<ClientMessage[]>(messagesQueryKey, (oldMessages = []) => {
-          // Remove any temporary messages and add the real one
-          const filteredMessages = oldMessages.filter(
-            (msg) => !msg.id?.startsWith("temp-")
-          );
-          return [...filteredMessages, clientMessage];
-        });
+        queryClient.setQueryData<ClientMessage[]>(
+          messagesQueryKey,
+          (oldMessages = []) => {
+            // Check if message already exists to prevent duplicates
+            const messageExists = oldMessages.some(
+              (msg) => msg._id === serverMessage._id
+            );
+            if (messageExists) {
+              return oldMessages;
+            }
+
+            // Remove any temporary messages and add the real one
+            const filteredMessages = oldMessages.filter(
+              (msg) => !msg.id?.startsWith("temp-")
+            );
+            return [...filteredMessages, clientMessage];
+          }
+        );
       });
 
       newSocket.on("messageError", (error: any) => {
@@ -106,7 +122,6 @@ export function SocketProvider({ children }: SocketProviderProps) {
       newSocket.on("error", (error) => {
         console.error("Socket error:", error);
       });
-
     } else {
       // Disconnect if not authenticated
       if (socket) {
@@ -136,13 +151,16 @@ export function SocketProvider({ children }: SocketProviderProps) {
       console.log("Sending message via socket:", { chatId, senderId, content });
       socket.emit("sendMessage", { chatId, senderId, content });
     } else {
-      console.error("Cannot send message - missing required data or socket not connected:", {
-        hasSocket: !!socket,
-        isSocketConnected: socket?.connected,
-        chatId,
-        senderId,
-        content,
-      });
+      console.error(
+        "Cannot send message - missing required data or socket not connected:",
+        {
+          hasSocket: !!socket,
+          isSocketConnected: socket?.connected,
+          chatId,
+          senderId,
+          content,
+        }
+      );
     }
   };
 
@@ -153,8 +171,6 @@ export function SocketProvider({ children }: SocketProviderProps) {
   };
 
   return (
-    <SocketContext.Provider value={value}>
-      {children}
-    </SocketContext.Provider>
+    <SocketContext.Provider value={value}>{children}</SocketContext.Provider>
   );
 }
