@@ -1,99 +1,93 @@
-import React, { useContext, useState } from 'react';
-import { useUsers } from '../../hooks/useUsers';
-import { useDebounce } from '../../hooks/useDebounce';
-import { useCreateChat } from '../../hooks/useChat';
-import { SelectedChatContext } from '../../contexts/SelectedChatContext';
-import type { User, Chat } from '../../types';
+import { XMarkIcon } from "@heroicons/react/24/solid";
+import React from "react";
+import type { User } from "../../types";
 
-interface NewChatModalProps {
-    isDark: boolean;
-    onClose: () => void;
+interface Props {
+  isDark: boolean;
+  onClose: () => void;
+  users: User[];
+  handleSelectUser: (userId: string) => void;
 }
 
-const NewChatModal: React.FC<NewChatModalProps> = ({ isDark, onClose }) => {
-    const { setSelectedChat } = useContext(SelectedChatContext) as { setSelectedChat: (chat: Chat | null) => void; };
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const debouncedSearch = useDebounce(search, 500);
-  const { data, isLoading, isError } = useUsers(page, 10, debouncedSearch);
-  const { users, hasNextPage } = data || {};
-  const createChatMutation = useCreateChat();
-
-  const handleUserClick = async (user: User) => {
-    try {
-      const chat = await createChatMutation.mutateAsync(user._id);
-      setSelectedChat(chat);
-      onClose();
-    } catch (error) {
-      console.error("Error creating chat:", error);
-    }
-  };
-
-  const handleNext = () => {
-    if (hasNextPage) {
-      setPage(prevPage => prevPage + 1);
-    }
-  };
-
-  const handlePrevious = () => {
-    setPage(prevPage => Math.max(prevPage - 1, 1));
-  };
-
+const NewChatModal = ({ isDark, onClose, users, handleSelectUser }: Props) => {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg p-8 w-full max-w-md`}>
-        <h2 className={`text-2xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>Create New Chat</h2>
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className={`${
+          isDark ? "bg-gray-800" : "bg-white"
+        } rounded-lg p-8 w-full max-w-md`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h2
+            className={`text-xl font-bold ${
+              isDark ? "text-white" : "text-gray-900"
+            }`}
+          >
+            New Chat
+          </h2>
+          <button
+            onClick={onClose}
+            className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
+              isDark ? "text-gray-300" : "text-gray-600"
+            }`}
+          >
+            <XMarkIcon className="h-6 w-6" />
+          </button>
+        </div>
 
-        <input
-          type="text"
-          placeholder="Search for users..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className={`w-full p-2 mb-4 rounded-lg ${isDark ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-900'}`}
-        />
-
-        {isLoading && <p className={`${isDark ? 'text-white' : 'text-black'}`}>Loading users...</p>}
-        {isError && <p className="text-red-500">Error loading users.</p>}
-
-        <div className="max-h-60 overflow-y-auto">
-          {users && users.map((user: User) => (
-            <div key={user._id} className={`p-2 rounded-lg mb-2 flex items-center space-x-3 cursor-pointer hover:bg-gray-700`} onClick={() => handleUserClick(user)}>
-              {user.image ? (<img src={user.image} alt={user.firstName || user.email} className='w-10 h-10 rounded-full' />) : (
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {users.map((user) => (
+            <button
+              key={user._id}
+              onClick={() => handleSelectUser(user._id)}
+              className={`w-full p-3 rounded-lg text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
+                isDark ? "text-white" : "text-gray-900"
+              }`}
+            >
+              <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
-                  {user.firstName?.charAt(0)}
+                  {user.image ? (
+                    <img
+                      className="w-10 h-10 rounded-full"
+                      src={user.image}
+                      alt="User avatar"
+                    />
+                  ) : (
+                    <div>
+                      {user.firstName?.charAt(0) || "U"}
+                    </div>
+                  )}
                 </div>
-              )}
-              <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {user.firstName} {user.lastName}
-              </p>
-            </div>
+                <div>
+                  <p className="font-medium">
+                    {user.firstName} {user.lastName}
+                  </p>
+                  <p
+                    className={`text-sm ${
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    }`}
+                  >
+                    {user.email}
+                  </p>
+                </div>
+              </div>
+            </button>
           ))}
         </div>
 
-        <div className="flex justify-between mt-4">
-          <button
-            onClick={handlePrevious}
-            disabled={page === 1}
-            className={`py-2 px-4 rounded-lg ${isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-800'} disabled:opacity-50`}
+        {users.length === 0 && (
+          <p
+            className={`text-center py-4 ${
+              isDark ? "text-gray-400" : "text-gray-500"
+            }`}
           >
-            Previous
-          </button>
-          <span className={`${isDark ? 'text-white' : 'text-black'}`}>Page {page}</span>
-          <button
-            onClick={handleNext}
-            disabled={!hasNextPage}
-            className={`py-2 px-4 rounded-lg ${isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-800'} disabled:opacity-50`}
-          >
-            Next
-          </button>
-        </div>
-
-        <button
-          onClick={onClose}
-          className={`mt-6 w-full py-2 px-4 rounded-lg ${isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-800'}`}
-        >
-          Close
-        </button>
+            No users found
+          </p>
+        )}
       </div>
     </div>
   );
