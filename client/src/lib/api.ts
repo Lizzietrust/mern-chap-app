@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import type { Chat, User, AuthResponse } from "../types";
 
 // Base API configuration
 export const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -116,13 +117,6 @@ class ApiClient {
 
 export const apiClient = new ApiClient(axiosInstance);
 
-// Example API functions
-export interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-
 export interface Post {
   id: number;
   title: string;
@@ -134,10 +128,12 @@ export interface Post {
 export const userApi = {
   getUsers: (page?: number, limit?: number, search?: string) => {
     const params = new URLSearchParams();
-    if (page) params.append('page', page.toString());
-    if (limit) params.append('limit', limit.toString());
-    if (search) params.append('search', search);
-    return apiClient.get<User[]>(`/api/user/fetch-all-users?${params.toString()}`);
+    if (page) params.append("page", page.toString());
+    if (limit) params.append("limit", limit.toString());
+    if (search) params.append("search", search);
+    return apiClient.get<User[]>(
+      `/api/user/fetch-all-users?${params.toString()}`
+    );
   },
   getUser: (id: number) => apiClient.get<User>(`/users/${id}`),
   createUser: (user: Omit<User, "id">) => apiClient.post<User>("/users", user),
@@ -169,23 +165,6 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface AuthResponse {
-  user: {
-    _id: string;
-    email: string;
-    firstName?: string;
-    lastName?: string;
-    image?: string;
-    bio?: string;
-    phone?: string;
-    location?: string;
-    website?: string;
-    profileSetup: boolean;
-    createdAt?: string;
-    updatedAt?: string;
-  };
-}
-
 // Auth API functions
 export const authApi = {
   register: (data: RegisterRequest) =>
@@ -194,22 +173,22 @@ export const authApi = {
     apiClient.post<AuthResponse>("/api/auth/login", data),
   logout: () => apiClient.post("/api/auth/logout"),
   me: () => apiClient.get<AuthResponse>("/api/auth/user-info"),
-  updateProfile: (data: { 
-    firstName?: string; 
-    lastName?: string; 
+  updateProfile: (data: {
+    firstName?: string;
+    lastName?: string;
     image?: string;
     bio?: string;
     phone?: string;
     location?: string;
     website?: string;
-  }) =>
-    apiClient.put<AuthResponse>("/api/auth/update-profile", data),
+  }) => apiClient.put<AuthResponse>("/api/auth/update-profile", data),
 };
 
+// Chat API functions
 export const chatApi = {
-  createChat: (userId: string) => apiClient.post("/api/messages/create-chat", { userId }),
+  createChat: (userId: string): Promise<Chat> =>
+    apiClient.post<Chat>("/api/messages/create-chat", { userId }),
 };
-
 
 // Export axios instance for direct use if needed
 export { axiosInstance };
