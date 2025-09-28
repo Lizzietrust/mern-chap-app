@@ -12,6 +12,7 @@ const setupSocket = (server) => {
   });
 
   const userSockets = new Map();
+  const userRooms = new Map(); // Track which rooms users are in
 
   // Helper function to broadcast online users
   const broadcastOnlineUsers = async () => {
@@ -26,89 +27,7 @@ const setupSocket = (server) => {
     }
   };
 
-  const sendMessage = async (socket, data) => {
-    const { chatId, senderId, content } = data;
-
-    try {
-      // Validate required fields
-      if (!chatId || !senderId || !content?.trim()) {
-        socket.emit("messageError", { error: "Missing required fields" });
-        return;
-      }
-
-      // Check if chat exists
-      const chat = await Chat.findById(chatId).populate("participants");
-      if (!chat) {
-        socket.emit("messageError", { error: "Chat not found" });
-        return;
-      }
-
-      // Check if sender is a participant
-      const isParticipant = chat.participants.some(
-        (p) => p._id.toString() === senderId
-      );
-      if (!isParticipant) {
-        socket.emit("messageError", { error: "Unauthorized" });
-        return;
-      }
-
-      // Create and save message
-      const newMessage = new Message({
-        sender: senderId,
-        messageType: "text",
-        content: content.trim(),
-        chatId: chatId, // Make sure to include chatId
-      });
-
-      const savedMessage = await newMessage.save();
-
-      // Update chat with new message
-      await Chat.findByIdAndUpdate(
-        chatId,
-        {
-          $push: { messages: savedMessage._id },
-          lastMessage: content.trim(),
-          lastMessageTime: new Date(),
-        },
-        { new: true }
-      );
-
-      // Get the populated message
-      const messageData = await Message.findById(savedMessage._id).populate(
-        "sender",
-        "_id firstName lastName image email bio phone location website color profileSetup"
-      );
-
-      const payload = {
-        ...messageData.toObject(),
-        chatId,
-        timestamp: messageData.createdAt,
-      };
-
-      console.log("Broadcasting message to participants:", payload);
-
-      // Send to all participants
-      chat.participants.forEach((participant) => {
-        const participantSocketId = userSockets.get(participant._id.toString());
-        if (participantSocketId) {
-          io.to(participantSocketId).emit("newMessage", payload);
-          console.log(
-            `Sent message to participant ${participant._id}: ${participantSocketId}`
-          );
-        } else {
-          console.log(`Participant ${participant._id} is offline`);
-        }
-      });
-    } catch (error) {
-      console.error("Error sending message:", error);
-      socket.emit("messageError", {
-        error: "Failed to send message",
-        details: error.message,
-      });
-    }
-  };
-
-  // Add authentication middleware
+  // Authentication middleware
   io.use(async (socket, next) => {
     const userId = socket.handshake.query.userId;
     if (!userId) {
@@ -128,40 +47,118 @@ const setupSocket = (server) => {
     }
   });
 
-  // In your socket.io setup
   io.on("connection", (socket) => {
-    socket.on("sendMessage", async (data) => {
-      try {
-        const { chatId, senderId, content } = data;
+    const userId = socket.userId;
+    console.log(`User ${userId} connected with socket ${socket.id}`);
+    
+    // Store user's socket ID
+    userSockets.set(userId, socket.id);
+    broadcastOnlineUsers();
 
-        // Save message to database (reuse your existing sendMessage logic)
+    // Handle joining chat rooms
+    socket.on("joinChat", (chatId) => {
+      socket.join(chatId);
+      userRooms.set(userId, chatId);
+      console.log(`User ${userId} joined chat ${chatId}`);
+    });
+
+    // Handle leaving chat rooms
+    socket.on("leaveChat", (chatId) => {
+      socket.leave(chatId);
+      userRooms.delete(userId);
+      console.log(`User ${userId} left chat ${chatId}`);
+    });
+
+    // Handle sending messages
+    socket.on("sendMessage", async (data) => {
+      const { chatId, senderId, content } = data;
+
+      try {
+        // Validate required fields
+        if (!chatId || !senderId || !content?.trim()) {
+          socket.emit("messageError", { error: "Missing required fields" });
+          return;
+        }
+
+        // Verify sender is the connected user
+        if (senderId !== userId) {
+          socket.emit("messageError", { error: "Unauthorized" });
+          return;
+        }
+
+        // Check if chat exists
+        const chat = await Chat.findById(chatId).populate("participants");
+        if (!chat) {
+          socket.emit("messageError", { error: "Chat not found" });
+          return;
+        }
+
+        // Check if sender is a participant
+        const isParticipant = chat.participants.some(
+          (p) => p._id.toString() === senderId
+        );
+        if (!isParticipant) {
+          socket.emit("messageError", { error: "Unauthorized" });
+          return;
+        }
+
+        // Create and save message
         const newMessage = new Message({
           sender: senderId,
           messageType: "text",
           content: content.trim(),
-          chatId,
+          chatId: chatId,
         });
 
         const savedMessage = await newMessage.save();
 
-        // Update chat
-        await Chat.findByIdAndUpdate(chatId, {
-          $push: { messages: savedMessage._id },
-          lastMessage: content.trim(),
-          lastMessageTime: new Date(),
-        });
+        // Update chat with new message
+        await Chat.findByIdAndUpdate(
+          chatId,
+          {
+            $push: { messages: savedMessage._id },
+            lastMessage: content.trim(),
+            lastMessageTime: new Date(),
+          },
+          { new: true }
+        );
 
-        // Populate and emit to all participants
-        const populatedMessage = await Message.findById(
-          savedMessage._id
-        ).populate("sender", "_id firstName lastName email image");
+        // Get the populated message
+        const messageData = await Message.findById(savedMessage._id).populate(
+          "sender",
+          "_id firstName lastName image email"
+        );
 
+        // Create consistent message payload
+        const payload = {
+          _id: savedMessage._id,
+          sender: messageData.sender,
+          messageType: "text",
+          content: content.trim(),
+          chatId: chatId,
+          timestamp: savedMessage.createdAt,
+          createdAt: savedMessage.createdAt,
+        };
+
+        console.log("Broadcasting message to chat room:", chatId);
+        
         // Emit to all participants in the chat room
-        io.to(chatId).emit("newMessage", populatedMessage);
+        io.to(chatId).emit("newMessage", payload);
+
       } catch (error) {
         console.error("Error sending message:", error);
-        socket.emit("messageError", { error: "Failed to send message" });
+        socket.emit("messageError", {
+          error: "Failed to send message",
+          details: error.message,
+        });
       }
+    });
+
+    socket.on("disconnect", () => {
+      console.log(`User ${userId} disconnected`);
+      userSockets.delete(userId);
+      userRooms.delete(userId);
+      broadcastOnlineUsers();
     });
   });
 
