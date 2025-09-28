@@ -41,3 +41,21 @@ export type Chat = {
   type: "user" | "channel";
   _id: string;
 } | null;
+
+// types.ts
+export interface AuthResponse {
+  user: {
+    _id: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    image?: string;
+    bio?: string;
+    phone?: string;
+    location?: string;
+    website?: string;
+    profileSetup: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+  };
+}
