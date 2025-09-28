@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { chatApi, apiClient as api } from "../lib/api";
-import type { Message } from "../types";
+import type { Message, Chat } from "../types";
 
 export const chatKeys = {
   all: ["chats"] as const,
@@ -19,8 +19,8 @@ export const messageKeys = {
 export function useCreateChat() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: (userId: string) => chatApi.createChat(userId),
+  return useMutation<Chat, Error, string>({
+    mutationFn: (userId: string): Promise<Chat> => chatApi.createChat(userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
     },
@@ -28,16 +28,16 @@ export function useCreateChat() {
 }
 
 export function useUserChats() {
-  return useQuery({
+  return useQuery<Chat[]>({
     queryKey: chatKeys.lists(),
-    queryFn: () => api.get("/api/messages/get-user-chats"),
+    queryFn: (): Promise<Chat[]> => api.get("/api/messages/get-user-chats"),
   });
 }
 
 export function useMessages(chatId: string | null | undefined) {
   return useQuery<Message[]>({
     queryKey: messageKeys.list(chatId!),
-    queryFn: () => api.get(`/api/messages/get-messages/${chatId}`),
+    queryFn: (): Promise<Message[]> => api.get(`/api/messages/get-messages/${chatId}`),
     enabled: !!chatId,
   });
 }
