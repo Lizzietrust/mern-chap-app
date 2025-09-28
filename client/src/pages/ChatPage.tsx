@@ -5,7 +5,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import { Layout } from "../components/Layout";
 import { SelectedChatContext } from "../contexts/SelectedChatContext";
 import { useSocket } from "../contexts/SocketContext";
-import type { Message } from "../types";
+import type { Message, Chat, User } from "../types";
 import ChatContainer from "../components/chat/ChatContainer";
 import { useUsers } from "../hooks/useUsers";
 import {
@@ -21,7 +21,7 @@ export function ChatPage() {
   const { state } = useApp();
   const { success, error } = useNotifications();
   const { isDark } = useTheme();
-  const { selectedChat, setSelectedChat } = useContext(SelectedChatContext);
+  const { selectedChat, setSelectedChat } = useContext(SelectedChatContext)!;
   const { sendMessage, socket } = useSocket();
   const queryClient = useQueryClient();
   const [isSending, setIsSending] = useState(false);
@@ -29,22 +29,17 @@ export function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const {
-    data: users,
-    isLoading: usersLoading,
-    isError: usersError,
+    data: usersData,
   } = useUsers(1, 10, "");
 
   const {
     data: chats,
     isLoading: chatsLoading,
-    isError: chatsError,
   } = useUserChats();
 
   const {
     data: messages,
     isLoading: messagesLoading,
-    isError: messagesError,
-    refetch: refetchMessages,
   } = useMessages(selectedChat?._id);
 
   const createChatMutation = useCreateChat();
@@ -55,10 +50,6 @@ export function ChatPage() {
       error("Failed to create chat");
     }
   }, [createChatMutation.isError, createChatMutation.error, error]);
-
-  console.log({ users });
-  console.log({ selectedChat });
-  console.log({ messages });
 
   const [newMessage, setNewMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -85,22 +76,21 @@ export function ChatPage() {
   useEffect(() => {
     if (selectedChat && socket) {
       socket.emit("joinChat", selectedChat._id);
-      // Refetch messages when switching chats
-      refetchMessages();
 
       return () => {
         socket.emit("leaveChat", selectedChat._id);
       };
     }
-  }, [selectedChat, socket, refetchMessages]);
+  }, [selectedChat, socket]);
 
   const handleSelectUser = async (userId: string) => {
     try {
-      const chat = await createChatMutation.mutateAsync(userId);
+      // Fix: Type assertion or proper typing
+      const chat = await createChatMutation.mutateAsync(userId) as Chat;
       setSelectedChat(chat);
       console.log("Chat created/selected:", chat);
-    } catch (error) {
-      console.error("Error creating or fetching chat:", error);
+    } catch (err) {
+      console.error("Error creating or fetching chat:", err);
       error("Failed to create or open chat");
     }
   };
@@ -112,23 +102,23 @@ export function ChatPage() {
       return;
     }
 
-    const senderId = state.user._id;
+    const sender: User = state.user;
     const chatId = selectedChat._id;
     const content = newMessage.trim();
 
-    console.log("Sending message:", { chatId, senderId, content });
+    console.log("Sending message:", { chatId, senderId: sender._id, content });
 
     setIsSending(true);
 
     // Optimistically update the UI
     const tempMessage: Message = {
-      id: `temp-${Date.now()}`,
-      sender: state.user._id,
+      _id: `temp-${Date.now()}`,
+      sender: sender,
       messageType: "text",
       content: content,
       chatId: chatId,
+      createdAt: new Date(),
       timestamp: new Date(),
-      text: content,
     };
 
     const messagesQueryKey = messageKeys.list(chatId);
@@ -144,7 +134,7 @@ export function ChatPage() {
 
     try {
       // Send message via socket
-      sendMessage(chatId, senderId, content);
+      sendMessage(chatId, sender._id, content);
 
       // Show typing indicator briefly
       setIsTyping(true);
@@ -159,7 +149,7 @@ export function ChatPage() {
       // Revert optimistic update on error
       queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
         if (!oldMessages) return [];
-        return oldMessages.filter((msg) => msg.id !== tempMessage.id);
+        return oldMessages.filter((msg) => msg._id !== tempMessage._id);
       });
 
       // Restore the message if sending failed
@@ -180,25 +170,20 @@ export function ChatPage() {
 
   const getChatTitle = () => {
     if (!selectedChat) return "Select a chat";
-    console.log({ selectedChat });
 
-    if (selectedChat?.participants) {
-      // This indicates a chat object
-      const otherUserId = selectedChat?.participants.find(
-        (p) => p._id !== state.user._id
+    if ("participants" in selectedChat) {
+      const otherUser = selectedChat.participants.find(
+        (p) => p._id !== state.user?._id
       );
 
-      const chatUserName =
-        otherUserId?.firstName && otherUserId?.lastName
-          ? `${otherUserId.firstName} ${otherUserId.lastName}`
-          : otherUserId?.email || "Unknown User";
-
-      return chatUserName || "Unknown User";
+      if (otherUser) {
+        return `${otherUser.firstName} ${otherUser.lastName}`;
+      }
+      return "Unknown User";
     }
 
-    if (selectedChat.name) {
-      // for group chats
-      return selectedChat.name;
+    if ("name" in selectedChat) {
+      return selectedChat.name || "Group Chat";
     }
 
     return "Select a chat";
@@ -207,18 +192,20 @@ export function ChatPage() {
   const getChatSubtitle = () => {
     if (!selectedChat) return "";
 
-    if (selectedChat.participants) {
-      const otherUserId = selectedChat.participants.find(
-        (p) => p._id !== state.user._id
+    if ("participants" in selectedChat) {
+      const otherUser = selectedChat.participants.find(
+        (p) => p._id !== state.user?._id
       );
-      const otherUser = users?.users?.find((u) => u._id === otherUserId?._id);
-      if (otherUser?.isOnline) return "Online";
-      if (otherUser?.lastSeen)
-        return `Last seen ${formatTime(otherUser.lastSeen)}`;
-      return "Offline";
+      if (otherUser && usersData?.users) {
+        const user = usersData.users.find((u) => u._id === otherUser._id);
+        if (user?.isOnline) return "Online";
+        if (user?.lastSeen)
+          return `Last seen ${formatTime(user.lastSeen)}`;
+        return "Offline";
+      }
     }
 
-    if (selectedChat.memberCount) {
+    if ("memberCount" in selectedChat) {
       return `${selectedChat.memberCount || 0} members`;
     }
 
@@ -265,7 +252,7 @@ export function ChatPage() {
           <Sidebar
             isDark={isDark}
             selectedChat={selectedChat}
-            users={users}
+            users={usersData?.users}
             chats={chats}
             channels={[]}
             setSelectedChat={setSelectedChat}
@@ -289,7 +276,7 @@ export function ChatPage() {
             setSelectedChat={setSelectedChat}
             getChatTitle={getChatTitle}
             getChatSubtitle={getChatSubtitle}
-            messages={messages}
+            messages={messages || []}
             formatTime={formatTime}
             isTyping={isTyping}
             messagesEndRef={messagesEndRef}
