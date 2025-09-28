@@ -3,6 +3,17 @@ import React, { useState } from "react";
 import { useMe } from "../../hooks/useAuth";
 import { getInitials } from "../../functions";
 import NewChatModal from "./NewChatModal";
+import type { Chat, User, Channel } from "../../types";
+
+interface Props {
+  isDark: boolean;
+  selectedChat: Chat | null;
+  users?: User[];
+  setSelectedChat: (chat: Chat | null) => void;
+  channels: Channel[];
+  handleSelectUser: (userId: string) => void;
+  chats?: Chat[];
+}
 
 const Sidebar = ({
   isDark,
@@ -12,7 +23,7 @@ const Sidebar = ({
   channels,
   handleSelectUser,
   chats,
-}) => {
+}: Props) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState<"dms" | "channels">("dms");
@@ -110,19 +121,23 @@ const Sidebar = ({
               {activeTab === "dms" && (
                 <div className="p-2">
                   {chats?.map((chat) => {
-                    const otherParticipant = chat?.participants?.find(
+                    if (!chat) return null;
+                    
+                    // Find other participant (not the current user)
+                    const otherParticipant = chat.participants?.find(
                       (p) => p._id !== authUser?.user?._id
                     );
 
-                    console.log({ chats });
-                    console.log({ otherParticipant });
+                    // Use optional chaining to safely access properties
+                    const unreadCount = (chat as any).unreadCount || 0;
+                    const lastMessage = (chat as any).lastMessage || "";
 
                     return (
                       <button
-                        key={chat?._id}
+                        key={chat._id}
                         onClick={() => setSelectedChat(chat)}
                         className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 overflow-hidden transition-colors cursor-pointer ${
-                          selectedChat?._id === chat?._id
+                          selectedChat?._id === chat._id
                             ? isDark
                               ? "bg-gray-700"
                               : "bg-gray-100"
@@ -140,10 +155,9 @@ const Sidebar = ({
                                 />
                               ) : (
                                 <div>
-                                  {otherParticipant?.firstName?.charAt(0)}
+                                  {otherParticipant?.firstName?.charAt(0) || "U"}
                                 </div>
                               )}
-                              {/* {otherParticipant?.image || otherParticipant?.firstName?.charAt(0)} */}
                             </div>
                             {otherParticipant?.isOnline && (
                               <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></div>
@@ -156,22 +170,22 @@ const Sidebar = ({
                                   isDark ? "text-white" : "text-gray-900"
                                 }`}
                               >
-                                {otherParticipant?.firstName}{" "}
-                                {otherParticipant?.lastName}
+                                {otherParticipant?.firstName || "Unknown"}{" "}
+                                {otherParticipant?.lastName || "User"}
                               </p>
-                              {chat.unreadCount > 0 && (
+                              {unreadCount > 0 && (
                                 <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
-                                  {chat.unreadCount}
+                                  {unreadCount}
                                 </span>
                               )}
                             </div>
-                            {chat.lastMessage && (
+                            {lastMessage && (
                               <p
                                 className={`text-sm truncate ${
                                   isDark ? "text-gray-400" : "text-gray-500"
                                 }`}
                               >
-                                {chat.lastMessage}
+                                {lastMessage}
                               </p>
                             )}
                           </div>
@@ -186,10 +200,10 @@ const Sidebar = ({
                 <div className="p-2">
                   {channels?.map((channel) => (
                     <button
-                      key={channel?._id}
-                      onClick={() => setSelectedChat(channel)}
-                      className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
-                        selectedChat?._id === channel?._id
+                      key={channel.id}
+                      onClick={() => setSelectedChat(channel as any)} // Temporary fix for type mismatch
+                      className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
+                        selectedChat?._id === channel.id
                           ? isDark
                             ? "bg-gray-700"
                             : "bg-gray-100"
@@ -199,7 +213,9 @@ const Sidebar = ({
                       <div className="flex items-center space-x-3">
                         <div
                           className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                            channel.isPrivate ? "bg-orange-500" : "bg-green-500"
+                            channel.isPrivate
+                              ? "bg-orange-500"
+                              : "bg-green-500"
                           } text-white font-semibold`}
                         >
                           {channel.isPrivate ? "🔒" : "#"}
@@ -213,9 +229,9 @@ const Sidebar = ({
                             >
                               {channel.name}
                             </p>
-                            {channel.unreadCount && (
+                            {(channel as any).unreadCount > 0 && (
                               <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
-                                {channel.unreadCount}
+                                {(channel as any).unreadCount}
                               </span>
                             )}
                           </div>
@@ -224,7 +240,7 @@ const Sidebar = ({
                               isDark ? "text-gray-400" : "text-gray-500"
                             }`}
                           >
-                            {channel.memberCount} members
+                            {channel.memberCount || 0} members
                           </p>
                         </div>
                       </div>
@@ -260,8 +276,8 @@ const Sidebar = ({
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
                     {getInitials(
-                      authUser?.user?.firstName,
-                      authUser?.user?.lastName
+                      authUser?.user?.firstName || "",
+                      authUser?.user?.lastName || ""
                     )}
                   </div>
                 )}
@@ -273,15 +289,14 @@ const Sidebar = ({
                       isDark ? "text-white" : "text-gray-900"
                     }`}
                   >
-                    {authUser?.user?.firstName || ""}{" "}
-                    {authUser?.user?.lastName || ""}
+                    {authUser?.user?.firstName || ""} {authUser?.user?.lastName || ""}
                   </p>
                   <p
                     className={`text-sm truncate ${
                       isDark ? "text-gray-400" : "text-gray-500"
                     }`}
                   >
-                    {authUser?.user?.email}
+                    {authUser?.user?.email || ""}
                   </p>
                 </div>
               )}
@@ -290,7 +305,12 @@ const Sidebar = ({
         </div>
       </div>
       {showModal && (
-        <NewChatModal isDark={isDark} onClose={() => setShowModal(false)} />
+        <NewChatModal
+          isDark={isDark}
+          onClose={() => setShowModal(false)}
+          users={users || []}
+          handleSelectUser={handleSelectUser}
+        />
       )}
     </>
   );
