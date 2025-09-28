@@ -3,7 +3,7 @@ import type { Message, Chat } from "../../types";
 import { useApp } from "../../contexts/AppContext";
 
 interface Props {
-  selectedChat: Chat;
+  selectedChat: Chat | null;
   isDark: boolean;
   setSelectedChat: (chat: Chat | null) => void;
   getChatTitle: () => string;
@@ -85,8 +85,7 @@ const ChatContainer = ({
                       isDark ? "text-white" : "text-gray-900"
                     }`}
                   >
-                    {state?.user?.name}
-                    {/* {getChatTitle()} */}
+                    {getChatTitle()}
                   </h1>
                   <p
                     className={`text-sm ${
@@ -124,8 +123,8 @@ const ChatContainer = ({
           </div>
 
           {/* Messages Container */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {!messages || messages.length === 0 ? (
+          <div className="overflow-y-auto h-[calc(100vh-120px)] p-4 space-y-4">
+            {!messages || messages?.length === 0 ? (
               <div
                 className={`text-center py-8 ${
                   isDark ? "text-gray-400" : "text-gray-500"
@@ -137,9 +136,9 @@ const ChatContainer = ({
             ) : (
               messages.map((message) => {
                 const isCurrentUser =
-                  message.sender === state.user._id ||
                   (typeof message.sender === "object" &&
-                    message.sender._id === state.user._id);
+                    message.sender._id === state?.user?._id) ||
+                  message.sender === state?.user?._id;
 
                 return (
                   <div
@@ -169,7 +168,7 @@ const ChatContainer = ({
                             : "text-gray-500"
                         }`}
                       >
-                        {formatTime(message?.createdAt || message?.timestamp)}
+                        {message.createdAt && formatTime(message.createdAt)}
                         {message.id?.startsWith("temp-") && (
                           <span className="ml-1">⏳</span>
                         )}
