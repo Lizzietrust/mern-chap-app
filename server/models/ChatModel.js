@@ -4,7 +4,7 @@ const chatSchema = new mongoose.Schema(
   {
     participants: [{
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Users",
       required: true,
     }],
     messages: [{
@@ -27,7 +27,7 @@ const chatSchema = new mongoose.Schema(
     },
     groupAdmin: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Users",
       required: function() {
         return this.isGroup;
       },
@@ -45,7 +45,7 @@ const chatSchema = new mongoose.Schema(
     unreadCount: [{
       user: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: "Users",
       },
       count: {
         type: Number,
