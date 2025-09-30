@@ -1,4 +1,4 @@
-import User from "../models/UserModel.js";
+import Users from "../models/UserModel.js";
 import jwt from "jsonwebtoken";
 
 const maxAge = 1 * 24 * 60 * 60 * 1000;
@@ -25,14 +25,14 @@ export const register = async (req, res, next) => {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await Users.findOne({ email });
     if (existingUser) {
       return res
         .status(409)
         .json({ message: "User with this email already exists" });
     }
 
-    const user = await User.create({ email, password });
+    const user = await Users.create({ email, password });
 
     const isProd = process.env.NODE_ENV === "production";
     res.cookie("jwt", createToken({ email, userId: user._id }), {
@@ -91,7 +91,7 @@ export const login = async (req, res, next) => {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await Users.findOne({ email });
     if (!existingUser) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -161,7 +161,7 @@ export const logout = async (req, res, next) => {
 
 export const getUserInfo = async (req, res, next) => {
   try {
-    const userData = await User.findById(req.userId)
+    const userData = await Users.findById(req.userId)
 
     if (!userData) {
       return res.status(404).json({ message: "User not found" });
@@ -237,7 +237,7 @@ export const updateProfile = async (req, res, next) => {
     }
 
     // Use findByIdAndUpdate with $set to avoid triggering pre-save hooks on password
-    const updatedUser = await User.findByIdAndUpdate(
+    const updatedUser = await Users.findByIdAndUpdate(
       userId,
       { $set: updateData },
       { new: true, runValidators: true }
