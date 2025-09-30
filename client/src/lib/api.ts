@@ -1,27 +1,25 @@
 import axios from "axios";
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
-import type { Chat, User, AuthResponse } from "../types";
+import type {
+  Chat,
+  User,
+  AuthResponse,
+  UsersResponse,
+  UserChat,
+} from "../types";
 
-// Base API configuration
 export const API_BASE_URL = import.meta.env.VITE_API_URL;
 
-// Create Axios instance with default configuration
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
-  withCredentials: true, // For handling cookies/sessions
+  withCredentials: true,
 });
 
-// Request interceptor for adding auth tokens
 axiosInstance.interceptors.request.use(
   (config) => {
-    // You can add auth token here if needed
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
     return config;
   },
   (error) => {
@@ -29,29 +27,23 @@ axiosInstance.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
 axiosInstance.interceptors.response.use(
   (response: AxiosResponse) => {
     return response;
   },
   (error) => {
-    // Handle common errors
     if (error.response) {
-      // Server responded with error status
       const { status, data } = error.response;
       const message = data?.message || `API Error: ${status}`;
       throw new Error(message);
     } else if (error.request) {
-      // Request was made but no response received
       throw new Error("Network error: No response received");
     } else {
-      // Something else happened
       throw new Error(`Request error: ${error.message}`);
     }
   }
 );
 
-// Generic API client using Axios
 class ApiClient {
   private axiosInstance: AxiosInstance;
 
@@ -76,7 +68,7 @@ class ApiClient {
 
   async post<T>(
     endpoint: string,
-    data?: any,
+    data?: unknown,
     config?: AxiosRequestConfig
   ): Promise<T> {
     return this.request<T>(endpoint, {
@@ -88,7 +80,7 @@ class ApiClient {
 
   async put<T>(
     endpoint: string,
-    data?: any,
+    data?: unknown,
     config?: AxiosRequestConfig
   ): Promise<T> {
     return this.request<T>(endpoint, {
@@ -104,7 +96,7 @@ class ApiClient {
 
   async patch<T>(
     endpoint: string,
-    data?: any,
+    data?: unknown,
     config?: AxiosRequestConfig
   ): Promise<T> {
     return this.request<T>(endpoint, {
@@ -124,25 +116,27 @@ export interface Post {
   userId: number;
 }
 
-// User API functions
 export const userApi = {
-  getUsers: (page?: number, limit?: number, search?: string) => {
+  getUsers: (
+    page?: number,
+    limit?: number,
+    search?: string
+  ): Promise<UsersResponse> => {
     const params = new URLSearchParams();
     if (page) params.append("page", page.toString());
     if (limit) params.append("limit", limit.toString());
     if (search) params.append("search", search);
-    return apiClient.get<User[]>(
+    return apiClient.get<UsersResponse>(
       `/api/user/fetch-all-users?${params.toString()}`
     );
   },
-  getUser: (id: number) => apiClient.get<User>(`/users/${id}`),
-  createUser: (user: Omit<User, "id">) => apiClient.post<User>("/users", user),
-  updateUser: (id: number, user: Partial<User>) =>
+  getUser: (id: string) => apiClient.get<User>(`/users/${id}`),
+  createUser: (user: Omit<User, "_id">) => apiClient.post<User>("/users", user),
+  updateUser: (id: string, user: Partial<User>) =>
     apiClient.put<User>(`/users/${id}`, user),
-  deleteUser: (id: number) => apiClient.delete(`/users/${id}`),
+  deleteUser: (id: string) => apiClient.delete(`/users/${id}`),
 };
 
-// Post API functions
 export const postApi = {
   getPosts: () => apiClient.get<Post[]>("/posts"),
   getPost: (id: number) => apiClient.get<Post>(`/posts/${id}`),
@@ -151,10 +145,9 @@ export const postApi = {
   createPost: (post: Omit<Post, "id">) => apiClient.post<Post>("/posts", post),
   updatePost: (id: number, post: Partial<Post>) =>
     apiClient.put<Post>(`/posts/${id}`, post),
-  deletePost: (id: number) => apiClient.delete(`/posts/${id}`),
+  deletePost: (id: number) => apiClient.delete<void>(`/posts/${id}`),
 };
 
-// Auth API interfaces
 export interface RegisterRequest {
   email: string;
   password: string;
@@ -165,30 +158,38 @@ export interface LoginRequest {
   password: string;
 }
 
-// Auth API functions
+export interface UpdateProfileRequest {
+  firstName?: string;
+  lastName?: string;
+  image?: string;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  website?: string;
+}
+
 export const authApi = {
   register: (data: RegisterRequest) =>
     apiClient.post<AuthResponse>("/api/auth/register", data),
   login: (data: LoginRequest) =>
     apiClient.post<AuthResponse>("/api/auth/login", data),
-  logout: () => apiClient.post("/api/auth/logout"),
+  logout: () => apiClient.post<void>("/api/auth/logout"),
   me: () => apiClient.get<AuthResponse>("/api/auth/user-info"),
-  updateProfile: (data: {
-    firstName?: string;
-    lastName?: string;
-    image?: string;
-    bio?: string;
-    phone?: string;
-    location?: string;
-    website?: string;
-  }) => apiClient.put<AuthResponse>("/api/auth/update-profile", data),
+  updateProfile: (data: UpdateProfileRequest) =>
+    apiClient.put<AuthResponse>("/api/auth/update-profile", data),
 };
 
-// Chat API functions
+export interface CreateChatRequest {
+  userId: string;
+}
+
 export const chatApi = {
   createChat: (userId: string): Promise<Chat> =>
-    apiClient.post<Chat>("/api/messages/create-chat", { userId }),
+    apiClient.post<Chat>("/api/messages/create-chat", {
+      userId,
+    } as CreateChatRequest),
+  getUserChats: (): Promise<UserChat[]> =>
+    apiClient.get<UserChat[]>("/api/messages/get-user-chats"),
 };
 
-// Export axios instance for direct use if needed
 export { axiosInstance };
