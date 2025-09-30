@@ -11,7 +11,7 @@ interface Props {
   messages: Message[];
   formatTime: (timestamp: Date | string) => string;
   isTyping: boolean;
-   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  messagesEndRef: React.RefObject<HTMLDivElement | null>;
   handleSendMessage: (e: React.FormEvent<HTMLFormElement>) => void;
   handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   newMessage: string;
