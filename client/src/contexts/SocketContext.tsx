@@ -53,7 +53,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
   useEffect(() => {
     let newSocket: Socket | null = null;
 
-    if (isAuthenticated && user) {
+    if (isAuthenticated && user?._id) {
       console.log("Connecting socket for user:", user._id);
       newSocket = io(API_BASE_URL, {
         query: { userId: user._id },
