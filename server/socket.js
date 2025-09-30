@@ -1,7 +1,7 @@
 import { Server } from "socket.io";
 import Message from "./models/MessageModel.js";
 import Chat from "./models/ChatModel.js";
-import User from "./models/UserModel.js";
+import Users from "./models/UserModel.js";
 
 const setupSocket = (server) => {
   const io = new Server(server, {
@@ -17,7 +17,7 @@ const setupSocket = (server) => {
   // Helper function to broadcast online users
   const broadcastOnlineUsers = async () => {
     try {
-      const onlineUsers = await User.find(
+      const onlineUsers = await Users.find(
         { _id: { $in: Array.from(userSockets.keys()) } },
         "_id firstName lastName email image isOnline lastSeen"
       );
@@ -35,7 +35,7 @@ const setupSocket = (server) => {
     }
 
     try {
-      const user = await User.findById(userId);
+      const user = await Users.findById(userId);
       if (!user) {
         return next(new Error("Invalid user"));
       }
