@@ -1,18 +1,31 @@
 import { PlusIcon } from "@heroicons/react/24/solid";
-import React, { useState } from "react";
-import { useMe } from "../../hooks/useAuth";
+import { useState } from "react";
+import { useApp } from "../../contexts/AppContext";
 import { getInitials } from "../../functions";
 import NewChatModal from "./NewChatModal";
-import type { Chat, User, Channel } from "../../types";
+import type {
+  // Chat,
+  ChatOrNull,
+  User,
+  UserChat,
+  ChannelChat,
+} from "../../types";
 
 interface Props {
   isDark: boolean;
-  selectedChat: Chat | null;
+  selectedChat: ChatOrNull;
   users?: User[];
-  setSelectedChat: (chat: Chat | null) => void;
-  channels: Channel[];
+  setSelectedChat: (chat: ChatOrNull) => void;
+  channels: ChannelChat[];
   handleSelectUser: (userId: string) => void;
-  chats?: Chat[];
+  chats?: UserChat[];
+  currentPage: number;
+  totalUsers: number;
+  onPageChange: (page: number) => void;
+  onSearch: (searchTerm: string) => void;
+  isLoadingUsers?: boolean;
+  searchTerm: string;
+  handleSearch: (searchTerm: string) => void;
 }
 
 const Sidebar = ({
@@ -23,11 +36,27 @@ const Sidebar = ({
   channels,
   handleSelectUser,
   chats,
+  currentPage,
+  totalUsers,
+  onPageChange,
+  onSearch,
+  isLoadingUsers = false,
+  searchTerm,
+  handleSearch,
 }: Props) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState<"dms" | "channels">("dms");
-  const { data: authUser, isLoading, isError } = useMe();
+  const { state } = useApp();
+
+  const handleUserSelect = async (userId: string) => {
+    try {
+      await handleSelectUser(userId);
+      setShowModal(false);
+    } catch (error) {
+      console.error("Failed to create chat:", error);
+    }
+  };
 
   return (
     <>
@@ -122,15 +151,18 @@ const Sidebar = ({
                 <div className="p-2">
                   {chats?.map((chat) => {
                     if (!chat) return null;
-                    
+
                     // Find other participant (not the current user)
                     const otherParticipant = chat.participants?.find(
-                      (p) => p._id !== authUser?.user?._id
+                      (p) => p.email !== state.user?.email
                     );
 
-                    // Use optional chaining to safely access properties
-                    const unreadCount = (chat as any).unreadCount || 0;
-                    const lastMessage = (chat as any).lastMessage || "";
+                    console.log({ otherParticipant });
+                    console.log({ state });
+
+                    // Use proper typing
+                    const unreadCount = chat.unreadCount || 0;
+                    const lastMessage = chat.lastMessage || "";
 
                     return (
                       <button
@@ -155,7 +187,8 @@ const Sidebar = ({
                                 />
                               ) : (
                                 <div>
-                                  {otherParticipant?.firstName?.charAt(0) || "U"}
+                                  {otherParticipant?.firstName?.charAt(0) ||
+                                    "U"}
                                 </div>
                               )}
                             </div>
@@ -200,10 +233,10 @@ const Sidebar = ({
                 <div className="p-2">
                   {channels?.map((channel) => (
                     <button
-                      key={channel.id}
-                      onClick={() => setSelectedChat(channel as any)} // Temporary fix for type mismatch
+                      key={channel._id}
+                      onClick={() => setSelectedChat(channel)}
                       className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
-                        selectedChat?._id === channel.id
+                        selectedChat?._id === channel._id
                           ? isDark
                             ? "bg-gray-700"
                             : "bg-gray-100"
@@ -213,9 +246,7 @@ const Sidebar = ({
                       <div className="flex items-center space-x-3">
                         <div
                           className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                            channel.isPrivate
-                              ? "bg-orange-500"
-                              : "bg-green-500"
+                            channel.isPrivate ? "bg-orange-500" : "bg-green-500"
                           } text-white font-semibold`}
                         >
                           {channel.isPrivate ? "🔒" : "#"}
@@ -229,11 +260,11 @@ const Sidebar = ({
                             >
                               {channel.name}
                             </p>
-                            {(channel as any).unreadCount > 0 && (
+                            {channel.unreadCount && channel.unreadCount > 0 ? (
                               <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
-                                {(channel as any).unreadCount}
+                                {channel.unreadCount}
                               </span>
-                            )}
+                            ) : null}
                           </div>
                           <p
                             className={`text-sm truncate ${
@@ -258,26 +289,20 @@ const Sidebar = ({
             isDark ? "border-gray-700" : "border-gray-200"
           }`}
         >
-          {isLoading && (
-            <div className={`${isDark ? "text-white" : "text-black"}`}>
-              Loading user...
-            </div>
-          )}
-          {isError && <div className="text-red-500">Error loading user.</div>}
-          {authUser && (
+          {state.user ? (
             <div className="flex items-center space-x-3">
               <div className="relative">
-                {authUser?.user?.image ? (
+                {state.user?.image ? (
                   <img
                     className="w-10 h-10 rounded-full"
-                    src={authUser.user.image}
+                    src={state.user.image}
                     alt="Your avatar"
                   />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
                     {getInitials(
-                      authUser?.user?.firstName || "",
-                      authUser?.user?.lastName || ""
+                      state.user?.firstName || "",
+                      state.user?.lastName || ""
                     )}
                   </div>
                 )}
@@ -289,17 +314,21 @@ const Sidebar = ({
                       isDark ? "text-white" : "text-gray-900"
                     }`}
                   >
-                    {authUser?.user?.firstName || ""} {authUser?.user?.lastName || ""}
+                    {state.user?.firstName || ""} {state.user?.lastName || ""}
                   </p>
                   <p
                     className={`text-sm truncate ${
                       isDark ? "text-gray-400" : "text-gray-500"
                     }`}
                   >
-                    {authUser?.user?.email || ""}
+                    {state.user?.email || ""}
                   </p>
                 </div>
               )}
+            </div>
+          ) : (
+            <div className={`${isDark ? "text-white" : "text-black"}`}>
+              Loading user...
             </div>
           )}
         </div>
@@ -309,7 +338,14 @@ const Sidebar = ({
           isDark={isDark}
           onClose={() => setShowModal(false)}
           users={users || []}
-          handleSelectUser={handleSelectUser}
+          handleSelectUser={handleUserSelect}
+          currentPage={currentPage}
+          totalUsers={totalUsers}
+          onPageChange={onPageChange}
+          onSearch={onSearch}
+          isLoading={isLoadingUsers}
+          searchTerm={searchTerm}
+          onSearchTermChange={handleSearch}
         />
       )}
     </>
