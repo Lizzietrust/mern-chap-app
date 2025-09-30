@@ -1,4 +1,4 @@
-import User from "../models/UserModel.js";
+import Users from "../models/UserModel.js";
 
 export const fetchAllUsers = async (req, res, next) => {
     try {
@@ -16,12 +16,12 @@ export const fetchAllUsers = async (req, res, next) => {
         };
       }
   
-      const users = await User.find(query)
+      const users = await Users.find(query)
         .limit(limit * 1)
         .skip((page - 1) * limit)
         .exec();
 
-      const totalUsers = await User.countDocuments(query);
+      const totalUsers = await Users.countDocuments(query);
   
       res.status(200).json({ users, totalUsers });
     } catch (error) {
