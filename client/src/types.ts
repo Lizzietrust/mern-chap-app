@@ -1,32 +1,61 @@
+import type { Dispatch, SetStateAction } from "react";
+
+export interface User {
+  _id: string;
+  name: string;
+  email: string;
+  profileSetup: boolean;
+  avatar?: string;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  website?: string;
+  firstName?: string;
+  lastName?: string;
+  image?: string;
+  isOnline?: boolean;
+  lastSeen?: Date;
+}
+
+export interface UsersResponse {
+  users: User[];
+  totalUsers: number;
+}
+
 export interface Message {
   _id?: string;
   id?: string;
-  sender:
-    | string
-    | {
-        _id: string;
-        firstName: string;
-        lastName: string;
-        email: string;
-        image?: string;
-      };
+  sender: string | User;
   messageType: "text" | "image" | "file";
   content: string;
   chatId: string;
   createdAt?: Date;
   timestamp?: Date;
   text?: string;
+  isOptimistic?: boolean;
 }
 
-export interface User {
-  id: string;
-  name: string;
-  avatar?: string;
-  isOnline: boolean;
-  lastMessage?: string;
+export interface BaseChat {
+  _id: string;
+  name?: string;
+  memberCount?: number;
   unreadCount?: number;
-  lastSeen?: Date;
+  lastMessage?: string;
 }
+
+export interface UserChat extends BaseChat {
+  type: "user";
+  participants?: User[];
+}
+
+export interface ChannelChat extends BaseChat {
+  type: "channel";
+  description?: string;
+  isPrivate?: boolean;
+}
+
+export type Chat = UserChat | ChannelChat;
+export type ChatOrNull = Chat | null;
 
 export interface Channel {
   id: string;
@@ -37,25 +66,23 @@ export interface Channel {
   isPrivate?: boolean;
 }
 
-export type Chat = {
-  type: "user" | "channel";
-  _id: string;
-} | null;
+export type SelectedChatContextType = {
+  selectedChat: ChatOrNull;
+  setSelectedChat: Dispatch<SetStateAction<ChatOrNull>>;
+};
 
-// types.ts
 export interface AuthResponse {
-  user: {
-    _id: string;
-    email: string;
-    firstName?: string;
-    lastName?: string;
-    image?: string;
-    bio?: string;
-    phone?: string;
-    location?: string;
-    website?: string;
-    profileSetup: boolean;
-    createdAt?: string;
-    updatedAt?: string;
-  };
+  user: User;
+  token?: string;
+  message?: string;
+}
+
+export interface UserChatWithMetadata extends UserChat {
+  lastActivity?: Date;
+  isTyping?: boolean;
+}
+
+export interface ChannelChatWithMetadata extends ChannelChat {
+  createdAt?: Date;
+  ownerId?: string;
 }
