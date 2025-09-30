@@ -4,8 +4,8 @@ import {
   authApi,
   type RegisterRequest,
   type LoginRequest,
-  type AuthResponse,
 } from "../lib/api";
+import type { AuthResponse } from "../types";
 
 // Query keys for auth
 export const authKeys = {
@@ -13,15 +13,45 @@ export const authKeys = {
   user: () => [...authKeys.all, "user"] as const,
 };
 
+// Helper function to clear user-specific data (chats, messages, etc.)
+function clearUserSpecificData(queryClient: ReturnType<typeof useQueryClient>) {
+  // Invalidate and remove all chat-related queries
+  queryClient.removeQueries({ queryKey: ['chats'] });
+  queryClient.removeQueries({ queryKey: ['messages'] });
+  queryClient.removeQueries({ queryKey: ['userChats'] });
+  
+  // Invalidate users list (optional, depends on your app)
+  queryClient.invalidateQueries({ queryKey: ['users'] });
+  
+  // Clear any socket-related data if stored in cache
+  queryClient.removeQueries({ queryKey: ['socket'] });
+}
+
+// Helper function to clear ALL user data (for logout)
+function clearAllUserData(queryClient: ReturnType<typeof useQueryClient>) {
+  // Clear auth user data
+  queryClient.removeQueries({ queryKey: authKeys.user() });
+  
+  // Clear all user-specific data
+  clearUserSpecificData(queryClient);
+  
+  // Optional: Clear other user-specific cache if needed
+  queryClient.removeQueries({ queryKey: ['notifications'] });
+  queryClient.removeQueries({ queryKey: ['settings'] });
+}
+
 // Hook to register a new user
 export function useRegister() {
   const queryClient = useQueryClient();
+  // const navigate = useNavigate();
 
   return useMutation({
     mutationFn: (data: RegisterRequest) => authApi.register(data),
     onSuccess: (response: AuthResponse) => {
       // Store user data in cache
       queryClient.setQueryData(authKeys.user(), response.user);
+      // Clear previous user's data
+      clearUserSpecificData(queryClient);
     },
   });
 }
@@ -29,12 +59,15 @@ export function useRegister() {
 // Hook to login user
 export function useLogin() {
   const queryClient = useQueryClient();
+  // const navigate = useNavigate();
 
   return useMutation({
     mutationFn: (data: LoginRequest) => authApi.login(data),
     onSuccess: (response: AuthResponse) => {
       // Store user data in cache
       queryClient.setQueryData(authKeys.user(), response.user);
+      // Clear any previous user's data from cache
+      clearUserSpecificData(queryClient);
     },
   });
 }
@@ -47,15 +80,15 @@ export function useLogout() {
   return useMutation({
     mutationFn: authApi.logout,
     onSuccess: () => {
-      // Clear user data from cache
-      queryClient.removeQueries({ queryKey: authKeys.user() });
+      // Clear all user-specific data from cache
+      clearAllUserData(queryClient);
       // Redirect to login page
       navigate("/login", { replace: true });
     },
     onError: (error) => {
       console.error("Logout error:", error);
       // Even if logout fails on server, clear local state
-      queryClient.removeQueries({ queryKey: authKeys.user() });
+      clearAllUserData(queryClient);
       navigate("/login", { replace: true });
     },
   });
@@ -67,6 +100,8 @@ export function useMe(enabled: boolean = true) {
     queryKey: authKeys.user(),
     queryFn: authApi.me,
     enabled,
+    // Don't cache for too long to ensure fresh data
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 
