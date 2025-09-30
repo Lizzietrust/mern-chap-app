@@ -4,7 +4,7 @@ import { authApi } from '../lib/api'
 import { useMe } from '../hooks/useAuth'
 import { SelectedChatProvider } from './SelectedChatContext'
 
-// Types
+// Types - Updated User interface
 export interface User {
   _id: string
   name: string
@@ -15,6 +15,12 @@ export interface User {
   phone?: string
   location?: string
   website?: string
+  // Add these to match your API response
+  image?: string
+  firstName?: string
+  lastName?: string
+  isOnline?: boolean
+  lastSeen?: Date
 }
 
 export interface AppState {
@@ -55,7 +61,7 @@ const initialState: AppState = {
   loading: true,
 }
 
-// Reducer
+// Reducer (same as before)
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_USER':
@@ -64,37 +70,31 @@ function appReducer(state: AppState, action: AppAction): AppState {
         user: action.payload,
         isAuthenticated: !!action.payload,
       }
-    
     case 'SET_AUTHENTICATED':
       return {
         ...state,
         isAuthenticated: action.payload,
       }
-    
     case 'SET_THEME':
       return {
         ...state,
         theme: action.payload,
       }
-    
     case 'TOGGLE_SIDEBAR':
       return {
         ...state,
         sidebarOpen: !state.sidebarOpen,
       }
-    
     case 'SET_SIDEBAR_OPEN':
       return {
         ...state,
         sidebarOpen: action.payload,
       }
-    
     case 'ADD_NOTIFICATION':
       return {
         ...state,
         notifications: [...state.notifications, action.payload],
       }
-    
     case 'REMOVE_NOTIFICATION':
       return {
         ...state,
@@ -102,19 +102,16 @@ function appReducer(state: AppState, action: AppAction): AppState {
           (notification) => notification.id !== action.payload
         ),
       }
-    
     case 'SET_LOADING':
       return {
         ...state,
         loading: action.payload,
       }
-    
     case 'LOGOUT':
       return {
         ...initialState,
         theme: state.theme, // Preserve theme preference
       }
-    
     default:
       return state
   }
@@ -124,7 +121,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
 interface AppContextType {
   state: AppState
   dispatch: React.Dispatch<AppAction>
-  // Convenience methods
   login: (user: User) => void
   logout: () => void
   toggleTheme: () => void
@@ -167,6 +163,12 @@ export function AppProvider({ children }: AppProviderProps) {
         phone: response.user.phone,
         location: response.user.location,
         website: response.user.website,
+        // Add the missing fields
+        image: response.user.image,
+        firstName: response.user.firstName,
+        lastName: response.user.lastName,
+        isOnline: response.user.isOnline,
+        lastSeen: response.user.lastSeen,
       }
       dispatch({ type: 'SET_USER', payload: userData })
     }
@@ -178,7 +180,7 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [meQuery.isError])
 
-  // Convenience methods
+  // Convenience methods (same as before)
   const login = (user: User) => {
     dispatch({ type: 'SET_USER', payload: user })
   }
@@ -208,7 +210,6 @@ export function AppProvider({ children }: AppProviderProps) {
     
     dispatch({ type: 'ADD_NOTIFICATION', payload: newNotification })
 
-    // Auto-remove notification after duration (default: 5 seconds)
     const duration = notification.duration || 5000
     setTimeout(() => {
       dispatch({ type: 'REMOVE_NOTIFICATION', payload: id })
@@ -245,4 +246,4 @@ export function useApp() {
     throw new Error('useApp must be used within an AppProvider')
   }
   return context
-} 
+}
