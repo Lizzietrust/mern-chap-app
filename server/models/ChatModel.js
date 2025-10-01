@@ -2,37 +2,66 @@ import mongoose from "mongoose";
 
 const chatSchema = new mongoose.Schema(
   {
-    participants: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Users",
+    type: {
+      type: String,
+      enum: ["direct", "channel"],
       required: true,
-    }],
-    messages: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Message",
-    }],
-    // For group chats
+      default: "direct",
+    },
+
+    participants: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Users",
+        required: function () {
+          return this.type === "direct";
+        },
+      },
+    ],
+
     name: {
       type: String,
-      required: function() {
-        return this.participants.length > 2;
+      required: function () {
+        return this.type === "channel";
       },
     },
-    // Group chat settings
-    isGroup: {
+    description: {
+      type: String,
+      default: "",
+    },
+    isPrivate: {
       type: Boolean,
-      default: function() {
-        return this.participants.length > 2;
-      },
+      default: false,
     },
-    groupAdmin: {
+    createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Users",
-      required: function() {
-        return this.isGroup;
+      required: function () {
+        return this.type === "channel";
       },
     },
-    // Last message info for chat list
+    admins: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Users",
+      },
+    ],
+    members: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Users",
+        required: function () {
+          return this.type === "channel";
+        },
+      },
+    ],
+
+    messages: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Message",
+      },
+    ],
     lastMessage: {
       type: String,
       default: "",
@@ -41,31 +70,47 @@ const chatSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
-    // Unread message counts per user
-    unreadCount: [{
-      user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Users",
+    unreadCount: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Users",
+        },
+        count: {
+          type: Number,
+          default: 0,
+        },
       },
-      count: {
-        type: Number,
-        default: 0,
-      },
-    }],
+    ],
   },
   {
-    timestamps: true, // This adds createdAt and updatedAt fields
+    timestamps: true,
   }
 );
 
-// Indexes for better performance
 chatSchema.index({ participants: 1 });
+chatSchema.index({ type: 1 });
+chatSchema.index({ members: 1 });
 chatSchema.index({ updatedAt: -1 });
 
-// Ensure participants array has at least 2 users
-chatSchema.pre('save', function(next) {
-  if (this.participants.length < 2) {
-    next(new Error('A chat must have at least 2 participants'));
+chatSchema.virtual("memberCount").get(function () {
+  if (this.type === "direct") {
+    return this.participants?.length || 0;
+  } else {
+    return this.members?.length || 0;
+  }
+});
+
+chatSchema.set("toJSON", { virtuals: true });
+
+chatSchema.pre("save", function (next) {
+  if (this.type === "direct" && this.participants.length < 2) {
+    next(new Error("A direct chat must have at least 2 participants"));
+  } else if (
+    this.type === "channel" &&
+    (!this.members || this.members.length === 0)
+  ) {
+    next(new Error("A channel must have at least one member"));
   } else {
     next();
   }
