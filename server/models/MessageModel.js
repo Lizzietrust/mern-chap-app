@@ -36,13 +36,13 @@ const messageSchema = new mongoose.Schema(
         return this.messageType === "file";
       },
     },
-    // Add chatId to link messages to chats
+
     chatId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Chat",
       required: true,
     },
-    // Track read status
+    
     readBy: [
       {
         user: {
@@ -55,7 +55,7 @@ const messageSchema = new mongoose.Schema(
         },
       },
     ],
-    // Track message status
+   
     status: {
       type: String,
       enum: ["sent", "delivered", "read"],
@@ -63,11 +63,11 @@ const messageSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true, // This adds createdAt and updatedAt fields
+    timestamps: true, 
   }
 );
 
-// Index for better query performance
+
 messageSchema.index({ chatId: 1, createdAt: -1 });
 messageSchema.index({ sender: 1 });
 
