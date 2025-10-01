@@ -6,6 +6,9 @@ import type {
   AuthResponse,
   UsersResponse,
   UserChat,
+  ChannelChat,
+  CreateChannelData,
+  UpdateChannelData,
 } from "../types";
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -190,6 +193,45 @@ export const chatApi = {
     } as CreateChatRequest),
   getUserChats: (): Promise<UserChat[]> =>
     apiClient.get<UserChat[]>("/api/messages/get-user-chats"),
+};
+
+export const channelApi = {
+  createChannel: (channelData: CreateChannelData): Promise<ChannelChat> =>
+    apiClient.post<ChannelChat>("/api/channels/create", channelData),
+
+  updateChannel: (
+    channelId: string,
+    data: UpdateChannelData
+  ): Promise<ChannelChat> =>
+    apiClient.put<ChannelChat>(`/api/channels/${channelId}`, data),
+
+  getUserChannels: (): Promise<ChannelChat[]> =>
+    apiClient.get<ChannelChat[]>("/api/channels/user-channels"),
+
+  getChannelMembers: (channelId: string): Promise<User[]> =>
+    apiClient.get<User[]>(`/api/channels/${channelId}/members`),
+
+  addChannelMember: (channelId: string, userId: string): Promise<ChannelChat> =>
+    apiClient.post<ChannelChat>(`/api/channels/${channelId}/members`, {
+      userId,
+    }),
+
+  removeChannelMember: (
+    channelId: string,
+    userId: string
+  ): Promise<ChannelChat> =>
+    apiClient.delete<ChannelChat>(
+      `/api/channels/${channelId}/members/${userId}`
+    ),
+  updateChannelAdmin: (
+    channelId: string,
+    userId: string,
+    isAdmin: boolean
+  ): Promise<ChannelChat> =>
+    apiClient.put<ChannelChat>(`/api/channels/${channelId}/admins`, {
+      userId,
+      isAdmin,
+    }),
 };
 
 export { axiosInstance };
