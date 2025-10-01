@@ -3,13 +3,7 @@ import { useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import { getInitials } from "../../functions";
 import NewChatModal from "./NewChatModal";
-import type {
-  // Chat,
-  ChatOrNull,
-  User,
-  UserChat,
-  ChannelChat,
-} from "../../types";
+import type { ChatOrNull, User, UserChat, ChannelChat } from "../../types";
 
 interface Props {
   isDark: boolean;
@@ -26,6 +20,9 @@ interface Props {
   isLoadingUsers?: boolean;
   searchTerm: string;
   handleSearch: (searchTerm: string) => void;
+  onCreateChannel: () => void;
+  onShowChannelSettings: () => void;
+  channelsLoading: boolean;
 }
 
 const Sidebar = ({
@@ -43,19 +40,26 @@ const Sidebar = ({
   isLoadingUsers = false,
   searchTerm,
   handleSearch,
-}: Props) => {
+  onCreateChannel,
+}: // channelsLoading,
+// onShowChannelSettings,
+Props) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showModal, setShowModal] = useState(false);
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [activeTab, setActiveTab] = useState<"dms" | "channels">("dms");
   const { state } = useApp();
 
   const handleUserSelect = async (userId: string) => {
     try {
       await handleSelectUser(userId);
-      setShowModal(false);
+      setShowNewChatModal(false);
     } catch (error) {
       console.error("Failed to create chat:", error);
     }
+  };
+
+  const handleChannelClick = (channel: ChannelChat) => {
+    setSelectedChat(channel);
   };
 
   return (
@@ -77,23 +81,30 @@ const Sidebar = ({
                     isDark ? "text-white" : "text-gray-900"
                   }`}
                 >
-                  Messages
+                  {activeTab === "dms" ? "Messages" : "Channels"}
                 </h2>
-                <button
-                  onClick={() => setShowModal(true)}
-                  className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
-                    isDark ? "text-gray-300" : "text-gray-600"
-                  }`}
-                >
-                  <PlusIcon className="h-6 w-6" />
-                </button>
+                {activeTab === "dms" && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setShowNewChatModal(true)}
+                      className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
+                        isDark ? "text-gray-300" : "text-gray-600"
+                      }`}
+                      title="New Chat"
+                    >
+                      <PlusIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
+
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer hidden md:block ${
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {sidebarCollapsed ? "→" : "←"}
             </button>
@@ -152,15 +163,10 @@ const Sidebar = ({
                   {chats?.map((chat) => {
                     if (!chat) return null;
 
-                    // Find other participant (not the current user)
                     const otherParticipant = chat.participants?.find(
-                      (p) => p.email !== state.user?.email
+                      (p) => p._id !== state.user?._id
                     );
 
-                    console.log({ otherParticipant });
-                    console.log({ state });
-
-                    // Use proper typing
                     const unreadCount = chat.unreadCount || 0;
                     const lastMessage = chat.lastMessage || "";
 
@@ -231,10 +237,43 @@ const Sidebar = ({
 
               {activeTab === "channels" && (
                 <div className="p-2">
+                  {/* Create Channel Button */}
+                  <button
+                    onClick={onCreateChannel}
+                    className={`w-full p-3 rounded-lg mb-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer border border-dashed ${
+                      isDark
+                        ? "border-gray-600 text-gray-300 hover:border-gray-500"
+                        : "border-gray-300 text-gray-600 hover:border-gray-400"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center text-white font-semibold">
+                        <PlusIcon className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`font-medium ${
+                            isDark ? "text-white" : "text-gray-900"
+                          }`}
+                        >
+                          Create New Channel
+                        </p>
+                        <p
+                          className={`text-sm ${
+                            isDark ? "text-gray-400" : "text-gray-500"
+                          }`}
+                        >
+                          Start a new channel conversation
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Channels List */}
                   {channels?.map((channel) => (
                     <button
                       key={channel._id}
-                      onClick={() => setSelectedChat(channel)}
+                      onClick={() => handleChannelClick(channel)}
                       className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
                         selectedChat?._id === channel._id
                           ? isDark
@@ -272,11 +311,26 @@ const Sidebar = ({
                             }`}
                           >
                             {channel.memberCount || 0} members
+                            {channel.description && ` • ${channel.description}`}
                           </p>
                         </div>
                       </div>
                     </button>
                   ))}
+
+                  {channels?.length === 0 && (
+                    <div
+                      className={`text-center py-8 ${
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      }`}
+                    >
+                      <div className="text-4xl mb-4">🏗️</div>
+                      <p>No channels yet</p>
+                      <p className="text-sm mt-1">
+                        Create your first channel to get started
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -333,10 +387,12 @@ const Sidebar = ({
           )}
         </div>
       </div>
-      {showModal && (
+
+      {/* New Chat Modal */}
+      {showNewChatModal && (
         <NewChatModal
           isDark={isDark}
-          onClose={() => setShowModal(false)}
+          onClose={() => setShowNewChatModal(false)}
           users={users || []}
           handleSelectUser={handleUserSelect}
           currentPage={currentPage}
