@@ -7,9 +7,10 @@ import http from "http";
 import authRoutes from "./routes/AuthRoutes.js";
 import userRoutes from "./routes/UserRoute.js";
 import messageRoutes from "./routes/MessageRoutes.js";
+import channelRoutes from "./routes/ChannelRoutes.js";
 import setupSocket from "./socket.js";
-import './models/UserModel.js'; // Import the User model to ensure it's registered
-import './models/MessageModel.js'; // Import the Message model to ensure it's registered
+import './models/UserModel.js'; 
+import './models/MessageModel.js'; 
 
 dotenv.config();
 
@@ -18,7 +19,6 @@ const server = http.createServer(app);
 const port = process.env.PORT || 5000;
 const databaseURL = process.env.DATABASE_URL;
 
-// Debug environment variables
 console.log("Environment variables:");
 console.log("PORT:", process.env.PORT);
 console.log("ORIGIN:", process.env.ORIGIN);
@@ -37,6 +37,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/channels", channelRoutes);
 
 setupSocket(server);
 
