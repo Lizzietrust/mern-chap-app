@@ -5,7 +5,14 @@ import { useTheme } from "../contexts/ThemeContext";
 import { Layout } from "../components/Layout";
 import { SelectedChatContext } from "../contexts/SelectedChatContext";
 import { useSocket } from "../contexts/SocketContext";
-import type { Message, Chat, User, SelectedChatContextType } from "../types";
+import {
+  type Message,
+  type Chat,
+  type User,
+  type SelectedChatContextType,
+  type ChannelChat,
+  isChannelChat,
+} from "../types";
 import ChatContainer from "../components/chat/ChatContainer";
 import { useUsers } from "../hooks/useUsers";
 import {
@@ -16,6 +23,9 @@ import {
 } from "../hooks/useChat";
 import Sidebar from "../components/chat/Sidebar";
 import { useQueryClient } from "@tanstack/react-query";
+import { useChannels, useCreateChannel } from "../hooks/useChannels";
+import CreateChannelModal from "../components/chat/CreateChannelModal";
+import ChannelSettingsModal from "../components/chat/ChannelSettingsModal";
 
 export function ChatPage() {
   const { state } = useApp();
@@ -80,6 +90,20 @@ export function ChatPage() {
     if (e.target) {
       e.target.value = "";
     }
+  };
+
+  const { data: channels, isLoading: channelsLoading } = useChannels();
+  const createChannelMutation = useCreateChannel();
+
+  console.log({ channels });
+  
+
+  const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+  const [showChannelSettings, setShowChannelSettings] = useState(false);
+
+  const handleChannelCreated = (channel: ChannelChat) => {
+    setSelectedChat(channel);
+    setShowCreateChannelModal(false);
   };
 
   const scrollToBottom = () => {
@@ -210,6 +234,10 @@ export function ChatPage() {
   const getChatTitle = (): string => {
     if (!selectedChat) return "Select a chat";
 
+    if ("admins" in selectedChat && "members" in selectedChat) {
+      return selectedChat.name || "Channel";
+    }
+
     if (
       "participants" in selectedChat &&
       Array.isArray(selectedChat.participants)
@@ -238,6 +266,12 @@ export function ChatPage() {
 
   const getChatSubtitle = (): string => {
     if (!selectedChat) return "";
+
+    if ("admins" in selectedChat && "members" in selectedChat) {
+      return `${selectedChat.memberCount || 0} members • ${
+        selectedChat.isPrivate ? "Private" : "Public"
+      }`;
+    }
 
     if (
       "participants" in selectedChat &&
@@ -318,6 +352,10 @@ export function ChatPage() {
             isLoadingUsers={isLoadingUsers}
             searchTerm={searchTerm}
             handleSearch={handleSearch}
+            channels={channels || []}
+            channelsLoading={channelsLoading}
+            onCreateChannel={() => setShowCreateChannelModal(true)}
+            onShowChannelSettings={() => setShowChannelSettings(true)}
           />
         )}
 
@@ -346,6 +384,30 @@ export function ChatPage() {
             newMessage={newMessage}
             setNewMessage={setNewMessage}
             isSending={isSending}
+            onShowChannelSettings={() => setShowChannelSettings(true)}
+          />
+        )}
+
+        {showCreateChannelModal && (
+          <CreateChannelModal
+            isDark={isDark}
+            onClose={() => setShowCreateChannelModal(false)}
+            onChannelCreated={(channel) => {
+              setSelectedChat(channel);
+              setShowCreateChannelModal(false);
+            }}
+          />
+        )}
+
+        {showChannelSettings && selectedChat && isChannelChat(selectedChat) && (
+          <ChannelSettingsModal
+            isDark={isDark}
+            channel={selectedChat}
+            onClose={() => setShowChannelSettings(false)}
+            onUpdate={() => {
+              // Refresh data
+              refetchChannels();
+            }}
           />
         )}
       </div>
