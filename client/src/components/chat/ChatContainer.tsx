@@ -1,11 +1,12 @@
 import { useRef } from "react";
-import type { Message, Chat } from "../../types";
+import type { Message, ChatOrNull } from "../../types";
 import { useApp } from "../../contexts/AppContext";
+import { isChannelChat } from "../../types";
 
 interface Props {
-  selectedChat: Chat | null;
+  selectedChat: ChatOrNull;
   isDark: boolean;
-  setSelectedChat: (chat: Chat | null) => void;
+  setSelectedChat: (chat: ChatOrNull) => void;
   getChatTitle: () => string;
   getChatSubtitle: () => string;
   messages: Message[];
@@ -17,6 +18,7 @@ interface Props {
   newMessage: string;
   setNewMessage: (message: string) => void;
   isSending?: boolean;
+  onShowChannelSettings: () => void;
 }
 
 const ChatContainer = ({
@@ -34,12 +36,52 @@ const ChatContainer = ({
   newMessage,
   setNewMessage,
   isSending = false,
+  onShowChannelSettings,
 }: Props) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { state } = useApp();
 
-  console.log({ messages });
+  const isChannel = selectedChat && isChannelChat(selectedChat);
+  // const isAdmin =
+  //   isChannel && selectedChat.admins.includes(state.user?._id || "");
+
+  const getSenderName = (message: Message): string => {
+    if (typeof message.sender === "object") {
+      return (
+        message.sender.name ||
+        `${message.sender.firstName || ""} ${
+          message.sender.lastName || ""
+        }`.trim() ||
+        message.sender.email ||
+        "Unknown User"
+      );
+    }
+    return "Unknown User";
+  };
+
+  const shouldShowSenderName = (message: Message, index: number): boolean => {
+    if (!isChannel) return false;
+
+    const isCurrentUser =
+      (typeof message.sender === "object" &&
+        message.sender._id === state?.user?._id) ||
+      message.sender === state?.user?._id;
+
+    if (isCurrentUser) return false;
+
+    if (index === 0) return true;
+
+    const prevMessage = messages[index - 1];
+    const prevSenderId =
+      typeof prevMessage.sender === "object"
+        ? prevMessage.sender._id
+        : prevMessage.sender;
+    const currentSenderId =
+      typeof message.sender === "object" ? message.sender._id : message.sender;
+
+    return prevSenderId !== currentSenderId;
+  };
 
   return (
     <div
@@ -79,21 +121,34 @@ const ChatContainer = ({
                     />
                   </svg>
                 </button>
-                <div>
-                  <h1
-                    className={`text-lg md:text-xl font-bold ${
-                      isDark ? "text-white" : "text-gray-900"
-                    }`}
-                  >
-                    {getChatTitle()}
-                  </h1>
-                  <p
-                    className={`text-sm ${
-                      isDark ? "text-gray-400" : "text-gray-500"
-                    }`}
-                  >
-                    {getChatSubtitle()}
-                  </p>
+                <div className="flex items-center space-x-3">
+                  {isChannel && (
+                    <div
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        selectedChat.isPrivate
+                          ? "bg-orange-500"
+                          : "bg-green-500"
+                      } text-white font-semibold`}
+                    >
+                      {selectedChat.isPrivate ? "🔒" : "#"}
+                    </div>
+                  )}
+                  <div>
+                    <h1
+                      className={`text-lg md:text-xl font-bold ${
+                        isDark ? "text-white" : "text-gray-900"
+                      }`}
+                    >
+                      {getChatTitle()}
+                    </h1>
+                    <p
+                      className={`text-sm ${
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      }`}
+                    >
+                      {getChatSubtitle()}
+                    </p>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center space-x-1 md:space-x-2">
@@ -101,6 +156,7 @@ const ChatContainer = ({
                   className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
                     isDark ? "text-gray-300" : "text-gray-600"
                   }`}
+                  title="Voice call"
                 >
                   📞
                 </button>
@@ -108,13 +164,16 @@ const ChatContainer = ({
                   className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
                     isDark ? "text-gray-300" : "text-gray-600"
                   }`}
+                  title="Video call"
                 >
                   🎥
                 </button>
                 <button
+                  onClick={onShowChannelSettings}
                   className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
                     isDark ? "text-gray-300" : "text-gray-600"
                   }`}
+                  title={isChannel ? "Channel settings" : "Chat settings"}
                 >
                   ⚙️
                 </button>
@@ -123,22 +182,33 @@ const ChatContainer = ({
           </div>
 
           {/* Messages Container */}
-          <div className="overflow-y-auto h-[calc(100vh-120px)] p-4 space-y-4">
+          <div className="overflow-y-auto h-[calc(100vh-120px)] p-4 space-y-2">
             {!messages || messages?.length === 0 ? (
               <div
                 className={`text-center py-8 ${
                   isDark ? "text-gray-400" : "text-gray-500"
                 }`}
               >
-                <div className="text-4xl mb-4">💬</div>
-                <p>No messages yet. Start the conversation!</p>
+                <div className="text-4xl mb-4">{isChannel ? "🏗️" : "💬"}</div>
+                <p className="text-lg font-medium mb-2">
+                  {isChannel
+                    ? "No messages in this channel yet"
+                    : "No messages yet"}
+                </p>
+                <p>
+                  {isChannel
+                    ? "Send a message to start the conversation!"
+                    : "Start the conversation!"}
+                </p>
               </div>
             ) : (
-              messages.map((message) => {
+              messages.map((message, index) => {
                 const isCurrentUser =
                   (typeof message.sender === "object" &&
                     message.sender._id === state?.user?._id) ||
                   message.sender === state?.user?._id;
+
+                const showSenderName = shouldShowSenderName(message, index);
 
                 return (
                   <div
@@ -156,9 +226,21 @@ const ChatContainer = ({
                           : "bg-white text-gray-900 border border-gray-200"
                       } ${message.id?.startsWith("temp-") ? "opacity-70" : ""}`}
                     >
+                      {/* Sender name for channels */}
+                      {showSenderName && (
+                        <p
+                          className={`text-xs font-medium mb-1 ${
+                            isDark ? "text-gray-300" : "text-gray-600"
+                          }`}
+                        >
+                          {getSenderName(message)}
+                        </p>
+                      )}
+
                       <p className="text-sm break-words">
                         {message.content || message.text}
                       </p>
+
                       <p
                         className={`text-xs mt-1 text-right ${
                           isCurrentUser
@@ -179,6 +261,7 @@ const ChatContainer = ({
               })
             )}
 
+            {/* Typing Indicator */}
             {isTyping && (
               <div className="flex justify-start">
                 <div
@@ -188,16 +271,25 @@ const ChatContainer = ({
                       : "bg-white text-gray-900 border border-gray-200"
                   }`}
                 >
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div
-                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: "0.1s" }}
-                    ></div>
-                    <div
-                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: "0.2s" }}
-                    ></div>
+                  <div className="flex items-center space-x-2">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.1s" }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.2s" }}
+                      ></div>
+                    </div>
+                    <span
+                      className={`text-xs ${
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      }`}
+                    >
+                      typing...
+                    </span>
                   </div>
                 </div>
               </div>
@@ -230,6 +322,7 @@ const ChatContainer = ({
                     isDark ? "text-gray-300" : "text-gray-600"
                   }`}
                   aria-label="Attach file"
+                  title="Attach file"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
