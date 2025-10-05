@@ -14,7 +14,7 @@ interface Props {
   isTyping: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   handleSendMessage: (e: React.FormEvent<HTMLFormElement>) => void;
-  handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleFileSelect: (file: File) => void;
   newMessage: string;
   setNewMessage: (message: string) => void;
   isSending?: boolean;
@@ -82,6 +82,37 @@ const ChatContainer = ({
 
     return prevSenderId !== currentSenderId;
   };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    handleFileSelect(file);
+
+    if (e.target) {
+      e.target.value = "";
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const extractFileName = (content: string): string => {
+    const match = content.match(/📎 (.+?) \(/);
+    return match ? match[1] : content;
+  };
+
+  const extractFileSize = (content: string): string => {
+    const match = content.match(/\(([^)]+)\)/);
+    return match ? match[1] : "";
+  };
+
+  console.log({ messages });
 
   return (
     <div
@@ -237,9 +268,50 @@ const ChatContainer = ({
                         </p>
                       )}
 
-                      <p className="text-sm break-words">
-                        {message.content || message.text}
-                      </p>
+                      <div className="text-sm break-words">
+                        {message.messageType === "image" ? (
+                          <div className="max-w-xs">
+                            <img
+                              src={message.fileUrl || message.content}
+                              alt={message.fileName || "Shared image"}
+                              className="rounded-lg max-w-full h-auto"
+                            />
+                            {message.content &&
+                              message.content !== message.fileName && (
+                                <p className="mt-1 text-xs opacity-75">
+                                  {message.content}
+                                </p>
+                              )}
+                          </div>
+                        ) : message.messageType === "file" ? (
+                          <div className="flex items-center space-x-2 p-2 bg-opacity-20 rounded">
+                            <span className="text-lg">📎</span>
+                            <div>
+                              <p className="font-medium">
+                                {message.fileName ||
+                                  extractFileName(message.content)}
+                              </p>
+                              <p className="text-xs opacity-75">
+                                {message.fileSize
+                                  ? formatFileSize(message.fileSize)
+                                  : extractFileSize(message.content)}
+                              </p>
+                              {message.fileUrl && (
+                                <a
+                                  href={message.fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs underline"
+                                >
+                                  Download
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          message.content || message.text
+                        )}
+                      </div>
 
                       <p
                         className={`text-xs mt-1 text-right ${
@@ -311,7 +383,7 @@ const ChatContainer = ({
                 <input
                   type="file"
                   ref={fileInputRef}
-                  onChange={handleFileSelect}
+                  onChange={handleFileInputChange}
                   className="hidden cursor-pointer"
                   accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
                 />
