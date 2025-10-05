@@ -1,5 +1,47 @@
 import Chat from "../models/ChatModel.js";
 import Message from "../models/MessageModel.js";
+import multer from "multer";
+import path from "path";
+import { v2 as cloudinary } from "cloudinary";
+import fs from "fs";
+
+export const uploadFile = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    console.log("Uploading file to Cloudinary:", req.file.originalname);
+
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: "chat-app",
+      resource_type: "auto",
+    });
+
+    console.log("Cloudinary upload successful:", result.secure_url);
+
+    fs.unlinkSync(req.file.path);
+
+    res.status(200).json({
+      fileUrl: result.secure_url,
+      fileName: req.file.originalname,
+      fileSize: result.bytes,
+      publicId: result.public_id,
+      message: "File uploaded successfully",
+    });
+  } catch (error) {
+    console.error("Error in uploadFile:", error);
+
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    res.status(500).json({
+      message: "File upload failed",
+      error: error.message,
+    });
+  }
+};
 
 export const createChat = async (req, res, next) => {
   try {
@@ -48,13 +90,30 @@ export const createChat = async (req, res, next) => {
 
 export const sendMessage = async (req, res, next) => {
   try {
-    const { chatId, content } = req.body;
+    const {
+      chatId,
+      content,
+      messageType = "text",
+      fileUrl,
+      fileName,
+      fileSize,
+    } = req.body;
     const sender = req.userId;
 
-    if (!chatId || !content?.trim()) {
+    if (!chatId) {
+      return res.status(400).json({ message: "ChatId is required" });
+    }
+
+    if (messageType === "text" && !content?.trim()) {
       return res
         .status(400)
-        .json({ message: "ChatId and content are required" });
+        .json({ message: "Content is required for text messages" });
+    }
+
+    if ((messageType === "image" || messageType === "file") && !fileUrl) {
+      return res
+        .status(400)
+        .json({ message: "File URL is required for file messages" });
     }
 
     const chat = await Chat.findById(chatId);
@@ -76,20 +135,36 @@ export const sendMessage = async (req, res, next) => {
       }
     }
 
-    const newMessage = new Message({
+    const messageData = {
       sender,
-      messageType: "text",
-      content: content.trim(),
+      messageType,
       chatId,
-    });
+    };
 
+    if (messageType === "text") {
+      messageData.content = content.trim();
+    } else if (messageType === "image" || messageType === "file") {
+      messageData.fileUrl = fileUrl;
+      messageData.fileName = fileName;
+      messageData.fileSize = fileSize;
+
+      messageData.content =
+        content?.trim() || `Shared ${messageType}: ${fileName}`;
+    }
+
+    const newMessage = new Message(messageData);
     const savedMessage = await newMessage.save();
+
+    const lastMessageContent =
+      messageType === "text"
+        ? content.trim()
+        : `Shared ${messageType}: ${fileName}`;
 
     await Chat.findByIdAndUpdate(
       chatId,
       {
         $push: { messages: savedMessage._id },
-        lastMessage: content.trim(),
+        lastMessage: lastMessageContent,
         lastMessageTime: new Date(),
       },
       { new: true }
@@ -104,7 +179,6 @@ export const sendMessage = async (req, res, next) => {
   } catch (error) {
     console.error("Error in sendMessage:", error);
     next(error);
-    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
