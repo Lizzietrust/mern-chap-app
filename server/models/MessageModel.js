@@ -42,7 +42,7 @@ const messageSchema = new mongoose.Schema(
       ref: "Chat",
       required: true,
     },
-    
+
     readBy: [
       {
         user: {
@@ -55,7 +55,7 @@ const messageSchema = new mongoose.Schema(
         },
       },
     ],
-   
+
     status: {
       type: String,
       enum: ["sent", "delivered", "read"],
@@ -63,10 +63,9 @@ const messageSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true, 
+    timestamps: true,
   }
 );
-
 
 messageSchema.index({ chatId: 1, createdAt: -1 });
 messageSchema.index({ sender: 1 });
