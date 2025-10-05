@@ -23,15 +23,18 @@ export interface UsersResponse {
 }
 
 export interface Message {
-  _id?: string;
   id?: string;
-  sender: string | User;
+  _id: string;
+  sender: User | string;
   messageType: "text" | "image" | "file";
   content: string;
   chatId: string;
-  createdAt?: Date;
-  timestamp?: Date;
+  timestamp: Date;
+  createdAt: Date;
   text?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
   isOptimistic?: boolean;
 }
 
@@ -46,7 +49,7 @@ export interface BaseChat {
 }
 
 export interface UserChat extends BaseChat {
-  type: "user";
+  type: "direct";
   participants: User[];
 }
 
@@ -57,6 +60,7 @@ export interface ChannelChat extends BaseChat {
   createdBy: string;
   admins: string[];
   members: string[];
+  name?: string;
 }
 
 export type Chat = UserChat | ChannelChat;
@@ -88,7 +92,7 @@ export interface UpdateChannelData {
 
 // Type guards
 export const isUserChat = (chat: Chat): chat is UserChat => {
-  return chat.type === "user";
+  return chat.type === "direct";
 };
 
 export const isChannelChat = (chat: Chat): chat is ChannelChat => {
