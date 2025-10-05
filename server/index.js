@@ -9,20 +9,25 @@ import userRoutes from "./routes/UserRoute.js";
 import messageRoutes from "./routes/MessageRoutes.js";
 import channelRoutes from "./routes/ChannelRoutes.js";
 import setupSocket from "./socket.js";
-import './models/UserModel.js'; 
-import './models/MessageModel.js'; 
+import { v2 as cloudinary } from "cloudinary";
 
 dotenv.config();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+console.log(
+  "Cloudinary configured with cloud_name:",
+  process.env.CLOUDINARY_CLOUD_NAME
+);
 
 const app = express();
 const server = http.createServer(app);
 const port = process.env.PORT || 5000;
 const databaseURL = process.env.DATABASE_URL;
-
-console.log("Environment variables:");
-console.log("PORT:", process.env.PORT);
-console.log("ORIGIN:", process.env.ORIGIN);
-console.log("DATABASE_URL:", process.env.DATABASE_URL ? "Set" : "Not set");
 
 app.use(
   cors({
@@ -34,10 +39,28 @@ app.use(
 
 app.use(cookieParser());
 app.use(express.json());
+app.use("/uploads", express.static("uploads"));
+
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/channels", channelRoutes);
+
+app.get("/test-cloudinary", async (req, res) => {
+  try {
+    const result = await cloudinary.api.ping();
+    res.json({
+      success: true,
+      message: "Cloudinary is connected!",
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
 
 setupSocket(server);
 
@@ -53,8 +76,5 @@ mongoose
   })
   .catch((err) => {
     console.error("Failed to connect to database:", err.message);
-    console.error(
-      "Tip: Ensure your IP is allowed in MongoDB Atlas Network Access and that your connection string has the correct username/password and a database name."
-    );
     process.exit(1);
   });
