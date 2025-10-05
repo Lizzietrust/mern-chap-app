@@ -4,11 +4,13 @@ import { useTheme } from "../contexts/ThemeContext";
 import { useNotifications } from "../contexts/NotificationContext";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserList } from "./UserList";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function ContextDemo() {
   const { state, login, logout, toggleSidebar, setLoading } = useApp();
   const { theme, isDark } = useTheme();
   const { success, error, warning, info, addNotification } = useNotifications();
+  const queryClient = useQueryClient();
 
   const [demoUser] = useState({
     id: 1,
@@ -23,6 +25,7 @@ export function ContextDemo() {
 
   const handleLogout = () => {
     logout();
+    queryClient.clear();
     info("You have been logged out");
   };
 
