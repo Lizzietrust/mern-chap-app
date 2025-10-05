@@ -38,7 +38,7 @@ export const createChannel = async (req, res, next) => {
       description: description?.trim() || "",
       isPrivate: Boolean(isPrivate),
       createdBy,
-      admins: [createdBy], 
+      admins: [createdBy],
       members: allMemberIds,
     });
 
@@ -303,13 +303,18 @@ export const updateChannelAdmin = async (req, res, next) => {
   }
 };
 
+
 export const getUserChannels = async (req, res, next) => {
   try {
     const userId = req.userId;
 
+ 
     const channels = await Chat.find({
       type: "channel",
-      members: userId,
+      $or: [
+        { isPrivate: false }, 
+        { members: userId }   
+      ]
     })
       .populate(
         "members",
