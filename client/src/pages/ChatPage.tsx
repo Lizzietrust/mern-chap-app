@@ -4,13 +4,13 @@ import { useNotifications } from "../contexts/NotificationContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { Layout } from "../components/Layout";
 import { SelectedChatContext } from "../contexts/SelectedChatContext";
-import { useSocket } from "../contexts/SocketContext";
+import { useSocket } from "../contexts/useSocket";
 import {
   type Message,
   type Chat,
   type User,
   type SelectedChatContextType,
-  type ChannelChat,
+  // type ChannelChat,
   isChannelChat,
 } from "../types";
 import ChatContainer from "../components/chat/ChatContainer";
@@ -20,10 +20,12 @@ import {
   useMessages,
   useCreateChat,
   messageKeys,
+  useUploadFile,
+  useSendMessage,
 } from "../hooks/useChat";
 import Sidebar from "../components/chat/Sidebar";
 import { useQueryClient } from "@tanstack/react-query";
-import { useChannels, useCreateChannel } from "../hooks/useChannels";
+import { useChannels } from "../hooks/useChannels";
 import CreateChannelModal from "../components/chat/CreateChannelModal";
 import ChannelSettingsModal from "../components/chat/ChannelSettingsModal";
 
@@ -52,25 +54,28 @@ export function ChatPage() {
   console.log({ usersData });
 
   const {
-    data: chats,
+    data: chats = [],
     isLoading: chatsLoading,
+    isFetching: chatsFetching,
     refetch: refetchChats,
   } = useUserChats();
 
   console.log({ chats });
 
   useEffect(() => {
-    if (state.user) {
-      setSelectedChat(null);
+    if (state.user?._id && !chatsLoading) {
+      console.log("🔄 User authenticated, fetching chats...");
       refetchChats();
     }
-  }, [state.user, setSelectedChat, refetchChats]);
+  }, [state.user?._id, chatsLoading, refetchChats]);
 
   const { data: messages, isLoading: messagesLoading } = useMessages(
     selectedChat?._id
   );
 
   const createChatMutation = useCreateChat();
+  const uploadFileMutation = useUploadFile();
+  const sendMessageMutation = useSendMessage();
 
   useEffect(() => {
     if (createChatMutation.isError) {
@@ -82,29 +87,109 @@ export function ChatPage() {
   const [newMessage, setNewMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileSelect = async (file: File) => {
+    if (!file || !state.user || !selectedChat || isSending) {
+      return;
+    }
 
-    success(`You selected ${file.name}`);
-    if (e.target) {
-      e.target.value = "";
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      error(`File too large. Maximum size is ${formatFileSize(maxSize)}`);
+      return;
+    }
+
+    console.log("Uploading file:", file.name);
+
+    const sender: User = state.user;
+    const chatId: string = selectedChat._id;
+    const tempMessageId = `temp-${Date.now()}`;
+    const messageType = getMessageTypeFromFile(file);
+
+    setIsSending(true);
+    const tempMessage: Message = {
+      _id: tempMessageId,
+      sender: sender,
+      messageType: messageType,
+      content: `Uploading ${file.name}...`,
+      text: `Uploading ${file.name}...`,
+      chatId: chatId,
+      createdAt: new Date(),
+      timestamp: new Date(),
+      isOptimistic: true,
+    };
+
+    const messagesQueryKey = messageKeys.list(chatId);
+    const previousMessages =
+      queryClient.getQueryData<Message[]>(messagesQueryKey);
+    queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
+      return oldMessages ? [...oldMessages, tempMessage] : [tempMessage];
+    });
+
+    try {
+      const uploadResponse = await uploadFileMutation.mutateAsync(file);
+
+      console.log("File uploaded:", uploadResponse);
+
+      await sendMessageMutation.mutateAsync({
+        chatId,
+        messageType,
+        fileUrl: uploadResponse.fileUrl,
+        fileName: uploadResponse.fileName,
+        fileSize: uploadResponse.fileSize,
+        content: file.name,
+      });
+      success(`File "${file.name}" sent successfully!`);
+
+      setTimeout(() => {
+        queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
+          return oldMessages
+            ? oldMessages.filter((msg) => msg._id !== tempMessageId)
+            : [];
+        });
+      }, 1000);
+    } catch (err) {
+      console.error("File upload failed:", err);
+      queryClient.setQueryData<Message[]>(
+        messagesQueryKey,
+        previousMessages || []
+      );
+      error("Failed to send file. Please try again.");
+    } finally {
+      setIsSending(false);
     }
   };
 
-  const { data: channels, isLoading: channelsLoading } = useChannels();
-  const createChannelMutation = useCreateChannel();
+  const getMessageTypeFromFile = (file: File): "text" | "image" | "file" => {
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type.startsWith("video/")) return "file";
+    if (file.type.startsWith("audio/")) return "file";
+    return "file";
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const {
+    data: channels,
+    isLoading: channelsLoading,
+    refetch: refetchChannels,
+  } = useChannels();
+  // const createChannelMutation = useCreateChannel();
 
   console.log({ channels });
-  
 
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
 
-  const handleChannelCreated = (channel: ChannelChat) => {
-    setSelectedChat(channel);
-    setShowCreateChannelModal(false);
-  };
+  // const handleChannelCreated = (channel: ChannelChat) => {
+  //   setSelectedChat(channel);
+  //   setShowCreateChannelModal(false);
+  // };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -231,17 +316,16 @@ export function ChatPage() {
     });
   };
 
+  console.log({ selectedChat });
+
   const getChatTitle = (): string => {
     if (!selectedChat) return "Select a chat";
 
-    if ("admins" in selectedChat && "members" in selectedChat) {
+    if (selectedChat.type === "channel") {
       return selectedChat.name || "Channel";
     }
 
-    if (
-      "participants" in selectedChat &&
-      Array.isArray(selectedChat.participants)
-    ) {
+    if (selectedChat.type === "direct") {
       const otherUser = selectedChat.participants.find(
         (p) => p._id !== state.user?._id
       );
@@ -257,26 +341,19 @@ export function ChatPage() {
       return "Unknown User";
     }
 
-    if ("name" in selectedChat) {
-      return selectedChat.name || "Group Chat";
-    }
-
     return "Select a chat";
   };
 
   const getChatSubtitle = (): string => {
     if (!selectedChat) return "";
 
-    if ("admins" in selectedChat && "members" in selectedChat) {
-      return `${selectedChat.memberCount || 0} members • ${
+    if (selectedChat.type === "channel") {
+      return `${selectedChat.members?.length || 0} members • ${
         selectedChat.isPrivate ? "Private" : "Public"
       }`;
     }
 
-    if (
-      "participants" in selectedChat &&
-      Array.isArray(selectedChat.participants)
-    ) {
+    if (selectedChat.type === "direct") {
       const otherUser = selectedChat.participants.find(
         (p) => p._id !== state.user?._id
       );
@@ -289,15 +366,10 @@ export function ChatPage() {
       }
     }
 
-    if (
-      "memberCount" in selectedChat &&
-      typeof selectedChat.memberCount === "number"
-    ) {
-      return `${selectedChat.memberCount || 0} members`;
-    }
-
     return "";
   };
+
+  const showLoading = chatsLoading || (chatsFetching && chats.length === 0);
 
   if (!state.user) {
     return (
@@ -319,6 +391,26 @@ export function ChatPage() {
     );
   }
 
+  if (showLoading) {
+    return (
+      <div
+        className={`min-h-screen flex items-center justify-center ${
+          isDark ? "bg-gray-900" : "bg-gray-50"
+        }`}
+      >
+        <div className="text-center">
+          <h2
+            className={`text-2xl font-bold ${
+              isDark ? "text-white" : "text-gray-900"
+            }`}
+          >
+            Loading your conversations...
+          </h2>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Layout>
       <div
@@ -327,7 +419,7 @@ export function ChatPage() {
         }`}
       >
         {/* Sidebar */}
-        {chatsLoading ? (
+        {showLoading ? (
           <div
             className={`flex items-center justify-center w-80 ${
               isDark ? "text-white" : "text-black"
@@ -341,8 +433,7 @@ export function ChatPage() {
             isDark={isDark}
             selectedChat={selectedChat}
             users={usersData?.users}
-            chats={chats}
-            channels={[]}
+            chats={chats || []}
             setSelectedChat={setSelectedChat}
             handleSelectUser={handleSelectUser}
             currentPage={currentPage}
@@ -405,8 +496,8 @@ export function ChatPage() {
             channel={selectedChat}
             onClose={() => setShowChannelSettings(false)}
             onUpdate={() => {
-              // Refresh data
               refetchChannels();
+              refetchChats();
             }}
           />
         )}
