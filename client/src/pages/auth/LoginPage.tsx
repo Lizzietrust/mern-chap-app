@@ -58,9 +58,7 @@ export function LoginPage() {
 
           // Convert server response to match our app's user format
           const userData = {
-            id:
-              parseInt(response.user._id) ||
-              Math.floor(Math.random() * 1000) + 1,
+            _id: response.user._id, // ✅ Use _id instead of id
             name:
               response.user.firstName && response.user.lastName
                 ? `${response.user.firstName} ${response.user.lastName}`
@@ -72,26 +70,26 @@ export function LoginPage() {
             phone: response.user.phone,
             location: response.user.location,
             website: response.user.website,
+            image: response.user.image,
+            firstName: response.user.firstName,
+            lastName: response.user.lastName,
           };
 
           console.log("Processed user data:", userData);
 
           login(userData);
+
           success("Successfully logged in!", "Welcome back");
 
-          // Check if profile setup is needed
           if (!response.user.profileSetup) {
-            // Go to profile where setup is embedded
             navigate("/profile", { replace: true });
           } else {
-            // Navigate to the intended destination or profile page
             const from = location.state?.from?.pathname || "/profile";
             navigate(from, { replace: true });
           }
         },
         onError: (err) => {
           console.error("Login error:", err);
-          // Handle specific error messages from the server
           const errorMessage =
             err instanceof Error
               ? err.message
