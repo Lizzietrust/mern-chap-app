@@ -38,6 +38,11 @@ axiosInstance.interceptors.response.use(
     if (error.response) {
       const { status, data } = error.response;
       const message = data?.message || `API Error: ${status}`;
+
+      if (status === 401) {
+        console.error("Unauthorized access - please login again");
+      }
+
       throw new Error(message);
     } else if (error.request) {
       throw new Error("Network error: No response received");
