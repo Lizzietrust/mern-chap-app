@@ -6,6 +6,7 @@ import type {
   User,
 } from "../types";
 import { channelApi } from "../lib/api";
+import { useApp } from "../contexts/AppContext";
 
 const channelKeys = {
   all: ["channels"] as const,
@@ -16,9 +17,16 @@ const channelKeys = {
 };
 
 export const useChannels = () => {
-  return useQuery<ChannelChat[]>({
-    queryKey: channelKeys.lists(),
+  const { state } = useApp();
+
+  return useQuery({
+    queryKey: [...channelKeys.lists(), state.user?._id],
     queryFn: () => channelApi.getUserChannels(),
+    enabled: !!state.user,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+    cacheTime: 5 * 60 * 1000,
   });
 };
 
