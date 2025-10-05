@@ -1,10 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import {
-  authApi,
-  type RegisterRequest,
-  type LoginRequest,
-} from "../lib/api";
+import { authApi, type RegisterRequest, type LoginRequest } from "../lib/api";
 import type { AuthResponse } from "../types";
 
 // Query keys for auth
@@ -16,28 +12,28 @@ export const authKeys = {
 // Helper function to clear user-specific data (chats, messages, etc.)
 function clearUserSpecificData(queryClient: ReturnType<typeof useQueryClient>) {
   // Invalidate and remove all chat-related queries
-  queryClient.removeQueries({ queryKey: ['chats'] });
-  queryClient.removeQueries({ queryKey: ['messages'] });
-  queryClient.removeQueries({ queryKey: ['userChats'] });
-  
+  queryClient.removeQueries({ queryKey: ["chats"] });
+  queryClient.removeQueries({ queryKey: ["messages"] });
+  queryClient.removeQueries({ queryKey: ["userChats"] });
+
   // Invalidate users list (optional, depends on your app)
-  queryClient.invalidateQueries({ queryKey: ['users'] });
-  
+  queryClient.invalidateQueries({ queryKey: ["users"] });
+
   // Clear any socket-related data if stored in cache
-  queryClient.removeQueries({ queryKey: ['socket'] });
+  queryClient.removeQueries({ queryKey: ["socket"] });
 }
 
 // Helper function to clear ALL user data (for logout)
 function clearAllUserData(queryClient: ReturnType<typeof useQueryClient>) {
   // Clear auth user data
   queryClient.removeQueries({ queryKey: authKeys.user() });
-  
+
   // Clear all user-specific data
   clearUserSpecificData(queryClient);
-  
+
   // Optional: Clear other user-specific cache if needed
-  queryClient.removeQueries({ queryKey: ['notifications'] });
-  queryClient.removeQueries({ queryKey: ['settings'] });
+  queryClient.removeQueries({ queryKey: ["notifications"] });
+  queryClient.removeQueries({ queryKey: ["settings"] });
 }
 
 // Hook to register a new user
