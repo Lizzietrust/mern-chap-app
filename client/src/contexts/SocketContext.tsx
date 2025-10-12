@@ -28,6 +28,9 @@ export interface SocketContextType {
     content: string,
     messageType?: string
   ) => void;
+  joinChat: (chatId: string) => void;
+  leaveChat: (chatId: string) => void;
+  isConnected: boolean;
 }
 
 interface SocketProviderProps {
@@ -37,6 +40,7 @@ interface SocketProviderProps {
 export function SocketProvider({ children }: SocketProviderProps) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
   const { state } = useApp();
   const { user, isAuthenticated } = state;
   const queryClient = useQueryClient();
@@ -47,6 +51,9 @@ export function SocketProvider({ children }: SocketProviderProps) {
     if (isAuthenticated && user?._id) {
       console.log("Connecting socket for user:", user._id);
       newSocket = io(API_BASE_URL, {
+        auth: {
+          token: localStorage.getItem("token"),
+        },
         query: { userId: user._id },
       });
 
@@ -54,6 +61,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
       newSocket.on("connect", () => {
         console.log("Socket connected:", newSocket?.id);
+        setIsConnected(true);
       });
 
       newSocket.on("getOnlineUsers", (users: User[]) => {
@@ -62,7 +70,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
       });
 
       newSocket.on("newMessage", (serverMessage: ServerMessage) => {
-        console.log("Received new message:", serverMessage);
+        console.log("📨 Received new message via socket:", serverMessage);
 
         const clientMessage: ClientMessage = {
           id: serverMessage._id,
@@ -75,6 +83,8 @@ export function SocketProvider({ children }: SocketProviderProps) {
           createdAt: new Date(serverMessage.createdAt),
           text: serverMessage.content || "",
           fileUrl: serverMessage.fileUrl,
+          fileName: serverMessage.fileName,
+          fileSize: serverMessage.fileSize,
         };
 
         const messagesQueryKey = messageKeys.list(serverMessage.chatId);
@@ -85,23 +95,43 @@ export function SocketProvider({ children }: SocketProviderProps) {
             const messageExists = oldMessages.some(
               (msg) => msg._id === serverMessage._id
             );
+
             if (messageExists) {
+              console.log("Message already exists, skipping");
               return oldMessages;
             }
 
-            const filteredMessages = oldMessages.filter(
-              (msg) => !msg.id?.startsWith("temp-")
-            );
+            console.log("Adding new message from socket");
+
+            const filteredMessages = oldMessages.filter((msg) => {
+              if (!msg._id.startsWith("temp-") && !msg.isOptimistic) {
+                return true;
+              }
+
+              const msgSenderId =
+                typeof msg.sender === "object" ? msg.sender._id : msg.sender;
+              const newSenderId =
+                typeof serverMessage.sender === "object"
+                  ? serverMessage.sender._id
+                  : serverMessage.sender;
+
+              return msgSenderId !== newSenderId;
+            });
+
             return [...filteredMessages, clientMessage];
           }
         );
 
         queryClient.invalidateQueries({ queryKey: ["chats"] });
+        queryClient.invalidateQueries({ queryKey: ["channels"] });
+      });
+
+      newSocket.on("typing", (data) => {
+        console.log("Typing event:", data);
       });
 
       newSocket.on("messageError", (error: unknown) => {
         console.error("Message sending error occurred");
-
         if (error instanceof Error) {
           console.error("Error message:", error.message);
         } else if (typeof error === "string") {
@@ -113,16 +143,19 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
       newSocket.on("disconnect", () => {
         console.log("Socket disconnected");
+        setIsConnected(false);
       });
 
       newSocket.on("error", (error) => {
         console.error("Socket error:", error);
+        setIsConnected(false);
       });
     } else {
       if (socket) {
         console.log("Disconnecting socket - user not authenticated");
         socket.close();
         setSocket(null);
+        setIsConnected(false);
       }
     }
 
@@ -130,6 +163,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
       if (newSocket) {
         console.log("Cleaning up socket");
         newSocket.disconnect();
+        setIsConnected(false);
       }
     };
   }, [isAuthenticated, user?._id, queryClient]);
@@ -168,10 +202,35 @@ export function SocketProvider({ children }: SocketProviderProps) {
     }
   };
 
+  const joinChat = (chatId: string) => {
+    if (socket && chatId) {
+      console.log(`Joining chat room: ${chatId}`);
+      socket.emit("joinChat", chatId);
+    } else {
+      console.error(
+        "Cannot join chat - socket not connected or missing chatId"
+      );
+    }
+  };
+
+  const leaveChat = (chatId: string) => {
+    if (socket && chatId) {
+      console.log(`Leaving chat room: ${chatId}`);
+      socket.emit("leaveChat", chatId);
+    } else {
+      console.error(
+        "Cannot leave chat - socket not connected or missing chatId"
+      );
+    }
+  };
+
   const value: SocketContextType = {
     socket,
     onlineUsers,
     sendMessage,
+    joinChat,
+    leaveChat,
+    isConnected,
   };
 
   return (
