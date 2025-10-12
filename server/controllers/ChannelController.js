@@ -303,18 +303,13 @@ export const updateChannelAdmin = async (req, res, next) => {
   }
 };
 
-
 export const getUserChannels = async (req, res, next) => {
   try {
     const userId = req.userId;
 
- 
     const channels = await Chat.find({
       type: "channel",
-      $or: [
-        { isPrivate: false }, 
-        { members: userId }   
-      ]
+      $or: [{ isPrivate: false }, { members: userId }],
     })
       .populate(
         "members",
@@ -347,9 +342,10 @@ export const getUserChannels = async (req, res, next) => {
       };
     });
 
-    res.status(200).json(transformedChannels);
+    res.status(200).json(transformedChannels || []);
   } catch (error) {
     console.error("Error in getUserChannels:", error);
-    next(error);
+
+    res.status(200).json([]);
   }
 };
