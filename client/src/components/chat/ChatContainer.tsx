@@ -241,9 +241,13 @@ const ChatContainer = ({
 
                 const showSenderName = shouldShowSenderName(message, index);
 
+                const isTempMessage =
+                  (message._id && message._id.startsWith("temp-")) ||
+                  message.isOptimistic === true;
+
                 return (
                   <div
-                    key={message._id || message.id}
+                    key={message._id}
                     className={`flex ${
                       isCurrentUser ? "justify-end" : "justify-start"
                     }`}
@@ -255,9 +259,8 @@ const ChatContainer = ({
                           : isDark
                           ? "bg-gray-700 text-white"
                           : "bg-white text-gray-900 border border-gray-200"
-                      } ${message.id?.startsWith("temp-") ? "opacity-70" : ""}`}
+                      } ${isTempMessage ? "opacity-70" : ""}`}
                     >
-                      {/* Sender name for channels */}
                       {showSenderName && (
                         <p
                           className={`text-xs font-medium mb-1 ${
@@ -323,9 +326,7 @@ const ChatContainer = ({
                         }`}
                       >
                         {message.createdAt && formatTime(message.createdAt)}
-                        {message.id?.startsWith("temp-") && (
-                          <span className="ml-1">⏳</span>
-                        )}
+                        {isTempMessage && <span className="ml-1">⏳</span>}
                       </p>
                     </div>
                   </div>
