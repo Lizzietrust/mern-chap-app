@@ -100,20 +100,17 @@ export const sendMessage = async (req, res, next) => {
     } = req.body;
     const sender = req.userId;
 
-    if (!chatId) {
-      return res.status(400).json({ message: "ChatId is required" });
-    }
+    console.log("📥 Received message request:", {
+      chatId,
+      sender,
+      content,
+      messageType,
+    });
 
-    if (messageType === "text" && !content?.trim()) {
+    if (!chatId || (!content?.trim() && !fileUrl)) {
       return res
         .status(400)
-        .json({ message: "Content is required for text messages" });
-    }
-
-    if ((messageType === "image" || messageType === "file") && !fileUrl) {
-      return res
-        .status(400)
-        .json({ message: "File URL is required for file messages" });
+        .json({ message: "ChatId and content or file are required" });
     }
 
     const chat = await Chat.findById(chatId);
@@ -135,36 +132,24 @@ export const sendMessage = async (req, res, next) => {
       }
     }
 
-    const messageData = {
+    const newMessage = new Message({
       sender,
       messageType,
+      content: content?.trim() || "",
+      fileUrl,
+      fileName,
+      fileSize,
       chatId,
-    };
+    });
 
-    if (messageType === "text") {
-      messageData.content = content.trim();
-    } else if (messageType === "image" || messageType === "file") {
-      messageData.fileUrl = fileUrl;
-      messageData.fileName = fileName;
-      messageData.fileSize = fileSize;
-
-      messageData.content =
-        content?.trim() || `Shared ${messageType}: ${fileName}`;
-    }
-
-    const newMessage = new Message(messageData);
     const savedMessage = await newMessage.save();
-
-    const lastMessageContent =
-      messageType === "text"
-        ? content.trim()
-        : `Shared ${messageType}: ${fileName}`;
+    console.log("💾 Message saved to database:", savedMessage._id);
 
     await Chat.findByIdAndUpdate(
       chatId,
       {
         $push: { messages: savedMessage._id },
-        lastMessage: lastMessageContent,
+        lastMessage: content?.trim() || fileName || "File shared",
         lastMessageTime: new Date(),
       },
       { new: true }
@@ -175,9 +160,46 @@ export const sendMessage = async (req, res, next) => {
       "_id firstName lastName email image"
     );
 
+    const io = req.app.get("io");
+
+    if (io) {
+      console.log(`📢 Emitting newMessage event for chat: ${chatId}`);
+
+      const messagePayload = {
+        _id: populatedMessage._id.toString(),
+        sender: populatedMessage.sender,
+        messageType: populatedMessage.messageType,
+        content: populatedMessage.content || "",
+        text: populatedMessage.content || "",
+        fileUrl: populatedMessage.fileUrl,
+        fileName: populatedMessage.fileName,
+        fileSize: populatedMessage.fileSize,
+        chatId: populatedMessage.chatId.toString(),
+        createdAt: populatedMessage.createdAt.toISOString(),
+        timestamp: populatedMessage.createdAt.toISOString(),
+      };
+
+      if (chat.type === "direct") {
+        chat.participants.forEach((participantId) => {
+          io.to(participantId.toString()).emit("newMessage", messagePayload);
+          console.log(`✅ Emitted to participant: ${participantId}`);
+        });
+      } else if (chat.type === "channel") {
+        chat.members.forEach((memberId) => {
+          io.to(memberId.toString()).emit("newMessage", messagePayload);
+          console.log(`✅ Emitted to member: ${memberId}`);
+        });
+
+        io.to(chatId).emit("newMessage", messagePayload);
+      }
+    } else {
+      console.log("❌ Socket.io instance not available");
+    }
+
+    console.log("✅ Message sent successfully");
     res.status(201).json(populatedMessage);
   } catch (error) {
-    console.error("Error in sendMessage:", error);
+    console.error("❌ Error in sendMessage:", error);
     next(error);
   }
 };
