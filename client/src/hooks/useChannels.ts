@@ -19,14 +19,14 @@ const channelKeys = {
 export const useChannels = () => {
   const { state } = useApp();
 
-  return useQuery({
+  return useQuery<ChannelChat[]>({
     queryKey: [...channelKeys.lists(), state.user?._id],
     queryFn: () => channelApi.getUserChannels(),
     enabled: !!state.user,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     staleTime: 0,
-    cacheTime: 5 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
 };
 
