@@ -46,6 +46,15 @@ app.use("/api/user", userRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/channels", channelRoutes);
 
+const io = setupSocket(server);
+
+app.set("io", io);
+
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
 app.get("/test-cloudinary", async (req, res) => {
   try {
     const result = await cloudinary.api.ping();
@@ -61,8 +70,6 @@ app.get("/test-cloudinary", async (req, res) => {
     });
   }
 });
-
-setupSocket(server);
 
 mongoose
   .connect(databaseURL, {
