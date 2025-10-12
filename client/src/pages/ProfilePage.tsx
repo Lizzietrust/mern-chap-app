@@ -5,6 +5,7 @@ import { useNotifications } from "../contexts/NotificationContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { Layout } from "../components/Layout";
 import { useUpdateProfile } from "../hooks/useAuth";
+import { LogoutButton } from "../components/LogoutButton";
 
 export function ProfilePage() {
   const { state, logout, dispatch } = useApp();
@@ -696,12 +697,7 @@ export function ProfilePage() {
                   >
                     Go to Chat
                   </button>
-                  <button
-                    onClick={handleLogout}
-                    className="px-4 py-2 border border-red-200 text-red-600 rounded-md hover:bg-red-50 cursor-pointer"
-                  >
-                    Logout
-                  </button>
+                  <LogoutButton isNav={false} />
                 </div>
               </div>
             </div>
