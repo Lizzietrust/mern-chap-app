@@ -73,8 +73,14 @@ export function useUserChats() {
 export function useMessages(chatId: string | null | undefined) {
   return useQuery<Message[]>({
     queryKey: messageKeys.list(chatId!),
-    queryFn: (): Promise<Message[]> =>
-      api.get(`/api/messages/get-messages/${chatId}`),
+    queryFn: async (): Promise<Message[]> => {
+      console.log("🔍 Fetching messages for chat:", chatId);
+      const messages = await api.get<Message[]>(
+        `/api/messages/get-messages/${chatId}`
+      );
+      console.log("✅ Fetched messages:", messages.length);
+      return messages;
+    },
     enabled: !!chatId,
     select: (data) => {
       const seen = new Set();
@@ -86,6 +92,9 @@ export function useMessages(chatId: string | null | undefined) {
         return true;
       });
     },
+    staleTime: 10000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 }
 
@@ -120,12 +129,21 @@ export function useSendMessage() {
       fileSize?: number;
       content: string;
     }) => {
+      console.log("📤 Sending message via HTTP:", data);
       return api.post("/api/messages/send-message", data);
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (response, variables) => {
+      console.log("✅ Message sent successfully:", response);
+
       queryClient.invalidateQueries({
         queryKey: messageKeys.list(variables.chatId),
       });
+
+      queryClient.invalidateQueries({ queryKey: ["chats"] });
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+    },
+    onError: (error, variables) => {
+      console.error("❌ Failed to send message:", error);
     },
   });
 }
