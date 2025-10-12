@@ -37,7 +37,7 @@ export function ChatPage() {
   const { selectedChat, setSelectedChat } = useContext(
     SelectedChatContext
   ) as SelectedChatContextType;
-  const { sendMessage, socket } = useSocket();
+  const { sendMessage, joinChat, leaveChat, isConnected } = useSocket();
   const queryClient = useQueryClient();
   const [isSending, setIsSending] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -72,6 +72,8 @@ export function ChatPage() {
   const { data: messages, isLoading: messagesLoading } = useMessages(
     selectedChat?._id
   );
+
+  console.log({ messages });
 
   const createChatMutation = useCreateChat();
   const uploadFileMutation = useUploadFile();
@@ -175,7 +177,7 @@ export function ChatPage() {
   };
 
   const {
-    data: channels,
+    data: channels = [],
     isLoading: channelsLoading,
     refetch: refetchChannels,
   } = useChannels();
@@ -200,14 +202,14 @@ export function ChatPage() {
   }, [messages]);
 
   useEffect(() => {
-    if (selectedChat && socket) {
-      socket.emit("joinChat", selectedChat._id);
+    if (selectedChat && isConnected) {
+      joinChat(selectedChat._id);
 
       return () => {
-        socket.emit("leaveChat", selectedChat._id);
+        leaveChat(selectedChat._id);
       };
     }
-  }, [selectedChat, socket]);
+  }, [selectedChat, isConnected, joinChat, leaveChat]);
 
   const handleSelectUser = async (userId: string) => {
     try {
@@ -231,9 +233,9 @@ export function ChatPage() {
     setCurrentPage(1);
   };
 
-  const isTempMessage = (msg: Message): boolean => {
-    return !!msg._id && msg._id.startsWith("temp-");
-  };
+  // const isTempMessage = (msg: Message): boolean => {
+  //   return !!msg._id && msg._id.startsWith("temp-");
+  // };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,7 +247,7 @@ export function ChatPage() {
     const sender: User = state.user;
     const chatId: string = selectedChat._id;
     const content: string = newMessage.trim();
-    const tempMessageId = `temp-${Date.now()}`;
+    const tempMessageId = `temp-${Date.now()}-${sender._id}`;
 
     console.log("Sending message:", { chatId, senderId: sender._id, content });
 
@@ -256,6 +258,7 @@ export function ChatPage() {
       sender: sender,
       messageType: "text",
       content: content,
+      text: content,
       chatId: chatId,
       createdAt: new Date(),
       timestamp: new Date(),
@@ -263,35 +266,30 @@ export function ChatPage() {
     };
 
     const messagesQueryKey = messageKeys.list(chatId);
-
     const previousMessages =
       queryClient.getQueryData<Message[]>(messagesQueryKey);
 
     queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
       if (!oldMessages) return [tempMessage];
-
-      const filteredMessages = oldMessages.filter((msg) => !isTempMessage(msg));
-      return [...filteredMessages, tempMessage];
+      return [...oldMessages, tempMessage];
     });
 
     setNewMessage("");
 
     try {
-      sendMessage(chatId, sender._id, content);
+      await sendMessageMutation.mutateAsync({
+        chatId,
+        messageType: "text",
+        content: content,
+      });
 
-      setIsTyping(true);
-      setTimeout(() => {
-        setIsTyping(false);
-      }, 1500);
-
-      console.log("Message sent successfully");
+      console.log("Message sent successfully via HTTP");
 
       setTimeout(() => {
         queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
-          if (!oldMessages) return [];
-          return oldMessages.filter((msg) => msg._id !== tempMessageId);
+          return oldMessages?.filter((msg) => msg._id !== tempMessageId) || [];
         });
-      }, 10000);
+      }, 500);
     } catch (err) {
       console.error("Failed to send message:", err);
 
@@ -443,7 +441,7 @@ export function ChatPage() {
             isLoadingUsers={isLoadingUsers}
             searchTerm={searchTerm}
             handleSearch={handleSearch}
-            channels={channels || []}
+            channels={channels}
             channelsLoading={channelsLoading}
             onCreateChannel={() => setShowCreateChannelModal(true)}
             onShowChannelSettings={() => setShowChannelSettings(true)}
