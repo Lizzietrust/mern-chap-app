@@ -10,7 +10,6 @@ import {
   type Chat,
   type User,
   type SelectedChatContextType,
-  // type ChannelChat,
   isChannelChat,
 } from "../types";
 import ChatContainer from "../components/chat/ChatContainer";
@@ -28,6 +27,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useChannels } from "../hooks/useChannels";
 import CreateChannelModal from "../components/chat/CreateChannelModal";
 import ChannelSettingsModal from "../components/chat/ChannelSettingsModal";
+import { TestConnectionStatus } from "../components/chat/TestSocketConnection";
+import { CookieDebug } from "../components/chat/CookieDebug";
 
 export function ChatPage() {
   const { state } = useApp();
@@ -37,13 +38,16 @@ export function ChatPage() {
   const { selectedChat, setSelectedChat } = useContext(
     SelectedChatContext
   ) as SelectedChatContextType;
-  const { sendMessage, joinChat, leaveChat, isConnected } = useSocket();
+  const { sendMessage, joinChat, leaveChat, isConnected, onlineUsers, socket } =
+    useSocket();
   const queryClient = useQueryClient();
   const [isSending, setIsSending] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
+  const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { data: usersData, isLoading: isLoadingUsers } = useUsers(
     currentPage,
@@ -51,16 +55,12 @@ export function ChatPage() {
     searchTerm
   );
 
-  console.log({ usersData });
-
   const {
     data: chats = [],
     isLoading: chatsLoading,
     isFetching: chatsFetching,
     refetch: refetchChats,
   } = useUserChats();
-
-  console.log({ chats });
 
   useEffect(() => {
     if (state.user?._id && !chatsLoading) {
@@ -72,8 +72,6 @@ export function ChatPage() {
   const { data: messages, isLoading: messagesLoading } = useMessages(
     selectedChat?._id
   );
-
-  console.log({ messages });
 
   const createChatMutation = useCreateChat();
   const uploadFileMutation = useUploadFile();
@@ -87,7 +85,54 @@ export function ChatPage() {
   }, [createChatMutation.isError, createChatMutation.error, error]);
 
   const [newMessage, setNewMessage] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
+
+  // Listen for typing events
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleTyping = (data: {
+      userId: string;
+      isTyping: boolean;
+      chatId: string;
+    }) => {
+      if (
+        data.chatId === selectedChat?._id &&
+        data.userId !== state.user?._id
+      ) {
+        setTypingUsers((prev) => ({
+          ...prev,
+          [data.userId]: data.isTyping,
+        }));
+      }
+    };
+
+    socket.on("typing", handleTyping);
+
+    return () => {
+      socket.off("typing", handleTyping);
+    };
+  }, [socket, selectedChat?._id, state.user?._id]);
+
+  // Handle typing indicator
+  const handleTyping = () => {
+    if (!selectedChat || !socket) return;
+
+    socket.emit("typing", {
+      chatId: selectedChat._id,
+      isTyping: true,
+    });
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("typing", {
+        chatId: selectedChat._id,
+        isTyping: false,
+      });
+    }, 2000);
+  };
 
   const handleFileSelect = async (file: File) => {
     if (!file || !state.user || !selectedChat || isSending) {
@@ -181,17 +226,9 @@ export function ChatPage() {
     isLoading: channelsLoading,
     refetch: refetchChannels,
   } = useChannels();
-  // const createChannelMutation = useCreateChannel();
-
-  console.log({ channels });
 
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
-
-  // const handleChannelCreated = (channel: ChannelChat) => {
-  //   setSelectedChat(channel);
-  //   setShowCreateChannelModal(false);
-  // };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -210,6 +247,32 @@ export function ChatPage() {
       };
     }
   }, [selectedChat, isConnected, joinChat, leaveChat]);
+
+  // In your ChatPage component, add a function to enhance participants with online status
+  const getEnhancedParticipants = (chat: Chat) => {
+    if (!chat.participants) return chat.participants;
+
+    return chat.participants.map((participant) => {
+      const onlineUser = onlineUsers.find((u) => u._id === participant._id);
+      return {
+        ...participant,
+        isOnline: onlineUser?.isOnline || participant.isOnline || false,
+        lastSeen: onlineUser?.lastSeen || participant.lastSeen,
+      };
+    });
+  };
+
+  // Update the selectedChat to include enhanced participants when needed
+  useEffect(() => {
+    if (selectedChat && selectedChat.type === "direct") {
+      // This will ensure the selectedChat has the latest online status
+      const enhancedParticipants = getEnhancedParticipants(selectedChat);
+      setSelectedChat({
+        ...selectedChat,
+        participants: enhancedParticipants,
+      });
+    }
+  }, [onlineUsers, selectedChat?._id]); // Re-run when onlineUsers change or chat changes
 
   const handleSelectUser = async (userId: string) => {
     try {
@@ -232,10 +295,6 @@ export function ChatPage() {
     setSearchTerm(search);
     setCurrentPage(1);
   };
-
-  // const isTempMessage = (msg: Message): boolean => {
-  //   return !!msg._id && msg._id.startsWith("temp-");
-  // };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,6 +335,14 @@ export function ChatPage() {
 
     setNewMessage("");
 
+    // Stop typing indicator
+    if (socket) {
+      socket.emit("typing", {
+        chatId: selectedChat._id,
+        isTyping: false,
+      });
+    }
+
     try {
       await sendMessageMutation.mutateAsync({
         chatId,
@@ -313,8 +380,6 @@ export function ChatPage() {
       minute: "2-digit",
     });
   };
-
-  console.log({ selectedChat });
 
   const getChatTitle = (): string => {
     if (!selectedChat) return "Select a chat";
@@ -357,15 +422,29 @@ export function ChatPage() {
       );
 
       if (otherUser) {
-        if (otherUser.isOnline) return "Online";
-        if (otherUser.lastSeen)
-          return `Last seen ${formatTime(otherUser.lastSeen)}`;
+        // Get the latest online status from socket context
+        const onlineUser = onlineUsers.find((u) => u._id === otherUser._id);
+        const isOnline = onlineUser?.isOnline || false;
+        const lastSeen = onlineUser?.lastSeen || otherUser.lastSeen;
+
+        console.log("🔍 Chat Subtitle Debug:", {
+          otherUserId: otherUser._id,
+          onlineUsers: onlineUsers.map((u) => u._id),
+          isOnline,
+          lastSeen,
+          onlineUserData: onlineUser,
+        });
+
+        if (isOnline) return "Online";
+        if (lastSeen) return `Last seen ${formatTime(lastSeen)}`;
         return "Offline";
       }
     }
 
     return "";
   };
+
+  const isTyping = Object.values(typingUsers).some((isTyping) => isTyping);
 
   const showLoading = chatsLoading || (chatsFetching && chats.length === 0);
 
@@ -416,7 +495,6 @@ export function ChatPage() {
           isDark ? "bg-gray-900" : "bg-gray-50"
         }`}
       >
-        {/* Sidebar */}
         {showLoading ? (
           <div
             className={`flex items-center justify-center w-80 ${
@@ -448,7 +526,6 @@ export function ChatPage() {
           />
         )}
 
-        {/* Main Chat Area */}
         {messagesLoading ? (
           <div
             className={`flex-1 flex items-center justify-center ${
@@ -463,7 +540,7 @@ export function ChatPage() {
             isDark={isDark}
             setSelectedChat={setSelectedChat}
             getChatTitle={getChatTitle}
-            getChatSubtitle={getChatSubtitle}
+            // getChatSubtitle={getChatSubtitle}
             messages={messages || []}
             formatTime={formatTime}
             isTyping={isTyping}
@@ -471,9 +548,15 @@ export function ChatPage() {
             handleSendMessage={handleSendMessage}
             handleFileSelect={handleFileSelect}
             newMessage={newMessage}
-            setNewMessage={setNewMessage}
+            setNewMessage={(msg) => {
+              setNewMessage(msg);
+              if (msg.trim()) {
+                handleTyping();
+              }
+            }}
             isSending={isSending}
             onShowChannelSettings={() => setShowChannelSettings(true)}
+            stateUser={state.user}
           />
         )}
 
