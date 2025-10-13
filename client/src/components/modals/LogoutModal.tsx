@@ -1,18 +1,35 @@
 import { useTheme } from "../../contexts/ThemeContext";
 import { useApp } from "../../contexts/AppContext";
 import { useNotifications } from "../../contexts/NotificationContext";
-import type { UseMutationResult } from "@tanstack/react-query";
 
-interface Props {
+interface LogoutModalProps {
   showModal: boolean;
-  setShowModal: (showModal: boolean) => void;
-  logoutMutation: UseMutationResult<void, Error, void, unknown>;
+  setShowModal: (show: boolean) => void;
+  onConfirm: () => void;
+  isLoading: boolean;
 }
 
-const LogoutModal = ({ setShowModal, logoutMutation }: Props) => {
+const LogoutModal: React.FC<LogoutModalProps> = ({
+  showModal,
+  setShowModal,
+  onConfirm,
+  isLoading,
+}) => {
   const closeModal = () => setShowModal(false);
 
   const { isDark } = useTheme();
+  const { logout: logoutFromContext } = useApp();
+  const { success } = useNotifications();
+
+  const handleConfirmLogout = () => {
+    // Call the onConfirm function passed from LogoutButton
+    onConfirm();
+
+    // Also update the app context and show success message
+    logoutFromContext();
+    success("Successfully logged out!", "See you soon");
+    setShowModal(false);
+  };
 
   const modalBgClass = isDark ? "bg-gray-800" : "bg-white";
   const modalTextClass = isDark ? "text-white" : "text-gray-900";
@@ -20,25 +37,6 @@ const LogoutModal = ({ setShowModal, logoutMutation }: Props) => {
   const cancelButtonClass = isDark
     ? "bg-gray-700 text-gray-200 hover:bg-gray-600 focus:ring-gray-500"
     : "bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-500";
-
-  const { logout: logoutFromContext } = useApp();
-  const { success } = useNotifications();
-
-  const handleLogout = () => {
-    logoutMutation.mutate(undefined, {
-      onSuccess: () => {
-        logoutFromContext();
-        success("Successfully logged out!", "See you soon");
-        setShowModal(false);
-      },
-      onError: (error) => {
-        console.error("Logout error:", error);
-        logoutFromContext();
-        success("Logged out successfully!", "See you soon");
-        setShowModal(false);
-      },
-    });
-  };
 
   return (
     <div
@@ -54,24 +52,24 @@ const LogoutModal = ({ setShowModal, logoutMutation }: Props) => {
             Confirm Logout
           </h3>
           <p className={`${modalSubtextClass} mb-6`}>
-            Are you sure you want to logout? You'll need to log back in to
-            access your account.
+            Are you sure you want to logout? Your online status will be updated
+            for other users.
           </p>
 
           <div className="flex justify-end space-x-3">
             <button
               onClick={closeModal}
-              disabled={logoutMutation.isPending}
+              disabled={isLoading}
               className={`px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${cancelButtonClass}`}
             >
               Cancel
             </button>
             <button
-              onClick={handleLogout}
-              disabled={logoutMutation.isPending}
+              onClick={handleConfirmLogout}
+              disabled={isLoading}
               className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {logoutMutation.isPending ? (
+              {isLoading ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Logging out...
