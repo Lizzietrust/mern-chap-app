@@ -2,13 +2,13 @@ import { useRef } from "react";
 import type { Message, ChatOrNull } from "../../types";
 import { useApp } from "../../contexts/AppContext";
 import { isChannelChat } from "../../types";
+import { useSocket } from "../../contexts/useSocket";
 
 interface Props {
   selectedChat: ChatOrNull;
   isDark: boolean;
   setSelectedChat: (chat: ChatOrNull) => void;
   getChatTitle: () => string;
-  getChatSubtitle: () => string;
   messages: Message[];
   formatTime: (timestamp: Date | string) => string;
   isTyping: boolean;
@@ -26,7 +26,6 @@ const ChatContainer = ({
   isDark,
   setSelectedChat,
   getChatTitle,
-  getChatSubtitle,
   messages,
   formatTime,
   isTyping,
@@ -41,6 +40,7 @@ const ChatContainer = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { state } = useApp();
+  const { onlineUsers } = useSocket();
 
   const isChannel = selectedChat && isChannelChat(selectedChat);
   // const isAdmin =
@@ -58,6 +58,44 @@ const ChatContainer = ({
       );
     }
     return "Unknown User";
+  };
+
+  // In ChatContainer, add this function:
+  const getChatSubtitle = (): string => {
+    if (!selectedChat) return "";
+
+    if (selectedChat.type === "channel") {
+      return `${selectedChat.members?.length || 0} members • ${
+        selectedChat.isPrivate ? "Private" : "Public"
+      }`;
+    }
+
+    if (selectedChat.type === "direct") {
+      const otherUser = selectedChat.participants?.find(
+        (p) => p._id !== state.user?._id
+      );
+
+      if (otherUser) {
+        // Get the latest online status from socket context
+        const onlineUser = onlineUsers.find((u) => u._id === otherUser._id);
+        const isOnline = onlineUser?.isOnline || false;
+        const lastSeen = onlineUser?.lastSeen || otherUser.lastSeen;
+
+        console.log("🔍 ChatContainer Subtitle Debug:", {
+          otherUserId: otherUser._id,
+          onlineUsers: onlineUsers.map((u) => u._id),
+          isOnline,
+          lastSeen,
+          onlineUserData: onlineUser,
+        });
+
+        if (isOnline) return "Online";
+        if (lastSeen) return `Last seen ${formatTime(lastSeen)}`;
+        return "Offline";
+      }
+    }
+
+    return "";
   };
 
   const shouldShowSenderName = (message: Message, index: number): boolean => {
