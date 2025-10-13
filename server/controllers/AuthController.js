@@ -143,6 +143,8 @@ export const login = async (req, res, next) => {
 
 export const logout = async (req, res, next) => {
   try {
+    const userId = req.userId; // Get the user ID from the auth middleware
+
     // Clear the JWT cookie
     const isProd = process.env.NODE_ENV === "production";
     res.clearCookie("jwt", {
@@ -150,6 +152,15 @@ export const logout = async (req, res, next) => {
       secure: isProd,
       sameSite: isProd ? "None" : "Lax",
     });
+
+    // Update user as offline in database
+    await Users.findByIdAndUpdate(userId, {
+      isOnline: false,
+      lastSeen: new Date(),
+    });
+
+    // Note: We can't directly access socket.io from the controller
+    // The actual socket disconnection will happen when the client refreshes/closes
 
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
@@ -161,7 +172,7 @@ export const logout = async (req, res, next) => {
 
 export const getUserInfo = async (req, res, next) => {
   try {
-    const userData = await Users.findById(req.userId)
+    const userData = await Users.findById(req.userId);
 
     if (!userData) {
       return res.status(404).json({ message: "User not found" });
@@ -184,7 +195,6 @@ export const getUserInfo = async (req, res, next) => {
         updatedAt: userData.updatedAt,
       },
     });
-
   } catch (error) {
     console.log({ error });
 
@@ -202,15 +212,8 @@ export const getUserInfo = async (req, res, next) => {
 
 export const updateProfile = async (req, res, next) => {
   try {
-    const { 
-      firstName, 
-      lastName, 
-      image, 
-      bio, 
-      phone, 
-      location, 
-      website 
-    } = req.body;
+    const { firstName, lastName, image, bio, phone, location, website } =
+      req.body;
     const userId = req.userId;
 
     const updateData = {};
@@ -226,8 +229,8 @@ export const updateProfile = async (req, res, next) => {
 
     // Check if there are any fields to update
     if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ 
-        message: "At least one field is required for update" 
+      return res.status(400).json({
+        message: "At least one field is required for update",
       });
     }
 
@@ -264,11 +267,9 @@ export const updateProfile = async (req, res, next) => {
         updatedAt: updatedUser.updatedAt,
       },
     });
-
   } catch (error) {
     console.log({ error });
     next(error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
