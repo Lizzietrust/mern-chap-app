@@ -86,7 +86,7 @@ export function Navigation() {
               Welcome, {state.user?.name}
             </div>
             <ThemeToggle />
-            <LogoutButton />
+            <LogoutButton isNav={true} />
           </div>
 
           <div className="md:hidden flex items-center">
