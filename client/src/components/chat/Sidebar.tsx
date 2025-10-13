@@ -4,6 +4,7 @@ import { useApp } from "../../contexts/AppContext";
 import { getInitials } from "../../functions";
 import NewChatModal from "./NewChatModal";
 import type { ChatOrNull, User, UserChat, ChannelChat } from "../../types";
+import { useSocket } from "../../contexts/useSocket";
 
 interface Props {
   isDark: boolean;
@@ -48,6 +49,7 @@ Props) => {
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [activeTab, setActiveTab] = useState<"dms" | "channels">("dms");
   const { state } = useApp();
+  const { onlineUsers } = useSocket();
 
   const handleUserSelect = async (userId: string) => {
     try {
@@ -61,6 +63,24 @@ Props) => {
   const handleChannelClick = (channel: ChannelChat) => {
     setSelectedChat(channel);
   };
+
+  // In your Sidebar component, enhance the participants with online status
+  const enhancedChats = chats?.map((chat) => {
+    if (chat.type === "direct" && chat.participants) {
+      return {
+        ...chat,
+        participants: chat.participants.map((participant) => {
+          const onlineUser = onlineUsers.find((u) => u._id === participant._id);
+          return {
+            ...participant,
+            isOnline: onlineUser?.isOnline || false,
+            lastSeen: onlineUser?.lastSeen || participant.lastSeen,
+          };
+        }),
+      };
+    }
+    return chat;
+  });
 
   return (
     <>
@@ -160,7 +180,7 @@ Props) => {
             <>
               {activeTab === "dms" && (
                 <div className="p-2">
-                  {chats?.map((chat) => {
+                  {enhancedChats?.map((chat) => {
                     if (!chat) return null;
 
                     const otherParticipant = chat.participants?.find(
