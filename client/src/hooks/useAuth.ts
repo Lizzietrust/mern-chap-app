@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { authApi, type RegisterRequest, type LoginRequest } from "../lib/api";
 import type { AuthResponse } from "../types";
+import { useApp } from "../contexts/AppContext";
+import { useSocket } from "../contexts/useSocket";
 
 // Query keys for auth
 export const authKeys = {
@@ -70,6 +72,8 @@ export function useLogin() {
 
 // Hook to logout user
 export function useLogout() {
+  const { dispatch } = useApp();
+  const { socket } = useSocket();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -78,6 +82,15 @@ export function useLogout() {
     onSuccess: () => {
       // Clear all user-specific data from cache
       clearAllUserData(queryClient);
+
+      if (socket) {
+        console.log("🔌 Disconnecting socket on logout");
+        socket.disconnect();
+      }
+
+      // Clear local state
+      dispatch({ type: "LOGOUT" });
+
       // Redirect to login page
       navigate("/login", { replace: true });
     },
@@ -85,6 +98,10 @@ export function useLogout() {
       console.error("Logout error:", error);
       // Even if logout fails on server, clear local state
       clearAllUserData(queryClient);
+      if (socket) {
+        socket.disconnect();
+      }
+      dispatch({ type: "LOGOUT" });
       navigate("/login", { replace: true });
     },
   });
