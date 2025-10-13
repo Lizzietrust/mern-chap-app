@@ -8,17 +8,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { messageKeys } from "../hooks/useChat";
 import { SocketContext } from "./socket-context";
 
-export interface ServerMessage {
-  _id: string;
-  sender: User;
-  messageType: "text" | "image" | "file";
-  content?: string;
-  fileUrl?: string;
-  timestamp: Date;
-  chatId: string;
-  createdAt: string;
-}
-
 export interface SocketContextType {
   socket: Socket | null;
   onlineUsers: User[];
@@ -31,6 +20,7 @@ export interface SocketContextType {
   joinChat: (chatId: string) => void;
   leaveChat: (chatId: string) => void;
   isConnected: boolean;
+  updateUserStatus: (isOnline: boolean) => void;
 }
 
 interface SocketProviderProps {
@@ -45,32 +35,75 @@ export function SocketProvider({ children }: SocketProviderProps) {
   const { user, isAuthenticated } = state;
   const queryClient = useQueryClient();
 
+  // Main socket connection effect
   useEffect(() => {
     let newSocket: Socket | null = null;
 
     if (isAuthenticated && user?._id) {
-      console.log("Connecting socket for user:", user._id);
+      console.log("🔌 Connecting socket for user:", user._id);
+
       newSocket = io(API_BASE_URL, {
-        auth: {
-          token: localStorage.getItem("token"),
-        },
-        query: { userId: user._id },
+        withCredentials: true, // Important for sending cookies
+        transports: ["websocket", "polling"],
       });
 
       setSocket(newSocket);
 
+      // Socket event handlers
       newSocket.on("connect", () => {
-        console.log("Socket connected:", newSocket?.id);
+        console.log("✅ Socket connected:", newSocket?.id);
         setIsConnected(true);
       });
 
-      newSocket.on("getOnlineUsers", (users: User[]) => {
-        console.log("Online users:", users);
+      newSocket.on("connect_error", (error) => {
+        console.error("🔌 Socket connection error:", error);
+        console.error("Error details:", {
+          message: error.message,
+          description: error.description,
+          context: error.context,
+        });
+        setIsConnected(false);
+      });
+
+      newSocket.on("onlineUsers", (users: User[]) => {
+        console.log("📋 Received online users:", users.length);
         setOnlineUsers(users);
       });
 
-      newSocket.on("newMessage", (serverMessage: ServerMessage) => {
-        console.log("📨 Received new message via socket:", serverMessage);
+      newSocket.on("userOnline", (data: { userId: string; user: User }) => {
+        console.log("🟢 User came online:", data.userId);
+        setOnlineUsers((prev) => {
+          const exists = prev.some((u) => u._id === data.userId);
+          if (exists) {
+            return prev.map((u) =>
+              u._id === data.userId ? { ...u, isOnline: true } : u
+            );
+          }
+          return [...prev, data.user];
+        });
+        queryClient.invalidateQueries({ queryKey: ["chats"] });
+      });
+
+      newSocket.on(
+        "userOffline",
+        (data: { userId: string; lastSeen: Date }) => {
+          console.log("🔴 User went offline:", data.userId);
+          setOnlineUsers((prev) =>
+            prev.map((u) =>
+              u._id === data.userId
+                ? { ...u, isOnline: false, lastSeen: data.lastSeen }
+                : u
+            )
+          );
+          
+          queryClient.invalidateQueries({ queryKey: ["chats"] });
+          queryClient.invalidateQueries({ queryKey: ["userChats"] });
+        }
+      );
+
+      // Handle new messages from socket
+      newSocket.on("newMessage", (serverMessage: any) => {
+        console.log("📨 Received new message via socket");
 
         const clientMessage: ClientMessage = {
           id: serverMessage._id,
@@ -126,23 +159,8 @@ export function SocketProvider({ children }: SocketProviderProps) {
         queryClient.invalidateQueries({ queryKey: ["channels"] });
       });
 
-      newSocket.on("typing", (data) => {
-        console.log("Typing event:", data);
-      });
-
-      newSocket.on("messageError", (error: unknown) => {
-        console.error("Message sending error occurred");
-        if (error instanceof Error) {
-          console.error("Error message:", error.message);
-        } else if (typeof error === "string") {
-          console.error("Error string:", error);
-        } else {
-          console.error("Unknown error type:", error);
-        }
-      });
-
-      newSocket.on("disconnect", () => {
-        console.log("Socket disconnected");
+      newSocket.on("disconnect", (reason) => {
+        console.log("❌ Socket disconnected. Reason:", reason);
         setIsConnected(false);
       });
 
@@ -151,22 +169,54 @@ export function SocketProvider({ children }: SocketProviderProps) {
         setIsConnected(false);
       });
     } else {
+      // Clean up if user is not authenticated
       if (socket) {
         console.log("Disconnecting socket - user not authenticated");
-        socket.close();
+        socket.disconnect();
         setSocket(null);
         setIsConnected(false);
+        setOnlineUsers([]);
       }
     }
 
     return () => {
       if (newSocket) {
-        console.log("Cleaning up socket");
+        console.log("🧹 Cleaning up socket");
         newSocket.disconnect();
         setIsConnected(false);
       }
     };
   }, [isAuthenticated, user?._id, queryClient]);
+
+  // Handle browser/tab close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (socket) {
+        console.log("🔌 Disconnecting socket on page unload");
+        socket.disconnect();
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [socket]);
+
+  // Socket methods
+  const updateUserStatus = (isOnline: boolean) => {
+    if (socket && socket.connected) {
+      console.log(
+        `🔄 Manually updating user status to: ${
+          isOnline ? "online" : "offline"
+        }`
+      );
+      socket.emit("updateUserStatus", { isOnline });
+    } else {
+      console.warn("⚠️ Cannot update user status - socket not connected");
+    }
+  };
 
   const sendMessage = (
     chatId: string,
@@ -174,14 +224,13 @@ export function SocketProvider({ children }: SocketProviderProps) {
     content: string,
     messageType: string = "text"
   ) => {
-    if (socket && chatId && senderId && content.trim()) {
-      console.log("Sending message via socket:", {
+    if (socket && socket.connected && chatId && senderId && content.trim()) {
+      console.log("📤 Sending message via socket:", {
         chatId,
         senderId,
         content,
         messageType,
       });
-
       socket.emit("sendMessage", {
         chatId,
         senderId,
@@ -190,21 +239,14 @@ export function SocketProvider({ children }: SocketProviderProps) {
       });
     } else {
       console.error(
-        "Cannot send message - missing required data or socket not connected:",
-        {
-          hasSocket: !!socket,
-          isSocketConnected: socket?.connected,
-          chatId,
-          senderId,
-          content,
-        }
+        "Cannot send message - socket not connected or missing data"
       );
     }
   };
 
   const joinChat = (chatId: string) => {
-    if (socket && chatId) {
-      console.log(`Joining chat room: ${chatId}`);
+    if (socket && socket.connected && chatId) {
+      console.log(`👥 Joining chat room: ${chatId}`);
       socket.emit("joinChat", chatId);
     } else {
       console.error(
@@ -214,8 +256,8 @@ export function SocketProvider({ children }: SocketProviderProps) {
   };
 
   const leaveChat = (chatId: string) => {
-    if (socket && chatId) {
-      console.log(`Leaving chat room: ${chatId}`);
+    if (socket && socket.connected && chatId) {
+      console.log(`👋 Leaving chat room: ${chatId}`);
       socket.emit("leaveChat", chatId);
     } else {
       console.error(
@@ -231,6 +273,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
     joinChat,
     leaveChat,
     isConnected,
+    updateUserStatus,
   };
 
   return (
