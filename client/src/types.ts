@@ -49,11 +49,16 @@ export interface BaseChat {
 }
 
 export interface UserChat extends BaseChat {
-  type: "direct";
+  _id: string;
+  type: "direct" | "channel";
   participants: User[];
+  lastMessage?: string;
+  lastMessageAt?: Date;
+  unreadCount?: number;
 }
 
 export interface ChannelChat extends BaseChat {
+  _id: string;
   type: "channel";
   description?: string;
   isPrivate: boolean;
@@ -61,6 +66,9 @@ export interface ChannelChat extends BaseChat {
   admins: string[];
   members: string[];
   name?: string;
+  lastMessage?: string;
+  lastMessageAt?: Date; // Add this
+  unreadCount?: number;
 }
 
 export type Chat = UserChat | ChannelChat;
