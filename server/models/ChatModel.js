@@ -70,18 +70,13 @@ const chatSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
-    unreadCount: [
-      {
-        user: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Users",
-        },
-        count: {
-          type: Number,
-          default: 0,
-        },
-      },
-    ],
+
+    // CORRECTED: Use Map structure for unreadCount
+    unreadCount: {
+      type: Map,
+      of: Number,
+      default: {},
+    },
   },
   {
     timestamps: true,
@@ -101,7 +96,16 @@ chatSchema.virtual("memberCount").get(function () {
   }
 });
 
-chatSchema.set("toJSON", { virtuals: true });
+chatSchema.set("toJSON", {
+  virtuals: true,
+  transform: function (doc, ret) {
+    // Convert Map to Object for JSON serialization
+    if (ret.unreadCount && ret.unreadCount instanceof Map) {
+      ret.unreadCount = Object.fromEntries(ret.unreadCount);
+    }
+    return ret;
+  },
+});
 
 chatSchema.pre("save", function (next) {
   if (this.type === "direct" && this.participants.length < 2) {
