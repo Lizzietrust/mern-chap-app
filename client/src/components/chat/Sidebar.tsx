@@ -5,6 +5,7 @@ import { getInitials } from "../../functions";
 import NewChatModal from "./NewChatModal";
 import type { ChatOrNull, User, UserChat, ChannelChat } from "../../types";
 import { useSocket } from "../../contexts/useSocket";
+import { useMarkAsRead } from "../../hooks/useMarkAsRead";
 
 interface Props {
   isDark: boolean;
@@ -12,8 +13,10 @@ interface Props {
   users?: User[];
   setSelectedChat: (chat: ChatOrNull) => void;
   channels: ChannelChat[];
+  directChats: UserChat[]; // Add this - direct chats only
   handleSelectUser: (userId: string) => void;
-  chats?: UserChat[];
+  // Remove the generic chats prop since we're separating them
+  // chats?: UserChat[];
   currentPage: number;
   totalUsers: number;
   onPageChange: (page: number) => void;
@@ -33,7 +36,7 @@ const Sidebar = ({
   setSelectedChat,
   channels,
   handleSelectUser,
-  chats,
+  directChats,
   currentPage,
   totalUsers,
   onPageChange,
@@ -42,14 +45,13 @@ const Sidebar = ({
   searchTerm,
   handleSearch,
   onCreateChannel,
-}: // channelsLoading,
-// onShowChannelSettings,
-Props) => {
+}: Props) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [activeTab, setActiveTab] = useState<"dms" | "channels">("dms");
   const { state } = useApp();
   const { onlineUsers } = useSocket();
+  const markAsReadMutation = useMarkAsRead();
 
   const handleUserSelect = async (userId: string) => {
     try {
@@ -64,8 +66,31 @@ Props) => {
     setSelectedChat(channel);
   };
 
-  // In your Sidebar component, enhance the participants with online status
-  const enhancedChats = chats?.map((chat) => {
+  const formatLastMessageTime = (
+    timestamp: Date | string | undefined
+  ): string => {
+    if (!timestamp) return "";
+
+    const date =
+      typeof timestamp === "string" ? new Date(timestamp) : timestamp;
+    const now = new Date();
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInHours = diffInMs / (1000 * 60 * 60);
+    const diffInDays = diffInHours / 24;
+
+    if (diffInHours < 1) {
+      const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+      return diffInMinutes < 1 ? "now" : `${diffInMinutes}m`;
+    } else if (diffInHours < 24) {
+      return `${Math.floor(diffInHours)}h`;
+    } else if (diffInDays < 7) {
+      return `${Math.floor(diffInDays)}d`;
+    } else {
+      return date.toLocaleDateString([], { month: "short", day: "numeric" });
+    }
+  };
+
+  const enhancedChats = directChats?.map((chat) => {
     if (chat.type === "direct" && chat.participants) {
       return {
         ...chat,
@@ -81,6 +106,49 @@ Props) => {
     }
     return chat;
   });
+ 
+  console.log("Sidebar Data Debug:", {
+    chats: directChats, // Check if this contains direct messages
+    channels: channels,
+    users: users,
+    currentUser: state.user,
+  });
+
+  const sortedDirectChats = enhancedChats?.sort((a, b) => {
+    const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+    const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  // Sort channels by last message time (most recent first)
+  const sortedChannels = channels?.sort((a, b) => {
+    const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+    const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  const handleChatSelect = (chat: UserChat | ChannelChat) => {
+    setSelectedChat(chat);
+
+    // Mark as read if there are unread messages
+    if (chat.unreadCount && chat.unreadCount > 0) {
+      markAsReadMutation.mutate(chat._id);
+    }
+  };
+
+  // Helper function to get display name for a user
+  const getDisplayName = (user: User): string => {
+    if (user.firstName && user.lastName) {
+      return `${user.firstName} ${user.lastName}`;
+    }
+    if (user.firstName) {
+      return user.firstName;
+    }
+    if (user.name) {
+      return user.name;
+    }
+    return user.email || "Unknown User";
+  };
 
   return (
     <>
@@ -180,27 +248,40 @@ Props) => {
             <>
               {activeTab === "dms" && (
                 <div className="p-2">
-                  {enhancedChats?.map((chat) => {
+                  {sortedDirectChats?.map((chat) => {
                     if (!chat) return null;
 
+                    // FIXED: Use chat.participants instead of sortedChats.participants
                     const otherParticipant = chat.participants?.find(
                       (p) => p._id !== state.user?._id
                     );
 
+                    console.log("Chat debug:", {
+                      chatId: chat._id,
+                      participants: chat.participants,
+                      otherParticipant,
+                      currentUserId: state.user?._id,
+                    });
+
                     const unreadCount = chat.unreadCount || 0;
                     const lastMessage = chat.lastMessage || "";
+                    const lastMessageTime = formatLastMessageTime(
+                      chat.lastMessageAt
+                    );
+                    const isSelected = selectedChat?._id === chat._id;
+                    const hasUnread = unreadCount > 0 && !isSelected;
 
                     return (
                       <button
                         key={chat._id}
-                        onClick={() => setSelectedChat(chat)}
+                        onClick={() => handleChatSelect(chat)}
                         className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 overflow-hidden transition-colors cursor-pointer ${
-                          selectedChat?._id === chat._id
+                          isSelected
                             ? isDark
                               ? "bg-gray-700"
                               : "bg-gray-100"
                             : ""
-                        }`}
+                        } ${hasUnread ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}
                       >
                         <div className="flex items-center space-x-3">
                           <div className="relative">
@@ -214,6 +295,7 @@ Props) => {
                               ) : (
                                 <div>
                                   {otherParticipant?.firstName?.charAt(0) ||
+                                    otherParticipant?.name?.charAt(0) ||
                                     "U"}
                                 </div>
                               )}
@@ -223,30 +305,51 @@ Props) => {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between mb-1">
                               <p
                                 className={`font-medium truncate ${
                                   isDark ? "text-white" : "text-gray-900"
-                                }`}
+                                } ${hasUnread ? "font-semibold" : ""}`}
                               >
-                                {otherParticipant?.firstName || "Unknown"}{" "}
-                                {otherParticipant?.lastName || "User"}
+                                {/* FIXED: Use getDisplayName helper */}
+                                {otherParticipant
+                                  ? getDisplayName(otherParticipant)
+                                  : "Unknown User"}
                               </p>
-                              {unreadCount > 0 && (
-                                <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
-                                  {unreadCount}
-                                </span>
-                              )}
+                              <div className="flex items-center space-x-2">
+                                {lastMessageTime && (
+                                  <span
+                                    className={`text-xs whitespace-nowrap ${
+                                      isDark ? "text-gray-400" : "text-gray-500"
+                                    } ${
+                                      hasUnread
+                                        ? "text-blue-500 dark:text-blue-400"
+                                        : ""
+                                    }`}
+                                  >
+                                    {lastMessageTime}
+                                  </span>
+                                )}
+                                {unreadCount > 0 && (
+                                  <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
+                                    {unreadCount}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            {lastMessage && (
+                            <div className="flex items-center justify-between">
                               <p
-                                className={`text-sm truncate ${
+                                className={`text-sm truncate flex-1 ${
                                   isDark ? "text-gray-400" : "text-gray-500"
+                                } ${
+                                  hasUnread
+                                    ? "text-blue-600 dark:text-blue-400 font-medium"
+                                    : ""
                                 }`}
                               >
-                                {lastMessage}
+                                {lastMessage || "No messages yet"}
                               </p>
-                            )}
+                            </div>
                           </div>
                         </div>
                       </button>
@@ -290,53 +393,87 @@ Props) => {
                   </button>
 
                   {/* Channels List */}
-                  {channels?.map((channel) => (
-                    <button
-                      key={channel._id}
-                      onClick={() => handleChannelClick(channel)}
-                      className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
-                        selectedChat?._id === channel._id
-                          ? isDark
-                            ? "bg-gray-700"
-                            : "bg-gray-100"
-                          : ""
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div
-                          className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                            channel.isPrivate ? "bg-orange-500" : "bg-green-500"
-                          } text-white font-semibold`}
-                        >
-                          {channel.isPrivate ? "🔒" : "#"}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <p
-                              className={`font-medium truncate ${
-                                isDark ? "text-white" : "text-gray-900"
-                              }`}
-                            >
-                              {channel.name}
-                            </p>
-                            {channel.unreadCount && channel.unreadCount > 0 ? (
-                              <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
-                                {channel.unreadCount}
-                              </span>
-                            ) : null}
-                          </div>
-                          <p
-                            className={`text-sm truncate ${
-                              isDark ? "text-gray-400" : "text-gray-500"
-                            }`}
+                  {sortedChannels?.map((channel) => {
+                    const lastMessageTime = formatLastMessageTime(
+                      channel.lastMessageAt
+                    );
+                    const isSelected = selectedChat?._id === channel._id;
+                    const hasUnread =
+                      (channel.unreadCount || 0) > 0 && !isSelected;
+                    return (
+                      <button
+                        key={channel._id}
+                        onClick={() => handleChatSelect(channel)}
+                        className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
+                          isSelected
+                            ? isDark
+                              ? "bg-gray-700"
+                              : "bg-gray-100"
+                            : ""
+                        } ${hasUnread ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                              channel.isPrivate
+                                ? "bg-orange-500"
+                                : "bg-green-500"
+                            } text-white font-semibold`}
                           >
-                            {channel.memberCount || 0} members
-                            {channel.description && ` • ${channel.description}`}
-                          </p>
+                            {channel.isPrivate ? "🔒" : "#"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <p
+                                className={`font-medium truncate ${
+                                  isDark ? "text-white" : "text-gray-900"
+                                } ${hasUnread ? "font-semibold" : ""}`}
+                              >
+                                {channel.name}
+                              </p>
+                              <div className="flex items-center space-x-2">
+                                {lastMessageTime && (
+                                  <span
+                                    className={`text-xs whitespace-nowrap ${
+                                      isDark ? "text-gray-400" : "text-gray-500"
+                                    } ${
+                                      hasUnread
+                                        ? "text-blue-500 dark:text-blue-400"
+                                        : ""
+                                    }`}
+                                  >
+                                    {lastMessageTime}
+                                  </span>
+                                )}
+                                {channel.unreadCount &&
+                                channel.unreadCount > 0 ? (
+                                  <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
+                                    {channel.unreadCount}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <p
+                                className={`text-sm truncate flex-1 ${
+                                  isDark ? "text-gray-400" : "text-gray-500"
+                                } ${
+                                  hasUnread
+                                    ? "text-blue-600 dark:text-blue-400 font-medium"
+                                    : ""
+                                }`}
+                              >
+                                {channel.lastMessage ||
+                                  `${channel.memberCount || 0} members`}
+                                {channel.description &&
+                                  ` • ${channel.description}`}
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
 
                   {channels?.length === 0 && (
                     <div
