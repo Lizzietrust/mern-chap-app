@@ -11,6 +11,8 @@ import {
   type User,
   type SelectedChatContextType,
   isChannelChat,
+  type UserChat,
+  type ChannelChat,
 } from "../types";
 import ChatContainer from "../components/chat/ChatContainer";
 import { useUsers } from "../hooks/useUsers";
@@ -68,6 +70,115 @@ export function ChatPage() {
       refetchChats();
     }
   }, [state.user?._id, chatsLoading, refetchChats]);
+
+  // Enhanced deduplication function
+  const removeDuplicateChats = (chats: UserChat[]): UserChat[] => {
+    const chatMap = new Map();
+
+    chats.forEach((chat) => {
+      // Skip chats with no participants or empty participants
+      if (!chat.participants || chat.participants.length === 0) {
+        console.log("🚫 Skipping chat with no participants:", chat._id);
+        return;
+      }
+
+      const otherParticipant = chat.participants.find(
+        (p) => p._id !== state.user?._id
+      );
+
+      // Skip if no other participant found (shouldn't happen with proper data)
+      if (!otherParticipant) {
+        console.log("🚫 Skipping chat with no other participant:", chat._id);
+        return;
+      }
+
+      const participantId = otherParticipant._id;
+      const existingChat = chatMap.get(participantId);
+
+      if (!existingChat) {
+        // First time seeing this participant
+        chatMap.set(participantId, chat);
+        console.log(
+          "✅ Added new chat for participant:",
+          participantId,
+          chat._id
+        );
+      } else {
+        // Compare timestamps to keep the most recent chat
+        const existingTime = existingChat.lastMessageAt
+          ? new Date(existingChat.lastMessageAt).getTime()
+          : 0;
+        const currentTime = chat.lastMessageAt
+          ? new Date(chat.lastMessageAt).getTime()
+          : 0;
+        const existingCreated = new Date(existingChat.createdAt).getTime();
+        const currentCreated = new Date(chat.createdAt).getTime();
+
+        // Prefer the chat with the most recent activity, or the newest created if no messages
+        if (
+          currentTime > existingTime ||
+          (currentTime === existingTime && currentCreated > existingCreated)
+        ) {
+          chatMap.set(participantId, chat);
+          console.log(
+            "🔄 Replaced chat for participant:",
+            participantId,
+            "old:",
+            existingChat._id,
+            "new:",
+            chat._id
+          );
+        } else {
+          console.log(
+            "➖ Keeping existing chat for participant:",
+            participantId,
+            existingChat._id
+          );
+        }
+      }
+    });
+
+    const result = Array.from(chatMap.values());
+    console.log("🎯 Deduplication complete:", {
+      input: chats.length,
+      output: result.length,
+      removed: chats.length - result.length,
+    });
+
+    return result;
+  };
+
+  // ==================== ADD THIS SEPARATION LOGIC ====================
+  // Separate mixed chats array into direct chats and channel chats
+  const separateChats = (allChats: Chat[] = []) => {
+    const directChats = allChats.filter(
+      (chat) => chat?.type === "direct"
+    ) as UserChat[];
+
+    const channelChats = allChats.filter(
+      (chat) => chat?.type === "channel"
+    ) as ChannelChat[];
+
+    return { directChats, channelChats };
+  };
+
+  const { directChats, channelChats: separatedChannelChats } =
+    separateChats(chats);
+
+  const uniqueDirectChats = removeDuplicateChats(directChats);
+
+  const allChannels = separatedChannelChats;
+
+  useEffect(() => {
+    console.log("🔍 Chat Separation Debug:", {
+      allChatsCount: chats.length,
+      directChatsCount: directChats.length,
+      separatedChannelChatsCount: separatedChannelChats.length,
+      directChats: directChats,
+      separatedChannelChats: separatedChannelChats,
+    });
+  }, [chats, directChats, separatedChannelChats]);
+  // ==================== END SEPARATION LOGIC ====================
 
   const { data: messages, isLoading: messagesLoading } = useMessages(
     selectedChat?._id
@@ -226,6 +337,18 @@ export function ChatPage() {
     isLoading: channelsLoading,
     refetch: refetchChannels,
   } = useChannels();
+
+  useEffect(() => {
+    console.log("🔍 Channel Debug (Using only separated channels):", {
+      allChatsCount: chats.length,
+      directChatsCount: directChats.length,
+      separatedChannelChatsCount: separatedChannelChats.length,
+      separatedChannelChats: separatedChannelChats.map((c) => ({
+        id: c._id,
+        name: c.name,
+      })),
+    });
+  }, [chats, directChats, separatedChannelChats]);
 
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
@@ -509,7 +632,8 @@ export function ChatPage() {
             isDark={isDark}
             selectedChat={selectedChat}
             users={usersData?.users}
-            chats={chats || []}
+            directChats={uniqueDirectChats}
+            channels={allChannels}
             setSelectedChat={setSelectedChat}
             handleSelectUser={handleSelectUser}
             currentPage={currentPage}
@@ -519,8 +643,7 @@ export function ChatPage() {
             isLoadingUsers={isLoadingUsers}
             searchTerm={searchTerm}
             handleSearch={handleSearch}
-            channels={channels}
-            channelsLoading={channelsLoading}
+            channelsLoading={false}
             onCreateChannel={() => setShowCreateChannelModal(true)}
             onShowChannelSettings={() => setShowChannelSettings(true)}
           />
