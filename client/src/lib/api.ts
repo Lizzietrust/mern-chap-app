@@ -198,6 +198,11 @@ export const chatApi = {
     } as CreateChatRequest),
   getUserChats: (): Promise<UserChat[]> =>
     apiClient.get<UserChat[]>("/api/messages/get-user-chats"),
+
+  markAsRead: (chatId: string) =>
+    apiClient.patch(`/api/messages/chats/${chatId}/read`),
+
+  getUnreadCounts: () => apiClient.get("/api/messages/chats/unread-counts"),
 };
 
 export const channelApi = {
