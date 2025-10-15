@@ -4,6 +4,7 @@ import multer from "multer";
 import path from "path";
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
+import mongoose from "mongoose";
 
 export const uploadFile = async (req, res, next) => {
   try {
@@ -57,19 +58,25 @@ export const createChat = async (req, res, next) => {
         .json({ message: "Cannot create chat with yourself" });
     }
 
+    // More robust duplicate check
     const existingChat = await Chat.findOne({
-      participants: { $all: [req.userId, userId] },
-      $expr: { $eq: [{ $size: "$participants" }, 2] },
+      type: "direct",
+      participants: {
+        $all: [req.userId, userId],
+        $size: 2, // Ensure exactly 2 participants
+      },
     }).populate(
       "participants",
       "_id firstName lastName email image isOnline lastSeen"
     );
 
     if (existingChat) {
+      console.log("✅ Returning existing chat:", existingChat._id);
       return res.status(200).json(existingChat);
     }
 
     const newChat = new Chat({
+      type: "direct", // Explicitly set type
       participants: [req.userId, userId],
     });
 
@@ -80,6 +87,7 @@ export const createChat = async (req, res, next) => {
       "_id firstName lastName email image isOnline lastSeen"
     );
 
+    console.log("✅ Created new chat:", populatedChat._id);
     res.status(201).json(populatedChat);
   } catch (error) {
     console.error("Error in createChat:", error);
@@ -145,6 +153,7 @@ export const sendMessage = async (req, res, next) => {
     const savedMessage = await newMessage.save();
     console.log("💾 Message saved to database:", savedMessage._id);
 
+    // Update chat with last message info
     await Chat.findByIdAndUpdate(
       chatId,
       {
@@ -161,6 +170,31 @@ export const sendMessage = async (req, res, next) => {
     );
 
     const io = req.app.get("io");
+
+    // INCREMENT UNREAD COUNTS FOR ALL RECIPIENTS (EXCEPT SENDER)
+    if (chat.type === "direct") {
+      for (const participantId of chat.participants) {
+        if (participantId.toString() !== sender) {
+          // Increment unread count for this participant
+          await Chat.findByIdAndUpdate(chatId, {
+            $inc: { [`unreadCount.${participantId}`]: 1 },
+          });
+          console.log(
+            `📈 Incremented unread count for participant: ${participantId}`
+          );
+        }
+      }
+    } else if (chat.type === "channel") {
+      for (const memberId of chat.members) {
+        if (memberId.toString() !== sender) {
+          // Increment unread count for this member
+          await Chat.findByIdAndUpdate(chatId, {
+            $inc: { [`unreadCount.${memberId}`]: 1 },
+          });
+          console.log(`📈 Incremented unread count for member: ${memberId}`);
+        }
+      }
+    }
 
     if (io) {
       console.log(`📢 Emitting newMessage event for chat: ${chatId}`);
@@ -192,6 +226,10 @@ export const sendMessage = async (req, res, next) => {
 
         io.to(chatId).emit("newMessage", messagePayload);
       }
+
+      // Also emit chat update to refresh sidebar
+      io.emit("chatUpdated", { chatId });
+      console.log(`🔄 Emitted chatUpdated event for: ${chatId}`);
     } else {
       console.log("❌ Socket.io instance not available");
     }
@@ -248,40 +286,234 @@ export const getUserChats = async (req, res, next) => {
   try {
     const userId = req.userId;
 
-    const chats = await Chat.find({ participants: userId })
-      .populate(
-        "participants",
-        "_id firstName lastName email image isOnline lastSeen"
-      )
-      .populate({
-        path: "messages",
-        options: { sort: { createdAt: -1 }, limit: 1 },
-        populate: {
-          path: "sender",
-          select: "_id firstName lastName",
+    console.log("🔍 getUserChats called for user:", userId);
+
+    const chats = await Chat.aggregate([
+      {
+        $match: {
+          $or: [
+            {
+              // Match direct chats: must have type "direct" AND valid participants
+              type: "direct",
+              participants: {
+                $exists: true,
+                $ne: [],
+                $size: 2, // Ensure exactly 2 participants for direct chats
+              },
+            },
+            {
+              // Match channel chats where user is a member
+              type: "channel",
+              members: new mongoose.Types.ObjectId(userId),
+            },
+          ],
         },
-      })
-      .sort({ updatedAt: -1 });
+      },
+      // ==================== ADD THIS STAGE TO FILTER EMPTY PARTICIPANTS ====================
+      {
+        $addFields: {
+          // For direct chats, ensure current user is a participant and there's exactly one other participant
+          isValidDirectChat: {
+            $cond: {
+              if: { $eq: ["$type", "direct"] },
+              then: {
+                $and: [
+                  { $isArray: "$participants" },
+                  { $eq: [{ $size: "$participants" }, 2] },
+                  {
+                    $in: [new mongoose.Types.ObjectId(userId), "$participants"],
+                  },
+                ],
+              },
+              else: true, // Channels are always valid for this check
+            },
+          },
+        },
+      },
+      {
+        $match: {
+          isValidDirectChat: true,
+        },
+      },
+      // ==================== END FILTER STAGE ====================
+      {
+        $lookup: {
+          from: "messages",
+          let: { chatId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$chatId", "$$chatId"] },
+                readBy: { $ne: new mongoose.Types.ObjectId(userId) },
+              },
+            },
+            { $count: "unreadCount" },
+          ],
+          as: "unreadMessages",
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "participants",
+          foreignField: "_id",
+          as: "participants",
+        },
+      },
+      {
+        $lookup: {
+          from: "messages",
+          let: { chatId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$chatId", "$$chatId"] },
+              },
+            },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+            {
+              $lookup: {
+                from: "users",
+                localField: "sender",
+                foreignField: "_id",
+                as: "sender",
+              },
+            },
+            {
+              $project: {
+                content: 1,
+                createdAt: 1,
+                sender: { $arrayElemAt: ["$sender", 0] },
+              },
+            },
+          ],
+          as: "lastMessageInfo",
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          type: 1,
+          participants: 1,
+          name: 1,
+          description: 1,
+          isPrivate: 1,
+          createdBy: 1,
+          admins: 1,
+          members: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          unreadCount: {
+            $ifNull: [{ $arrayElemAt: ["$unreadMessages.unreadCount", 0] }, 0],
+          },
+          lastMessage: { $arrayElemAt: ["$lastMessageInfo.content", 0] },
+          lastMessageAt: { $arrayElemAt: ["$lastMessageInfo.createdAt", 0] },
+          lastMessageSender: { $arrayElemAt: ["$lastMessageInfo.sender", 0] },
+          // Remove the isValidDirectChat field by not including it (don't use exclusion)
+        },
+      },
+      {
+        $sort: { lastMessageAt: -1, updatedAt: -1 },
+      },
+    ]);
 
-    const transformedChats = chats.map((chat) => {
-      const chatObj = chat.toObject();
-      const lastMessage =
-        chatObj.messages && chatObj.messages.length > 0
-          ? chatObj.messages[0]
-          : null;
-
-      return {
-        ...chatObj,
-        lastMessage: lastMessage ? lastMessage.content : null,
-        lastMessageTime: lastMessage ? lastMessage.createdAt : null,
-        lastMessageSender: lastMessage ? lastMessage.sender : null,
-      };
+    console.log("📈 Aggregation Results:", {
+      totalChats: chats.length,
+      chatTypes: chats.map((chat) => ({
+        id: chat._id,
+        type: chat.type,
+        name: chat.name,
+        participantsCount: chat.participants?.length,
+        membersCount: chat.members?.length,
+        lastMessage: chat.lastMessage,
+        unreadCount: chat.unreadCount,
+      })),
     });
 
-    res.status(200).json(transformedChats);
+    res.status(200).json(chats);
   } catch (error) {
     console.error("Error in getUserChats:", error);
     next(error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    // Remove the duplicate return statement that was causing the "headers already sent" error
+  }
+};
+
+export const markChatAsRead = async (req, res, next) => {
+  try {
+    const { chatId } = req.params;
+    const userId = req.userId;
+
+    // Mark messages as read
+    await Message.updateMany(
+      {
+        chatId,
+        readBy: { $ne: userId },
+      },
+      {
+        $addToSet: { readBy: userId },
+      }
+    );
+
+    // Update chat's unread count using Map structure
+    await Chat.findByIdAndUpdate(chatId, {
+      $set: {
+        [`unreadCount.${userId}`]: 0,
+      },
+    });
+
+    res.status(200).json({ message: "Chat marked as read" });
+  } catch (error) {
+    console.error("Error marking chat as read:", error);
+    next(error);
+  }
+};
+
+export const getUnreadCounts = async (req, res, next) => {
+  try {
+    const userId = req.userId;
+
+    const unreadCounts = await Chat.aggregate([
+      {
+        $match: {
+          $or: [
+            {
+              type: "direct",
+              participants: new mongoose.Types.ObjectId(userId),
+            },
+            { type: "channel", members: new mongoose.Types.ObjectId(userId) },
+          ],
+        },
+      },
+      {
+        $lookup: {
+          from: "messages",
+          let: { chatId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$chatId", "$$chatId"] },
+                readBy: { $ne: new mongoose.Types.ObjectId(userId) },
+              },
+            },
+            { $count: "unreadCount" },
+          ],
+          as: "unreadMessages",
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          unreadCount: {
+            $ifNull: [{ $arrayElemAt: ["$unreadMessages.unreadCount", 0] }, 0],
+          },
+        },
+      },
+    ]);
+
+    res.status(200).json(unreadCounts);
+  } catch (error) {
+    console.error("Error getting unread counts:", error);
+    next(error);
   }
 };
