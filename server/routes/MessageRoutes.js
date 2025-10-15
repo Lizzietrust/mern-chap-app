@@ -5,10 +5,13 @@ import {
   getMessages,
   getUserChats,
   uploadFile,
+  markChatAsRead,
+  getUnreadCounts,
 } from "../controllers/MessageController.js";
 import { verifyToken } from "../middlewares/AuthMiddleware.js";
 import multer from "multer";
 import path from "path";
+import { cleanupChats } from "../controllers/CleanupChatsController.js";
 
 const messageRoutes = express.Router();
 
@@ -37,5 +40,10 @@ messageRoutes.post("/send-message", verifyToken, sendMessage);
 messageRoutes.get("/get-messages/:chatId", verifyToken, getMessages);
 messageRoutes.get("/get-user-chats", verifyToken, getUserChats);
 messageRoutes.post("/upload", verifyToken, upload.single("file"), uploadFile);
+messageRoutes.patch("/chats/:chatId/read", verifyToken, markChatAsRead);
+messageRoutes.get("/chats/unread-counts", verifyToken, getUnreadCounts);
+messageRoutes.delete("/chats/cleanup", verifyToken, cleanupChats);
 
 export default messageRoutes;
+
+
