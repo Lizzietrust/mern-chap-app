@@ -25,14 +25,7 @@ export function useCreateChat() {
   return useMutation({
     mutationFn: chatApi.createChat,
     onSuccess: (newChat) => {
-      queryClient.invalidateQueries({ queryKey: ["chats", state.user?._id] });
-
-      queryClient.setQueryData(
-        ["chats", state.user?._id],
-        (oldChats: UserChat[] = []) => {
-          return [...oldChats, newChat];
-        }
-      );
+      queryClient.invalidateQueries({ queryKey: chatKeys.userChats(state.user?._id) });
     },
   });
 }
@@ -40,14 +33,8 @@ export function useCreateChat() {
 export function useUserChats() {
   const { state } = useApp();
 
-  console.log("🔍 useUserChats debug:", {
-    userId: state.user?._id,
-    hasUser: !!state.user,
-    enabled: !!state.user?._id,
-  });
-
   return useQuery<UserChat[]>({
-    queryKey: ["chats", state.user?._id],
+    queryKey: chatKeys.userChats(state.user?._id),
     queryFn: async () => {
       console.log("🔄 Fetching user chats...");
       try {
@@ -67,6 +54,33 @@ export function useUserChats() {
     gcTime: 5 * 60 * 1000,
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  });
+}
+
+export function useMarkAsRead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (chatId: string) => chatApi.markAsRead(chatId),
+    onSuccess: (_, chatId) => {
+      // Update the local cache to reset unread count
+      queryClient.setQueryData(chatKeys.userChats(), (oldChats: UserChat[] = []) => {
+        return oldChats.map(chat => 
+          chat._id === chatId 
+            ? { ...chat, unreadCount: 0 }
+            : chat
+        );
+      });
+
+      // Also update the general chats query
+      queryClient.setQueryData(["chats"], (oldChats: UserChat[] = []) => {
+        return oldChats.map(chat => 
+          chat._id === chatId 
+            ? { ...chat, unreadCount: 0 }
+            : chat
+        );
+      });
+    },
   });
 }
 
