@@ -163,7 +163,7 @@ export const sendMessage = async (req, res, next) => {
     const savedMessage = await newMessage.save();
     console.log("✅ Message saved to database:", savedMessage._id);
 
-    // ==================== EMERGENCY UNREAD COUNT FIX ====================
+    // ==================== FIXED UNREAD COUNT LOGIC ====================
     console.log("🔄 Updating unread counts...");
 
     try {
@@ -205,12 +205,36 @@ export const sendMessage = async (req, res, next) => {
             console.log(`🔄 Reset unread count for sender: ${participantStr}`);
           }
         }
+      } else if (chat.type === "channel") {
+        // FIXED: For channels, increment unread count for ALL members except sender
+        for (const memberId of chat.members) {
+          const memberStr = memberId.toString();
+          if (memberStr !== sender) {
+            // Increment for other members
+            await db.collection("chats").updateOne(
+              { _id: chat._id },
+              {
+                $inc: { [`unreadCount.${memberStr}`]: 1 },
+              }
+            );
+            console.log(`📈 Incremented unread count for member: ${memberStr}`);
+          } else {
+            // Reset for sender
+            await db.collection("chats").updateOne(
+              { _id: chat._id },
+              {
+                $set: { [`unreadCount.${memberStr}`]: 0 },
+              }
+            );
+            console.log(`🔄 Reset unread count for sender: ${memberStr}`);
+          }
+        }
       }
     } catch (unreadError) {
       console.error("❌ Error updating unread counts:", unreadError);
       console.log("⚠️ Continuing without unread count update");
     }
-    // ==================== END EMERGENCY UNREAD COUNT FIX ====================
+    // ==================== END FIXED UNREAD COUNT LOGIC ====================
 
     // Update chat with last message info
     await Chat.findByIdAndUpdate(chatId, {
@@ -497,7 +521,7 @@ export const markChatAsRead = async (req, res, next) => {
       chat.unreadCount = new Map();
     }
 
-    // Use the schema method
+    // Use the schema method to reset unread count for this user
     await chat.resetUnreadCount(userId);
 
     // Also mark messages as read
