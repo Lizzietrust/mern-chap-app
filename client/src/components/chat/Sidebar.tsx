@@ -46,7 +46,7 @@ const Sidebar = ({
   handleSearch,
   onCreateChannel,
   getDisplayUnreadCount,
-  getChannelDisplayUnreadCount
+  getChannelDisplayUnreadCount,
 }: Props) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
@@ -129,19 +129,19 @@ const Sidebar = ({
     return timeB - timeA;
   });
 
- const handleChatSelect = (chat: UserChat | ChannelChat) => {
-   setSelectedChat(chat);
+  const handleChatSelect = (chat: UserChat | ChannelChat) => {
+    setSelectedChat(chat);
 
-   // Mark as read if there are unread messages
-   const unreadCount =
-     "type" in chat && chat.type === "direct"
-       ? getDisplayUnreadCount(chat as UserChat)
-       : getChannelDisplayUnreadCount(chat as ChannelChat);
+    // Mark as read if there are unread messages
+    const unreadCount =
+      "type" in chat && chat.type === "direct"
+        ? getDisplayUnreadCount(chat as UserChat)
+        : getChannelDisplayUnreadCount(chat as ChannelChat);
 
-   if (unreadCount > 0) {
-     markAsReadMutation.mutate(chat._id);
-   }
- };
+    if (unreadCount > 0) {
+      markAsReadMutation.mutate(chat._id);
+    }
+  };
 
   // Helper function to get display name for a user
   const getDisplayName = (user: User): string => {
@@ -155,6 +155,28 @@ const Sidebar = ({
       return user.name;
     }
     return user.email || "Unknown User";
+  };
+
+  // Helper function to get display name for message sender
+  const getSenderDisplayName = (sender: User): string => {
+    if (!sender) return "Unknown User";
+
+    if (typeof sender === "object") {
+      if (sender.firstName && sender.lastName) {
+        return `${sender.firstName} ${sender.lastName}`;
+      }
+      if (sender.firstName) {
+        return sender.firstName;
+      }
+      if (sender.name) {
+        return sender.name;
+      }
+      if (sender.email) {
+        return sender.email;
+      }
+    }
+
+    return "Unknown User";
   };
 
   return (
@@ -251,7 +273,7 @@ const Sidebar = ({
             sidebarCollapsed ? "hidden md:block" : ""
           }`}
         >
-          {!sidebarCollapsed && (
+          {!sidebarCollapsed ? (
             <>
               {activeTab === "dms" && (
                 <div className="p-2">
@@ -471,12 +493,170 @@ const Sidebar = ({
                                     : ""
                                 }`}
                               >
-                                {channel.lastMessage ||
-                                  `${channel.memberCount || 0} members`}
-                                {channel.description &&
-                                  ` • ${channel.description}`}
+                                {channel.lastMessage ? (
+                                  <>
+                                    {channel.lastMessage}
+                                    {channel.lastMessageSender && (
+                                      <span className="ml-1 opacity-75">
+                                        •{" "}
+                                        {getSenderDisplayName(
+                                          channel.lastMessageSender
+                                        )}
+                                      </span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <>
+                                    {`${channel.memberCount || 0} members`}
+                                    {channel.description &&
+                                      ` • ${channel.description}`}
+                                  </>
+                                )}
                               </p>
                             </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {channels?.length === 0 && (
+                    <div
+                      className={`text-center py-8 ${
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      }`}
+                    >
+                      <div className="text-4xl mb-4">🏗️</div>
+                      <p>No channels yet</p>
+                      <p className="text-sm mt-1">
+                        Create your first channel to get started
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {activeTab === "dms" && (
+                <div className="p-2">
+                  {sortedDirectChats?.map((chat) => {
+                    if (!chat) return null;
+
+                    const otherParticipant = chat.participants?.find(
+                      (p) => p._id !== state.user?._id
+                    );
+
+                    console.log("Chat debug:", {
+                      chatId: chat._id,
+                      participants: chat.participants,
+                      otherParticipant,
+                      currentUserId: state.user?._id,
+                    });
+
+                    // Use the getDisplayUnreadCount function here
+                    const unreadCount = getDisplayUnreadCount(chat);
+                    const lastMessage = chat.lastMessage || "";
+                    const lastMessageTime = formatLastMessageTime(
+                      chat.lastMessageAt
+                    );
+                    const isSelected = selectedChat?._id === chat._id;
+                    const hasUnread = unreadCount > 0 && !isSelected;
+
+                    return (
+                      <button
+                        key={chat._id}
+                        onClick={() => handleChatSelect(chat)}
+                        className={`w-full flex flex-col p-1 items-center justify-center rounded-lg mb-4 text-center hover:bg-gray-50 dark:hover:bg-gray-700 overflow-hidden transition-colors cursor-pointer ${
+                          isSelected
+                            ? isDark
+                              ? "bg-gray-700"
+                              : "bg-gray-100"
+                            : ""
+                        } ${hasUnread ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}
+                      >
+                        <div className="flex flex-col items-center space-x-3">
+                          <div className="relative">
+                            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
+                              {otherParticipant?.image ? (
+                                <img
+                                  className="w-10 h-10 rounded-full"
+                                  src={otherParticipant.image}
+                                  alt="User avatar"
+                                />
+                              ) : (
+                                <div>
+                                  {otherParticipant?.firstName?.charAt(0) ||
+                                    otherParticipant?.name?.charAt(0) ||
+                                    "U"}
+                                </div>
+                              )}
+                            </div>
+                            {otherParticipant?.isOnline && (
+                              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {activeTab === "channels" && (
+                <div className="p-2">
+                  {/* Create Channel Button */}
+                  <button
+                    onClick={onCreateChannel}
+                    className={`w-full ${
+                      sidebarCollapsed ? "p-1" : "p-3"
+                    } rounded-lg mb-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer border border-dashed ${
+                      isDark
+                        ? "border-gray-600 text-gray-300 hover:border-gray-500"
+                        : "border-gray-300 text-gray-600 hover:border-gray-400"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center text-white font-semibold">
+                        <PlusIcon className="h-5 w-5" />
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Channels List */}
+                  {sortedChannels?.map((channel) => {
+                    const lastMessageTime = formatLastMessageTime(
+                      channel.lastMessageAt
+                    );
+                    const isSelected = selectedChat?._id === channel._id;
+
+                    // Use the getChannelDisplayUnreadCount function here
+                    const unreadCount = getChannelDisplayUnreadCount(channel);
+                    const hasUnread = unreadCount > 0 && !isSelected;
+
+                    return (
+                      <button
+                        key={channel._id}
+                        onClick={() => handleChatSelect(channel)}
+                        className={`w-full ${
+                          sidebarCollapsed ? "p-1" : "p-3"
+                        } rounded-lg mb-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
+                          isSelected
+                            ? isDark
+                              ? "bg-gray-700"
+                              : "bg-gray-100"
+                            : ""
+                        } ${hasUnread ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                              channel.isPrivate
+                                ? "bg-orange-500"
+                                : "bg-green-500"
+                            } text-white font-semibold`}
+                          >
+                            {channel.isPrivate ? "🔒" : "#"}
                           </div>
                         </div>
                       </button>
@@ -504,21 +684,37 @@ const Sidebar = ({
 
         {/* User Profile Section */}
         <div
-          className={`p-4 border-t ${
+          className={`${sidebarCollapsed ? "p-2" : "p-4"} border-t ${
             isDark ? "border-gray-700" : "border-gray-200"
           }`}
         >
           {state.user ? (
-            <div className="flex items-center space-x-3">
+            <div
+              className={`flex items-center ${
+                sidebarCollapsed ? "justify-center" : "space-x-3"
+              }`}
+            >
               <div className="relative">
                 {state.user?.image ? (
                   <img
-                    className="w-10 h-10 rounded-full"
+                    className="w-10 h-10 rounded-full object-cover cursor-pointer"
                     src={state.user.image}
                     alt="Your avatar"
+                    title={
+                      sidebarCollapsed
+                        ? `${state.user.firstName} ${state.user.lastName}`
+                        : ""
+                    }
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
+                  <div
+                    className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold cursor-pointer"
+                    title={
+                      sidebarCollapsed
+                        ? `${state.user.firstName} ${state.user.lastName}`
+                        : ""
+                    }
+                  >
                     {getInitials(
                       state.user?.firstName || "",
                       state.user?.lastName || ""
@@ -526,6 +722,8 @@ const Sidebar = ({
                   </div>
                 )}
               </div>
+
+              {/* User info - only show when sidebar is expanded */}
               {!sidebarCollapsed && (
                 <div className="flex-1 min-w-0">
                   <p
@@ -546,8 +744,18 @@ const Sidebar = ({
               )}
             </div>
           ) : (
-            <div className={`${isDark ? "text-white" : "text-black"}`}>
-              Loading user...
+            <div
+              className={`flex items-center ${
+                sidebarCollapsed ? "justify-center" : ""
+              } ${isDark ? "text-white" : "text-black"}`}
+            >
+              <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 animate-pulse"></div>
+              {!sidebarCollapsed && (
+                <div className="ml-3 space-y-2">
+                  <div className="h-4 w-24 bg-gray-300 dark:bg-gray-600 rounded animate-pulse"></div>
+                  <div className="h-3 w-32 bg-gray-300 dark:bg-gray-600 rounded animate-pulse"></div>
+                </div>
+              )}
             </div>
           )}
         </div>
