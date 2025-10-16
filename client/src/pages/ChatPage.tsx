@@ -23,6 +23,7 @@ import {
   messageKeys,
   useUploadFile,
   useSendMessage,
+  useMarkAsRead,
 } from "../hooks/useChat";
 import Sidebar from "../components/chat/Sidebar";
 import { useQueryClient } from "@tanstack/react-query";
@@ -187,6 +188,7 @@ export function ChatPage() {
   const createChatMutation = useCreateChat();
   const uploadFileMutation = useUploadFile();
   const sendMessageMutation = useSendMessage();
+  const markAsReadMutation = useMarkAsRead();
 
   useEffect(() => {
     if (createChatMutation.isError) {
@@ -197,7 +199,6 @@ export function ChatPage() {
 
   const [newMessage, setNewMessage] = useState("");
 
-  // Listen for typing events
   useEffect(() => {
     if (!socket) return;
 
@@ -224,7 +225,26 @@ export function ChatPage() {
     };
   }, [socket, selectedChat?._id, state.user?._id]);
 
-  // Handle typing indicator
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleSocketConnect = () => {
+      console.log("✅ Socket connected for messaging");
+    };
+
+    const handleSocketDisconnect = () => {
+      console.log("❌ Socket disconnected");
+    };
+
+    socket.on("connect", handleSocketConnect);
+    socket.on("disconnect", handleSocketDisconnect);
+
+    return () => {
+      socket.off("connect", handleSocketConnect);
+      socket.off("disconnect", handleSocketDisconnect);
+    };
+  }, [socket]);
+
   const handleTyping = () => {
     if (!selectedChat || !socket) return;
 
@@ -385,17 +405,79 @@ export function ChatPage() {
     });
   };
 
-  // Update the selectedChat to include enhanced participants when needed
   useEffect(() => {
     if (selectedChat && selectedChat.type === "direct") {
-      // This will ensure the selectedChat has the latest online status
       const enhancedParticipants = getEnhancedParticipants(selectedChat);
       setSelectedChat({
         ...selectedChat,
         participants: enhancedParticipants,
       });
     }
-  }, [onlineUsers, selectedChat?._id]); // Re-run when onlineUsers change or chat changes
+  }, [onlineUsers, selectedChat?._id]);
+
+  useEffect(() => {
+    if (selectedChat && state.user?._id) {
+      // Automatically mark chat as read when selected
+      const markAsRead = async () => {
+        try {
+          await markAsReadMutation.mutateAsync(selectedChat._id);
+          console.log(`✅ Auto-marked chat ${selectedChat._id} as read`);
+        } catch (error) {
+          console.error("❌ Failed to auto-mark chat as read:", error);
+        }
+      };
+
+      markAsRead();
+    }
+  }, [selectedChat?._id, state.user?._id]);
+
+  useEffect(() => {
+    if (!socket || !selectedChat) return;
+
+    const handleNewMessage = (message: Message) => {
+      console.log("📨 Received new message via socket:", message._id);
+
+      if (message.chatId === selectedChat._id) {
+        const messagesQueryKey = messageKeys.list(selectedChat._id);
+
+        queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
+          if (!oldMessages) return [message];
+
+          // Check if message already exists (either as real message or optimistic)
+          const existingIndex = oldMessages.findIndex(
+            (msg) =>
+              msg._id === message._id ||
+              (msg.isOptimistic &&
+                msg.content === message.content &&
+                msg.sender._id === message.sender._id)
+          );
+
+          if (existingIndex >= 0) {
+            // Replace the existing message (could be optimistic or duplicate)
+            const newMessages = [...oldMessages];
+            newMessages[existingIndex] = {
+              ...message,
+              isOptimistic: false,
+              isSending: false,
+            };
+            return newMessages;
+          }
+
+          // Add new message
+          return [
+            ...oldMessages,
+            { ...message, isOptimistic: false, isSending: false },
+          ];
+        });
+      }
+    };
+
+    socket.on("newMessage", handleNewMessage);
+
+    return () => {
+      socket.off("newMessage", handleNewMessage);
+    };
+  }, [socket, selectedChat, queryClient]);
 
   const handleSelectUser = async (userId: string) => {
     try {
@@ -445,12 +527,14 @@ export function ChatPage() {
       createdAt: new Date(),
       timestamp: new Date(),
       isOptimistic: true,
+      isSending: true, // Add this flag for styling
     };
 
     const messagesQueryKey = messageKeys.list(chatId);
     const previousMessages =
       queryClient.getQueryData<Message[]>(messagesQueryKey);
 
+    // Add optimistic message
     queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
       if (!oldMessages) return [tempMessage];
       return [...oldMessages, tempMessage];
@@ -467,27 +551,54 @@ export function ChatPage() {
     }
 
     try {
-      await sendMessageMutation.mutateAsync({
+      // Wait for the message to be sent
+      const response = await sendMessageMutation.mutateAsync({
         chatId,
         messageType: "text",
         content: content,
       });
 
-      console.log("Message sent successfully via HTTP");
+      console.log("✅ Message sent successfully via HTTP:", response._id);
 
+      // Update the optimistic message to show it's sent successfully
+      queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
+        if (!oldMessages) return [];
+
+        return oldMessages.map((msg) =>
+          msg._id === tempMessageId
+            ? { ...response, isOptimistic: false, isSending: false }
+            : msg
+        );
+      });
+
+      // The socket should handle the final message, but we keep this as backup
       setTimeout(() => {
         queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
-          return oldMessages?.filter((msg) => msg._id !== tempMessageId) || [];
+          return (
+            oldMessages?.filter(
+              (msg) => !(msg._id === tempMessageId && msg.isOptimistic)
+            ) || []
+          );
         });
-      }, 500);
+
+        // Refresh to ensure we have the latest
+        queryClient.invalidateQueries({ queryKey: messageKeys.list(chatId) });
+      }, 2000);
     } catch (err) {
-      console.error("Failed to send message:", err);
+      console.error("❌ Failed to send message:", err);
 
-      queryClient.setQueryData<Message[]>(
-        messagesQueryKey,
-        previousMessages || []
-      );
+      // Revert optimistic update on error - mark as failed instead of removing
+      queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
+        if (!oldMessages) return [];
 
+        return oldMessages.map((msg) =>
+          msg._id === tempMessageId
+            ? { ...msg, isOptimistic: true, isSending: false, failed: true }
+            : msg
+        );
+      });
+
+      // Restore the message content for retry
       setNewMessage(content);
       error("Failed to send message. Please try again.");
     } finally {
@@ -530,41 +641,33 @@ export function ChatPage() {
     return "Select a chat";
   };
 
-  const getChatSubtitle = (): string => {
-    if (!selectedChat) return "";
-
-    if (selectedChat.type === "channel") {
-      return `${selectedChat.members?.length || 0} members • ${
-        selectedChat.isPrivate ? "Private" : "Public"
-      }`;
+  const getDisplayUnreadCount = (chat: UserChat): number => {
+    if (typeof chat.unreadCount === "number") {
+      return chat.unreadCount;
     }
 
-    if (selectedChat.type === "direct") {
-      const otherUser = selectedChat.participants.find(
-        (p) => p._id !== state.user?._id
-      );
-
-      if (otherUser) {
-        // Get the latest online status from socket context
-        const onlineUser = onlineUsers.find((u) => u._id === otherUser._id);
-        const isOnline = onlineUser?.isOnline || false;
-        const lastSeen = onlineUser?.lastSeen || otherUser.lastSeen;
-
-        console.log("🔍 Chat Subtitle Debug:", {
-          otherUserId: otherUser._id,
-          onlineUsers: onlineUsers.map((u) => u._id),
-          isOnline,
-          lastSeen,
-          onlineUserData: onlineUser,
-        });
-
-        if (isOnline) return "Online";
-        if (lastSeen) return `Last seen ${formatTime(lastSeen)}`;
-        return "Offline";
-      }
+    // If unreadCount is an object/map, extract the count for current user
+    if (chat.unreadCount && typeof chat.unreadCount === "object") {
+      const userCount = chat.unreadCount[state.user?._id || ""];
+      return typeof userCount === "number" ? userCount : 0;
     }
 
-    return "";
+    // Default to 0
+    return 0;
+  };
+
+  // Add this to your ChatPage component
+  const getChannelDisplayUnreadCount = (channel: ChannelChat): number => {
+    if (typeof channel.unreadCount === "number") {
+      return channel.unreadCount;
+    }
+
+    if (channel.unreadCount && typeof channel.unreadCount === "object") {
+      const userCount = channel.unreadCount[state.user?._id || ""];
+      return typeof userCount === "number" ? userCount : 0;
+    }
+
+    return 0;
   };
 
   const isTyping = Object.values(typingUsers).some((isTyping) => isTyping);
@@ -646,6 +749,8 @@ export function ChatPage() {
             channelsLoading={false}
             onCreateChannel={() => setShowCreateChannelModal(true)}
             onShowChannelSettings={() => setShowChannelSettings(true)}
+            getDisplayUnreadCount={getDisplayUnreadCount}
+            getChannelDisplayUnreadCount={getChannelDisplayUnreadCount}
           />
         )}
 

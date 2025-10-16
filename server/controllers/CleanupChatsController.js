@@ -60,3 +60,42 @@ export const cleanupChats = async (req, res, next) => {
     next(error);
   }
 };
+
+// Add this temporary route to fix all chats
+export const fixUnreadCounts = async (req, res, next) => {
+  try {
+    console.log("🛠️ Fixing unreadCount structure for all chats...");
+
+    // Find all chats where unreadCount is an array or doesn't exist
+    const chatsToFix = await Chat.find({
+      $or: [
+        { unreadCount: { $exists: false } },
+        { unreadCount: { $type: "array" } },
+        { unreadCount: [] },
+      ],
+    });
+
+    console.log(`🔧 Found ${chatsToFix.length} chats to fix`);
+
+    let fixedCount = 0;
+
+    for (const chat of chatsToFix) {
+      if (!chat.unreadCount || Array.isArray(chat.unreadCount)) {
+        await Chat.findByIdAndUpdate(chat._id, {
+          $set: { unreadCount: {} },
+        });
+        fixedCount++;
+        console.log(`✅ Fixed chat: ${chat._id}`);
+      }
+    }
+
+    console.log(`🎉 Successfully fixed ${fixedCount} chats`);
+    res.status(200).json({
+      message: `Fixed ${fixedCount} chats with invalid unreadCount structure`,
+      totalFixed: fixedCount,
+    });
+  } catch (error) {
+    console.error("Error fixing unreadCounts:", error);
+    next(error);
+  }
+};

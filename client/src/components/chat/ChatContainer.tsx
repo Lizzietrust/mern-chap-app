@@ -152,6 +152,27 @@ const ChatContainer = ({
 
   console.log({ messages });
 
+  const handleDownload = async (fileUrl: string, fileName: string) => {
+    try {
+      const response = await fetch(fileUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.style.display = "none";
+      a.href = url;
+      a.download = fileName || "download";
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Download failed:", error);
+      // Fallback: open in new tab
+      window.open(fileUrl, "_blank");
+    }
+  };
+
+  
   return (
     <div
       className={`${selectedChat ? "flex" : "hidden md:flex"} flex-1 flex-col`}
@@ -291,13 +312,28 @@ const ChatContainer = ({
                     }`}
                   >
                     <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                        isCurrentUser
-                          ? "bg-blue-500 text-white"
-                          : isDark
-                          ? "bg-gray-700 text-white"
-                          : "bg-white text-gray-900 border border-gray-200"
-                      } ${isTempMessage ? "opacity-70" : ""}`}
+                      className={`
+          max-w-xs lg:max-w-md px-4 py-2 rounded-lg transition-all duration-300
+          ${
+            isCurrentUser
+              ? "bg-blue-500 text-white"
+              : isDark
+              ? "bg-gray-700 text-white"
+              : "bg-white text-gray-900 border border-gray-200"
+          }
+          ${message.isOptimistic ? "opacity-70 blur-[0.5px]" : ""}
+          ${message.isSending ? "opacity-80" : ""}
+          ${
+            message.failed
+              ? "opacity-70 bg-red-100 border border-red-300 dark:bg-red-900/20 dark:border-red-700"
+              : ""
+          }
+          ${
+            !message.isOptimistic && !message.failed
+              ? "opacity-100 blur-none"
+              : ""
+          }
+        `}
                     >
                       {showSenderName && (
                         <p
@@ -315,19 +351,39 @@ const ChatContainer = ({
                             <img
                               src={message.fileUrl || message.content}
                               alt={message.fileName || "Shared image"}
-                              className="rounded-lg max-w-full h-auto"
+                              className="rounded-lg max-w-full h-auto cursor-pointer"
+                              onClick={() => {
+                                if (message.fileUrl) {
+                                  window.open(message.fileUrl, "_blank");
+                                }
+                              }}
                             />
-                            {message.content &&
-                              message.content !== message.fileName && (
-                                <p className="mt-1 text-xs opacity-75">
-                                  {message.content}
-                                </p>
-                              )}
+                            <div className="mt-2 flex space-x-2">
+                              <button
+                                onClick={() =>
+                                  handleDownload(
+                                    message.fileUrl,
+                                    message.fileName || "image"
+                                  )
+                                }
+                                className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 transition-colors"
+                              >
+                                Download
+                              </button>
+                              <button
+                                onClick={() =>
+                                  window.open(message.fileUrl, "_blank")
+                                }
+                                className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600 transition-colors"
+                              >
+                                Open
+                              </button>
+                            </div>
                           </div>
                         ) : message.messageType === "file" ? (
                           <div className="flex items-center space-x-2 p-2 bg-opacity-20 rounded">
                             <span className="text-lg">📎</span>
-                            <div>
+                            <div className="flex-1">
                               <p className="font-medium">
                                 {message.fileName ||
                                   extractFileName(message.content)}
@@ -337,16 +393,27 @@ const ChatContainer = ({
                                   ? formatFileSize(message.fileSize)
                                   : extractFileSize(message.content)}
                               </p>
-                              {message.fileUrl && (
-                                <a
-                                  href={message.fileUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs underline"
+                              <div className="mt-2 flex space-x-2">
+                                <button
+                                  onClick={() =>
+                                    handleDownload(
+                                      message.fileUrl,
+                                      message.fileName || "file"
+                                    )
+                                  }
+                                  className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 transition-colors"
                                 >
                                   Download
-                                </a>
-                              )}
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    window.open(message.fileUrl, "_blank")
+                                  }
+                                  className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600 transition-colors"
+                                >
+                                  Open
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ) : (
@@ -365,6 +432,7 @@ const ChatContainer = ({
                       >
                         {message.createdAt && formatTime(message.createdAt)}
                         {isTempMessage && <span className="ml-1">⏳</span>}
+                        {message.failed && <span className="ml-1">❌</span>}
                       </p>
                     </div>
                   </div>

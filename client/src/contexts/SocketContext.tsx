@@ -95,7 +95,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
                 : u
             )
           );
-          
+
           queryClient.invalidateQueries({ queryKey: ["chats"] });
           queryClient.invalidateQueries({ queryKey: ["userChats"] });
         }
@@ -157,6 +157,12 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
         queryClient.invalidateQueries({ queryKey: ["chats"] });
         queryClient.invalidateQueries({ queryKey: ["channels"] });
+      });
+
+      newSocket.on("chatUpdated", (data: { chatId: string }) => {
+        console.log("🔄 Chat updated, refreshing chats list");
+        queryClient.invalidateQueries({ queryKey: ["chats"] });
+        queryClient.invalidateQueries({ queryKey: ["userChats"] });
       });
 
       newSocket.on("disconnect", (reason) => {

@@ -13,10 +13,8 @@ interface Props {
   users?: User[];
   setSelectedChat: (chat: ChatOrNull) => void;
   channels: ChannelChat[];
-  directChats: UserChat[]; // Add this - direct chats only
+  directChats: UserChat[];
   handleSelectUser: (userId: string) => void;
-  // Remove the generic chats prop since we're separating them
-  // chats?: UserChat[];
   currentPage: number;
   totalUsers: number;
   onPageChange: (page: number) => void;
@@ -27,6 +25,8 @@ interface Props {
   onCreateChannel: () => void;
   onShowChannelSettings: () => void;
   channelsLoading: boolean;
+  getDisplayUnreadCount: (chat: UserChat) => number;
+  getChannelDisplayUnreadCount: (channel: ChannelChat) => number;
 }
 
 const Sidebar = ({
@@ -45,6 +45,8 @@ const Sidebar = ({
   searchTerm,
   handleSearch,
   onCreateChannel,
+  getDisplayUnreadCount,
+  getChannelDisplayUnreadCount
 }: Props) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
@@ -106,7 +108,7 @@ const Sidebar = ({
     }
     return chat;
   });
- 
+
   console.log("Sidebar Data Debug:", {
     chats: directChats, // Check if this contains direct messages
     channels: channels,
@@ -127,14 +129,19 @@ const Sidebar = ({
     return timeB - timeA;
   });
 
-  const handleChatSelect = (chat: UserChat | ChannelChat) => {
-    setSelectedChat(chat);
+ const handleChatSelect = (chat: UserChat | ChannelChat) => {
+   setSelectedChat(chat);
 
-    // Mark as read if there are unread messages
-    if (chat.unreadCount && chat.unreadCount > 0) {
-      markAsReadMutation.mutate(chat._id);
-    }
-  };
+   // Mark as read if there are unread messages
+   const unreadCount =
+     "type" in chat && chat.type === "direct"
+       ? getDisplayUnreadCount(chat as UserChat)
+       : getChannelDisplayUnreadCount(chat as ChannelChat);
+
+   if (unreadCount > 0) {
+     markAsReadMutation.mutate(chat._id);
+   }
+ };
 
   // Helper function to get display name for a user
   const getDisplayName = (user: User): string => {
@@ -251,7 +258,6 @@ const Sidebar = ({
                   {sortedDirectChats?.map((chat) => {
                     if (!chat) return null;
 
-                    // FIXED: Use chat.participants instead of sortedChats.participants
                     const otherParticipant = chat.participants?.find(
                       (p) => p._id !== state.user?._id
                     );
@@ -263,7 +269,8 @@ const Sidebar = ({
                       currentUserId: state.user?._id,
                     });
 
-                    const unreadCount = chat.unreadCount || 0;
+                    // Use the getDisplayUnreadCount function here
+                    const unreadCount = getDisplayUnreadCount(chat);
                     const lastMessage = chat.lastMessage || "";
                     const lastMessageTime = formatLastMessageTime(
                       chat.lastMessageAt
@@ -311,7 +318,6 @@ const Sidebar = ({
                                   isDark ? "text-white" : "text-gray-900"
                                 } ${hasUnread ? "font-semibold" : ""}`}
                               >
-                                {/* FIXED: Use getDisplayName helper */}
                                 {otherParticipant
                                   ? getDisplayName(otherParticipant)
                                   : "Unknown User"}
@@ -398,8 +404,11 @@ const Sidebar = ({
                       channel.lastMessageAt
                     );
                     const isSelected = selectedChat?._id === channel._id;
-                    const hasUnread =
-                      (channel.unreadCount || 0) > 0 && !isSelected;
+
+                    // Use the getChannelDisplayUnreadCount function here
+                    const unreadCount = getChannelDisplayUnreadCount(channel);
+                    const hasUnread = unreadCount > 0 && !isSelected;
+
                     return (
                       <button
                         key={channel._id}
@@ -445,12 +454,11 @@ const Sidebar = ({
                                     {lastMessageTime}
                                   </span>
                                 )}
-                                {channel.unreadCount &&
-                                channel.unreadCount > 0 ? (
+                                {unreadCount > 0 && (
                                   <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
-                                    {channel.unreadCount}
+                                    {unreadCount}
                                   </span>
-                                ) : null}
+                                )}
                               </div>
                             </div>
                             <div className="flex items-center justify-between">

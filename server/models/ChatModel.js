@@ -71,11 +71,14 @@ const chatSchema = new mongoose.Schema(
       default: Date.now,
     },
 
-    // CORRECTED: Use Map structure for unreadCount
     unreadCount: {
       type: Map,
-      of: Number,
-      default: {},
+      of: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      default: () => new Map(),
     },
   },
   {
@@ -99,7 +102,6 @@ chatSchema.virtual("memberCount").get(function () {
 chatSchema.set("toJSON", {
   virtuals: true,
   transform: function (doc, ret) {
-    // Convert Map to Object for JSON serialization
     if (ret.unreadCount && ret.unreadCount instanceof Map) {
       ret.unreadCount = Object.fromEntries(ret.unreadCount);
     }
@@ -119,6 +121,23 @@ chatSchema.pre("save", function (next) {
     next();
   }
 });
+
+chatSchema.methods.incrementUnreadCount = function (userId) {
+  if (!this.unreadCount) {
+    this.unreadCount = new Map();
+  }
+  const currentCount = this.unreadCount.get(userId.toString()) || 0;
+  this.unreadCount.set(userId.toString(), currentCount + 1);
+  return this.save();
+};
+
+chatSchema.methods.resetUnreadCount = function (userId) {
+  if (this.unreadCount) {
+    this.unreadCount.set(userId.toString(), 0);
+    return this.save();
+  }
+  return Promise.resolve(this);
+};
 
 const Chat = mongoose.model("Chat", chatSchema);
 

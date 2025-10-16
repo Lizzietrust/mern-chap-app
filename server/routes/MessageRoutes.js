@@ -7,11 +7,15 @@ import {
   uploadFile,
   markChatAsRead,
   getUnreadCounts,
+  debugChats,
 } from "../controllers/MessageController.js";
 import { verifyToken } from "../middlewares/AuthMiddleware.js";
 import multer from "multer";
 import path from "path";
-import { cleanupChats } from "../controllers/CleanupChatsController.js";
+import {
+  cleanupChats,
+  fixUnreadCounts,
+} from "../controllers/CleanupChatsController.js";
 
 const messageRoutes = express.Router();
 
@@ -43,7 +47,7 @@ messageRoutes.post("/upload", verifyToken, upload.single("file"), uploadFile);
 messageRoutes.patch("/chats/:chatId/read", verifyToken, markChatAsRead);
 messageRoutes.get("/chats/unread-counts", verifyToken, getUnreadCounts);
 messageRoutes.delete("/chats/cleanup", verifyToken, cleanupChats);
+messageRoutes.post("/chats/fix-unread-counts", fixUnreadCounts);
+messageRoutes.get("/chats/debug", debugChats);
 
 export default messageRoutes;
-
-
