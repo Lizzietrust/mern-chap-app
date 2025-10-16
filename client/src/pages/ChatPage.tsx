@@ -469,6 +469,11 @@ export function ChatPage() {
             { ...message, isOptimistic: false, isSending: false },
           ];
         });
+
+        // AUTO-READ: If this message is in the currently opened chat, mark it as read
+        if (message.sender._id !== state.user?._id) {
+          markAsReadMutation.mutate(selectedChat._id);
+        }
       }
     };
 
@@ -477,7 +482,7 @@ export function ChatPage() {
     return () => {
       socket.off("newMessage", handleNewMessage);
     };
-  }, [socket, selectedChat, queryClient]);
+  }, [socket, selectedChat, queryClient, state.user?._id, markAsReadMutation]);
 
   const handleSelectUser = async (userId: string) => {
     try {
@@ -642,6 +647,11 @@ export function ChatPage() {
   };
 
   const getDisplayUnreadCount = (chat: UserChat): number => {
+    // If this chat is currently selected/opened, return 0
+    if (selectedChat?._id === chat._id) {
+      return 0;
+    }
+
     if (typeof chat.unreadCount === "number") {
       return chat.unreadCount;
     }
@@ -656,8 +666,12 @@ export function ChatPage() {
     return 0;
   };
 
-  // Add this to your ChatPage component
   const getChannelDisplayUnreadCount = (channel: ChannelChat): number => {
+    // If this channel is currently selected/opened, return 0
+    if (selectedChat?._id === channel._id) {
+      return 0;
+    }
+
     if (typeof channel.unreadCount === "number") {
       return channel.unreadCount;
     }
