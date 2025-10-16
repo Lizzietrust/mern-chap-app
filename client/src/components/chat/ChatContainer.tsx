@@ -172,7 +172,76 @@ const ChatContainer = ({
     }
   };
 
-  
+  const handleMenuClick = () => {
+    const options = [
+      { label: "👥 View Participants", action: handleParticipantsClick },
+      { label: "🔔 Notification Settings", action: handleNotificationsClick },
+      { label: "⚙️ Chat Settings", action: handleSettingsClick },
+      { label: "⚙️ Calls", action: handleSettingsClick },
+    ];
+
+    // Show dropdown menu with these options
+    alert(
+      "More options:\n• View Participants\n• Notification Settings\n• Chat Settings"
+    );
+  };
+
+  // Separate handlers for each icon
+  const handleParticipantsClick = () => {
+    if (isChannel) {
+      // Show channel members modal
+      alert(
+        "Channel Members:\n• View all members\n• See online status\n• Manage roles\n• Add/remove members"
+      );
+    } else {
+      // Show DM participant info
+      const otherUser = selectedChat.participants?.find(
+        (p) => p._id !== state.user?._id
+      );
+      alert(
+        `Chat with: ${otherUser?.firstName} ${otherUser?.lastName}\n\n• View profile\n• Shared media\n• Common groups`
+      );
+    }
+  };
+
+  const handleNotificationsClick = () => {
+    if (isChannel) {
+      alert(
+        "Channel Notifications:\n• Mute channel\n• Custom notification sounds\n• Mention preferences"
+      );
+    } else {
+      alert(
+        "Chat Notifications:\n• Mute conversation\n• Custom alerts\n• Do Not Disturb"
+      );
+    }
+  };
+
+  const handleSearchClick = () => {
+    alert(
+      "Search in this conversation\n\n• Search by keyword\n• Filter by date\n• Find files and links"
+    );
+  };
+
+  const handleSettingsClick = () => {
+    if (!selectedChat) {
+      // User-level settings
+      alert(
+        "User Settings:\n• Account preferences\n• Theme and appearance\n• Privacy controls\n• Security settings"
+      );
+      return;
+    }
+
+    if (isChannel) {
+      // Channel settings (admin/mod features)
+      onShowChannelSettings(); // Your existing function
+    } else {
+      // DM chat settings
+      alert(
+        "Chat Settings:\n• Change chat theme\n• Clear chat history\n• Export chat\n• Block user\n• Delete chat"
+      );
+    }
+  };
+
   return (
     <div
       className={`${selectedChat ? "flex" : "hidden md:flex"} flex-1 flex-col`}
@@ -242,30 +311,14 @@ const ChatContainer = ({
                 </div>
               </div>
               <div className="flex items-center space-x-1 md:space-x-2">
-                <button
-                  className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
-                    isDark ? "text-gray-300" : "text-gray-600"
-                  }`}
-                  title="Voice call"
-                >
-                  📞
+                {/* Search - Most frequently used */}
+                <button onClick={handleSearchClick} title="Search messages">
+                  🔍
                 </button>
-                <button
-                  className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
-                    isDark ? "text-gray-300" : "text-gray-600"
-                  }`}
-                  title="Video call"
-                >
-                  🎥
-                </button>
-                <button
-                  onClick={onShowChannelSettings}
-                  className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
-                    isDark ? "text-gray-300" : "text-gray-600"
-                  }`}
-                  title={isChannel ? "Channel settings" : "Chat settings"}
-                >
-                  ⚙️
+
+                {/* Menu - Combines participants, notifications, settings */}
+                <button onClick={handleMenuClick} title="More options">
+                  ⋮
                 </button>
               </div>
             </div>
