@@ -3,7 +3,7 @@ import { useApp } from "./AppContext";
 import type { User } from "./AppContext";
 import io, { Socket } from "socket.io-client";
 import { API_BASE_URL } from "../lib/api";
-import type { Message as ClientMessage } from "../types";
+import type { Message as ClientMessage } from "../types/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { messageKeys } from "../hooks/useChat";
 import { SocketContext } from "./socket-context";
