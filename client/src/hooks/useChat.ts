@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { chatApi, apiClient as api } from "../lib/api";
-import type { Message, UserChat } from "../types";
+import type { Message, UserChat } from "../types/types";
 import { useApp } from "../contexts/AppContext";
 
 export const chatKeys = {
@@ -25,7 +25,9 @@ export function useCreateChat() {
   return useMutation({
     mutationFn: chatApi.createChat,
     onSuccess: (newChat) => {
-      queryClient.invalidateQueries({ queryKey: chatKeys.userChats(state.user?._id) });
+      queryClient.invalidateQueries({
+        queryKey: chatKeys.userChats(state.user?._id),
+      });
     },
   });
 }
@@ -64,20 +66,19 @@ export function useMarkAsRead() {
     mutationFn: (chatId: string) => chatApi.markAsRead(chatId),
     onSuccess: (_, chatId) => {
       // Update the local cache to reset unread count
-      queryClient.setQueryData(chatKeys.userChats(), (oldChats: UserChat[] = []) => {
-        return oldChats.map(chat => 
-          chat._id === chatId 
-            ? { ...chat, unreadCount: 0 }
-            : chat
-        );
-      });
+      queryClient.setQueryData(
+        chatKeys.userChats(),
+        (oldChats: UserChat[] = []) => {
+          return oldChats.map((chat) =>
+            chat._id === chatId ? { ...chat, unreadCount: 0 } : chat
+          );
+        }
+      );
 
       // Also update the general chats query
       queryClient.setQueryData(["chats"], (oldChats: UserChat[] = []) => {
-        return oldChats.map(chat => 
-          chat._id === chatId 
-            ? { ...chat, unreadCount: 0 }
-            : chat
+        return oldChats.map((chat) =>
+          chat._id === chatId ? { ...chat, unreadCount: 0 } : chat
         );
       });
     },
