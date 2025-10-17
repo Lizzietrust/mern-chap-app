@@ -260,3 +260,13 @@ export const canUserManageChannel = (
 ): boolean => {
   return isUserAdmin(chat, userId) || chat.createdBy === userId;
 };
+
+export interface LogoutModalProps {
+  showModal: boolean;
+  setShowModal: (show: boolean) => void;
+  onConfirm: () => void;
+  isLoading: boolean;
+}
+
+export type ThemeVariant = "dark" | "light";
+
