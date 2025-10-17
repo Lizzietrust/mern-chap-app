@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ChannelChat } from "../types";
+import type { ChannelChat } from "../types/types";
 import { useNotifications } from "../contexts/NotificationContext";
 import { useApp } from "../contexts/AppContext";
 import {
