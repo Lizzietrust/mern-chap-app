@@ -1,5 +1,5 @@
 import React, { useContext } from "react";
-import type { Chat } from "../types";
+import type { Chat } from "../types/types";
 
 type SelectedChatContextType = {
   selectedChat: Chat | null;
