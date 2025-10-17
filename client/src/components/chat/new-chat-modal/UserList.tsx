@@ -27,7 +27,7 @@ export const UserList: React.FC<UserListProps> = React.memo(
     }
 
     return (
-      <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+      <div className="overflow-y-auto space-y-2 min-h-0 h-[calc(90vh-250px)]">
         {users.map((user) => (
           <UserItem
             key={user._id}
