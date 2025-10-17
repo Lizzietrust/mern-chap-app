@@ -4,7 +4,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@heroicons/react/24/solid";
-import type { User } from "../../types";
+import type { User } from "../../types/types";
 
 interface Props {
   isDark: boolean;
