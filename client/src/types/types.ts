@@ -86,6 +86,7 @@ export interface ChannelChat extends BaseChat {
   name?: string;
   lastMessage?: string;
   lastMessageAt?: Date;
+  lastMessageSender?: User | string;
   unreadCount?: number;
 }
 

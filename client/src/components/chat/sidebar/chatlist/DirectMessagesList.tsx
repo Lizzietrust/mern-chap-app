@@ -1,0 +1,85 @@
+import React from "react";
+import { ChatItem } from "./ChatItem";
+import {
+  getOtherParticipant,
+  getDisplayName,
+  formatLastMessageTime,
+} from "../../../../utils/sidebar.utils";
+import { useApp } from "../../../../contexts/AppContext";
+import type { UserChat, ChatOrNull } from "../../../../types/types";
+
+interface DirectMessagesListProps {
+  isDark: boolean;
+  sidebarCollapsed: boolean;
+  selectedChat: ChatOrNull;
+  directChats: UserChat[];
+  onChatSelect: (chat: UserChat) => void;
+  getDisplayUnreadCount: (chat: UserChat) => number;
+}
+
+export const DirectMessagesList: React.FC<DirectMessagesListProps> = React.memo(
+  ({
+    isDark,
+    sidebarCollapsed,
+    selectedChat,
+    directChats,
+    onChatSelect,
+    getDisplayUnreadCount,
+  }) => {
+    const { state } = useApp();
+
+    if (directChats.length === 0) {
+      return (
+        <div className="p-4 text-center">
+          <p className={`${isDark ? "text-gray-400" : "text-gray-500"}`}>
+            No conversations yet
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-2">
+        {directChats.map((chat) => {
+          const otherParticipant = getOtherParticipant(chat, state.user?._id);
+          const unreadCount = getDisplayUnreadCount(chat);
+          const isSelected = selectedChat?._id === chat._id;
+          const hasUnread = unreadCount > 0 && !isSelected;
+
+          const displayName = otherParticipant
+            ? getDisplayName(otherParticipant)
+            : "Unknown User";
+          const lastMessage = chat.lastMessage || "No messages yet";
+          const lastMessageTime = formatLastMessageTime(chat.lastMessageAt);
+          const isOnline = otherParticipant?.isOnline || false;
+          const userImage = otherParticipant?.image;
+          const initials =
+            otherParticipant?.firstName?.charAt(0) ||
+            otherParticipant?.name?.charAt(0) ||
+            "U";
+
+          return (
+            <ChatItem
+              key={chat._id}
+              chat={chat}
+              isSelected={isSelected}
+              hasUnread={hasUnread}
+              unreadCount={unreadCount}
+              displayName={displayName}
+              lastMessage={lastMessage}
+              lastMessageTime={lastMessageTime}
+              isOnline={isOnline}
+              userImage={userImage}
+              initials={initials}
+              onSelect={() => onChatSelect(chat)}
+              isDark={isDark}
+              sidebarCollapsed={sidebarCollapsed}
+            />
+          );
+        })}
+      </div>
+    );
+  }
+);
+
+DirectMessagesList.displayName = "DirectMessagesList";
