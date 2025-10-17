@@ -28,7 +28,7 @@ export const Modal: React.FC<ModalProps> = ({
       onClick={onClose}
     >
       <div
-        className={`rounded-lg w-full ${sizeClasses[size]} ${
+        className={`rounded-lg w-full h-[90vh] ${sizeClasses[size]} ${
           isDark ? "bg-gray-800 text-white" : "bg-white text-gray-900"
         }`}
         onClick={(e) => e.stopPropagation()}
