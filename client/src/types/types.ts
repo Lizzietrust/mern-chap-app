@@ -270,3 +270,20 @@ export interface LogoutModalProps {
 
 export type ThemeVariant = "dark" | "light";
 
+export interface NotificationDemo {
+  type: "success" | "error" | "warning" | "info";
+  title: string;
+  message: string;
+  delay?: number;
+  duration?: number;
+  persistent?: boolean;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
+}
+
+export interface StateCard {
+  title: string;
+  items: { label: string; value: string | boolean | number }[];
+}
