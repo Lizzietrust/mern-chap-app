@@ -13,7 +13,7 @@ import {
   isChannelChat,
   type UserChat,
   type ChannelChat,
-} from "../types";
+} from "../types/types";
 import ChatContainer from "../components/chat/ChatContainer";
 import { useUsers } from "../hooks/useUsers";
 import {
