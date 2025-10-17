@@ -2,7 +2,7 @@ import { PlusIcon } from "@heroicons/react/24/solid";
 import { useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import { getInitials } from "../../functions";
-import NewChatModal from "./NewChatModal";
+import NewChatModal from "./new-chat-modal/NewChatModal";
 import type {
   ChatOrNull,
   User,
