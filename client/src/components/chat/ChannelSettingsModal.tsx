@@ -1,5 +1,5 @@
 import React from "react";
-import type { ChannelChat } from "../../types";
+import type { ChannelChat } from "../../types/types";
 import { useChannelSettings } from "../../hooks/useChannelSettings";
 import { Modal } from "../modals/Modal";
 import { Tabs } from "./Tabs";
