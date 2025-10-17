@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLogout } from "../hooks/useAuth";
-import LogoutModal from "./modals/LogoutModal";
+import LogoutModal from "./modals/logout/LogoutModal";
 import { useSocket } from "../contexts/useSocket";
 
 interface LogoutButtonProps {
