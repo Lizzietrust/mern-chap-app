@@ -3,7 +3,7 @@ import { useUsers } from "../../hooks/useUsers";
 import { useCreateChannel } from "../../hooks/useChannels";
 import { useNotifications } from "../../contexts/NotificationContext";
 import { useApp } from "../../contexts/AppContext";
-import type { ChannelChat } from "../../types";
+import type { ChannelChat } from "../../types/types";
 
 interface Props {
   isDark: boolean;
