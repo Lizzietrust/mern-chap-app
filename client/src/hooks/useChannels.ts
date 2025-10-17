@@ -4,7 +4,7 @@ import type {
   CreateChannelData,
   UpdateChannelData,
   User,
-} from "../types";
+} from "../types/types";
 import { channelApi } from "../lib/api";
 import { useApp } from "../contexts/AppContext";
 
