@@ -12,18 +12,14 @@ export function LogoutButton({ isNav = false }: LogoutButtonProps) {
   const { updateUserStatus } = useSocket();
   const [showModal, setShowModal] = useState(false);
 
-  // In your LogoutButton component
   const handleLogout = async () => {
     try {
       console.log("🔄 Updating user status to offline before logout");
 
-      // Force immediate status update
       updateUserStatus(false);
 
-      // Wait for the status update to be processed
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Then proceed with logout
       await logoutMutation.mutateAsync();
     } catch (error) {
       console.error("Logout error:", error);
