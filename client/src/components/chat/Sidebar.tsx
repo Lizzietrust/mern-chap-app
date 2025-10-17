@@ -3,7 +3,12 @@ import { useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import { getInitials } from "../../functions";
 import NewChatModal from "./NewChatModal";
-import type { ChatOrNull, User, UserChat, ChannelChat } from "../../types";
+import type {
+  ChatOrNull,
+  User,
+  UserChat,
+  ChannelChat,
+} from "../../types/types";
 import { useSocket } from "../../contexts/useSocket";
 import { useMarkAsRead } from "../../hooks/useMarkAsRead";
 
