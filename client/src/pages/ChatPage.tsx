@@ -28,7 +28,7 @@ import {
 import Sidebar from "../components/chat/Sidebar";
 import { useQueryClient } from "@tanstack/react-query";
 import { useChannels } from "../hooks/useChannels";
-import CreateChannelModal from "../components/chat/CreateChannelModal";
+import CreateChannelModal from "../components/chat/create-channel-modal.tsx/CreateChannelModal";
 import ChannelSettingsModal from "../components/chat/ChannelSettingsModal";
 
 export function ChatPage() {
