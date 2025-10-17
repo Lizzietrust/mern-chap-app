@@ -30,8 +30,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useChannels } from "../hooks/useChannels";
 import CreateChannelModal from "../components/chat/CreateChannelModal";
 import ChannelSettingsModal from "../components/chat/ChannelSettingsModal";
-import { TestConnectionStatus } from "../components/chat/TestSocketConnection";
-import { CookieDebug } from "../components/chat/CookieDebug";
 
 export function ChatPage() {
   const { state } = useApp();
