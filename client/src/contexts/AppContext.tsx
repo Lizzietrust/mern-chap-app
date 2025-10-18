@@ -1,6 +1,6 @@
 import { useReducer } from "react";
 import type { ReactNode } from "react";
-import { SelectedChatProvider } from "./SelectedChatContext";
+import { SelectedChatProvider } from "./selectedChatContext";
 import { AppLogic } from "./AppLogic";
 import { appReducer, initialState } from "./reducers/appReducer";
 import { AppContext } from "./appcontext/appConstants";
