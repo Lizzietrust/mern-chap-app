@@ -4,7 +4,7 @@ import { authApi, type RegisterRequest, type LoginRequest } from "../lib/api";
 import type { AuthResponse } from "../types/types";
 import { useApp } from "../contexts/appcontext/index";
 import { useSocket } from "../contexts/useSocket";
-import { useNotifications } from "../contexts/NotificationContext"; // Use your existing context
+import { useNotifications } from "../contexts"; // Use your existing context
 
 // Query keys for auth
 export const authKeys = {
