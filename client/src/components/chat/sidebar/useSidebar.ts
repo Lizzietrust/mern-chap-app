@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { useApp } from "../../../contexts/AppContext";
+import { useApp } from "../../../contexts/appcontext/index";
 import { useSocket } from "../../../contexts/useSocket";
 import { useMarkAsRead } from "../../../hooks/useMarkAsRead";
 import type { UserChat, ChannelChat, ChatOrNull } from "../../../types/types";
