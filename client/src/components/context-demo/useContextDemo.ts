@@ -1,9 +1,9 @@
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { User, NotificationDemo } from "../../types/types";
-import { useApp } from "../../contexts/AppContext";
+import { useApp } from "../../contexts/appcontext/index";
 import { useTheme } from "../../contexts/ThemeContext";
-import { useNotifications } from "../../contexts/NotificationContext";
+import { useNotifications } from "../../contexts";
 
 export const useContextDemo = () => {
   const { state, login, logout, toggleSidebar, setLoading } = useApp();
