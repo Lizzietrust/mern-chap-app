@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLogout } from "../hooks/useAuth";
 import LogoutModal from "./modals/logout/LogoutModal";
-import { useSocket } from "../contexts/useSocket";
+import { useSocket } from "../hooks/useSocket";
 
 interface LogoutButtonProps {
   isNav?: boolean;
