@@ -1,4 +1,4 @@
-import { useApp } from "../../contexts/AppContext";
+import { useApp } from "../../contexts/appcontext/index";
 import { useTheme } from "../../contexts/ThemeContext";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { LogoutButton } from "../LogoutButton";
