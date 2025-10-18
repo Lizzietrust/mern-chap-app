@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useApp } from "../contexts/AppContext";
-import { useNotifications } from "../contexts/NotificationContext";
+import { useApp } from "../contexts/appcontext/index";
+import { useNotifications } from "../contexts";
 import { useTheme } from "../contexts/ThemeContext";
 
 export function ProfileSetupPage() {
