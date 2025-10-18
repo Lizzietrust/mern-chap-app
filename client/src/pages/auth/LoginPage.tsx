@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { useApp } from "../../contexts/AppContext";
+import { useApp } from "../../contexts/appcontext/index";
 import { useNotifications } from "../../contexts/NotificationContext";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useLogin } from "../../hooks/useAuth";
