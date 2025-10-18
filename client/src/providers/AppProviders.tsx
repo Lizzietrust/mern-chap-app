@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react'
-import { AppProvider } from '../contexts/AppContext'
-import { ThemeProvider } from '../contexts/ThemeContext'
-import { NotificationProvider } from '../contexts'
-import { QueryProvider } from './QueryProvider'
-import { SocketProvider } from '../contexts/socket'
+import type { ReactNode } from "react";
+import { AppProvider } from "../contexts/AppContext";
+import { ThemeProvider } from "../contexts/theme";
+import { NotificationProvider } from "../contexts";
+import { QueryProvider } from "./QueryProvider";
+import { SocketProvider } from "../contexts/socket";
 
 interface AppProvidersProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 export function AppProviders({ children }: AppProvidersProps) {
@@ -20,5 +20,5 @@ export function AppProviders({ children }: AppProvidersProps) {
         </NotificationProvider>
       </ThemeProvider>
     </QueryProvider>
-  )
-} 
+  );
+}
