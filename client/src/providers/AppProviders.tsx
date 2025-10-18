@@ -3,7 +3,7 @@ import { AppProvider } from '../contexts/AppContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { NotificationProvider } from '../contexts'
 import { QueryProvider } from './QueryProvider'
-import { SocketProvider } from '../contexts/SocketContext'
+import { SocketProvider } from '../contexts/socket'
 
 interface AppProvidersProps {
   children: ReactNode
