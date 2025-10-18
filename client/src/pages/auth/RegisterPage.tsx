@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/appcontext/index";
-import { useNotifications } from "../../contexts/NotificationContext";
+import { useNotifications } from "../../contexts";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useRegister } from "../../hooks/useAuth";
 
