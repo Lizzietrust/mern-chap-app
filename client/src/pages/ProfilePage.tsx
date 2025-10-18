@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../contexts/appcontext/index";
 import { useNotifications } from "../contexts";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "../contexts/theme";
 import { Layout } from "../components/Layout";
 import { useUpdateProfile } from "../hooks/useAuth";
 import { LogoutButton } from "../components/LogoutButton";
