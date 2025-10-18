@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useTheme } from "../../../contexts/ThemeContext";
+import { useTheme } from "../../../contexts/theme";
 import { useApp } from "../../../contexts/appcontext/index";
 import { useNotifications } from "../../../contexts";
 
