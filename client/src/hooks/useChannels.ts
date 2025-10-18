@@ -6,7 +6,7 @@ import type {
   User,
 } from "../types/types";
 import { channelApi } from "../lib/api";
-import { useApp } from "../contexts/AppContext";
+import { useApp } from "../contexts/appcontext/index";
 
 const channelKeys = {
   all: ["channels"] as const,
