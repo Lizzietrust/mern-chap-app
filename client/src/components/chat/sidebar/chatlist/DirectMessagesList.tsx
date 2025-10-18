@@ -5,7 +5,7 @@ import {
   getDisplayName,
   formatLastMessageTime,
 } from "../../../../utils/sidebar.utils";
-import { useApp } from "../../../../contexts/AppContext";
+import { useApp } from "../../../../contexts/appcontext/index";
 import type { UserChat, ChatOrNull } from "../../../../types/types";
 
 interface DirectMessagesListProps {
