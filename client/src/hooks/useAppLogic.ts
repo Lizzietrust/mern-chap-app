@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { authApi } from "../lib/api";
 import { useMe } from "./useAuth";
-import { useSelectedChat } from "../contexts/SelectedChatContext";
+import { useSelectedChat } from "../contexts/selectedChatContext";
 import type {
   User,
   AppNotification,
