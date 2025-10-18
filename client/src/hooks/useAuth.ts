@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { authApi, type RegisterRequest, type LoginRequest } from "../lib/api";
 import type { AuthResponse } from "../types/types";
 import { useApp } from "../contexts/appcontext/index";
-import { useSocket } from "../contexts/useSocket";
+import { useSocket } from "./useSocket";
 import { useNotifications } from "../contexts"; // Use your existing context
 
 // Query keys for auth
