@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { useApp } from "./AppContext";
-import type { User } from "./AppContext";
+import { useApp } from "./appcontext/index";
+import type { User } from "../types/types";
 import io, { Socket } from "socket.io-client";
 import { API_BASE_URL } from "../lib/api";
 import type { Message as ClientMessage } from "../types/types";
