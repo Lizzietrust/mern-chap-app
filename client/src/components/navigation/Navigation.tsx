@@ -1,5 +1,5 @@
 import { useApp } from "../../contexts/appcontext/index";
-import { useTheme } from "../../contexts/ThemeContext";
+import { useTheme } from "../../contexts/theme";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { LogoutButton } from "../LogoutButton";
 import { useNavigation } from "../../hooks/useNavigation";
