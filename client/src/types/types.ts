@@ -97,6 +97,7 @@ export type ChatOrNull = Chat | null;
 export interface SelectedChatContextType {
   selectedChat: ChatOrNull;
   setSelectedChat: Dispatch<SetStateAction<ChatOrNull>>;
+  clearSelectedChat: () => void;
 }
 
 export interface AuthResponse {
