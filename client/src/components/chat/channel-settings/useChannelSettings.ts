@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ChannelChat } from "../../../types/types";
-import { useNotifications } from "../../../contexts/NotificationContext";
+import { useNotifications } from "../../../contexts";
 import { useApp } from "../../../contexts/appcontext/index";
 import {
   useChannelMembers,
