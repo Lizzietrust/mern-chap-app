@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useTheme } from "../../../contexts/ThemeContext";
 import { useApp } from "../../../contexts/appcontext/index";
-import { useNotifications } from "../../../contexts/NotificationContext";
+import { useNotifications } from "../../../contexts";
 
 export const useLogoutModal = (
   onConfirm: () => void,
