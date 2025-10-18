@@ -1,4 +1,4 @@
-import { useSocket } from "../contexts/useSocket";
+import { useSocket } from "./useSocket";
 import type { Chat, User } from "../types/types";
 
 export const useChatSubtitle = () => {
