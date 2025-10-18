@@ -5,7 +5,7 @@ import { Modal } from "../../modals/Modal";
 import { Tabs } from "../Tabs";
 import { SettingsTab } from "./SettingsTab";
 import { MemberItem } from "./MemberItem";
-import { useApp } from "../../../contexts/AppContext";
+import { useApp } from "../../../contexts/appcontext/index";
 
 interface Props {
   isDark: boolean;
