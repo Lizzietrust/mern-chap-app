@@ -4,7 +4,7 @@ import { RegisterPage } from '../pages/auth/RegisterPage'
 import { ProfilePage } from '../pages/ProfilePage'
 import { ChatPage } from '../pages/ChatPage'
 import { ProtectedRoute } from '../components/ProtectedRoute'
-import { useApp } from '../contexts/AppContext'
+import { useApp } from '../contexts/appcontext/index'
 
 export function AppRouter() {
   const { state } = useApp()
