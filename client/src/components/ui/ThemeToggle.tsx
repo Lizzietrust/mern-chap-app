@@ -1,4 +1,4 @@
-import { useTheme } from "../../contexts/ThemeContext";
+import { useTheme } from "../../contexts/theme";
 import { SunIcon, MoonIcon } from "./icons/ThemeIcons";
 import { themeToggleStyles } from "../../styles/themeToggleStyles";
 
