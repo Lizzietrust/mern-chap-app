@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useContext } from "react";
 import { useApp } from "../contexts/appcontext/index";
 import { useNotifications } from "../contexts";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "../contexts/theme";
 import { Layout } from "../components/Layout";
 import { SelectedChatContext } from "../contexts/selectedChatContext/SelectedChatContext";
 import { useSocket } from "../hooks/useSocket";
