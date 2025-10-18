@@ -4,7 +4,7 @@ import { useNotifications } from "../contexts";
 import { useTheme } from "../contexts/ThemeContext";
 import { Layout } from "../components/Layout";
 import { SelectedChatContext } from "../contexts/selectedChatContext/SelectedChatContext";
-import { useSocket } from "../contexts/useSocket";
+import { useSocket } from "../hooks/useSocket";
 import {
   type Message,
   type Chat,
