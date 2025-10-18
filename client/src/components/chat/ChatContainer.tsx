@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { useApp } from "../../contexts/AppContext";
+import { useApp } from "../../contexts/appcontext/index";
 import { useSocket } from "../../contexts/useSocket";
 import { isChannelChat, isDirectChat } from "../../types/types";
 import type { ChatContainerProps } from "../../types/chat-container.types";
