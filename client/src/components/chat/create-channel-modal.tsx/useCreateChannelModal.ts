@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useUsers } from "../../../hooks/useUsers";
 import { useCreateChannel } from "../../../hooks/useChannels";
 import { useNotifications } from "../../../contexts/NotificationContext";
-import { useApp } from "../../../contexts/AppContext";
+import { useApp } from "../../../contexts/appcontext/index";
 import type { ChannelFormData } from "../../../types/CreateChannelModal.types";
 import type { ChannelChat } from "../../../types/types";
 
