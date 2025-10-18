@@ -1,6 +1,6 @@
 // hooks/useSocketDebug.ts
 import { useEffect, useState } from "react";
-import { useSocket } from "../contexts/useSocket";
+import { useSocket } from "./useSocket";
 
 export const useSocketDebug = () => {
   const { socket, isConnected, onlineUsers } = useSocket();
