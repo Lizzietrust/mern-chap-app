@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useContext } from "react";
-import { useApp } from "../contexts/AppContext";
+import { useApp } from "../contexts/appcontext/index";
 import { useNotifications } from "../contexts/NotificationContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { Layout } from "../components/Layout";
