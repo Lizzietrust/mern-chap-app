@@ -1,5 +1,5 @@
-import { AppRouter } from './router/AppRouter'
-import { NotificationToast } from './components/NotificationToast'
+import { AppRouter } from "./router/AppRouter";
+import { NotificationToast } from "./components/notifications/NotificationToast";
 
 function App() {
   return (
@@ -7,7 +7,7 @@ function App() {
       <AppRouter />
       <NotificationToast />
     </>
-  )
+  );
 }
 
-export default App
+export default App;
