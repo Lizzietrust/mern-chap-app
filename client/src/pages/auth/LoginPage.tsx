@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useApp } from "../../contexts/appcontext/index";
 import { useNotifications } from "../../contexts";
-import { useTheme } from "../../contexts/ThemeContext";
+import { useTheme } from "../../contexts/theme";
 import { useLogin } from "../../hooks/useAuth";
 
 export function LoginPage() {
