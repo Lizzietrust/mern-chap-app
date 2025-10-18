@@ -1,4 +1,4 @@
-import { useSocket } from "../contexts/useSocket";
+import { useSocket } from "./useSocket";
 
 export const useUserStatus = (userId: string) => {
   const { onlineUsers } = useSocket();
