@@ -1,4 +1,4 @@
-import { useNotifications } from "../../contexts/NotificationContext";
+import { useNotifications } from "../../contexts";
 import {
   XMarkIcon,
   CheckCircleIcon,
