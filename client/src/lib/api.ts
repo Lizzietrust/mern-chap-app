@@ -2,14 +2,21 @@ import axios from "axios";
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 import type {
   Chat,
-  User,
-  AuthResponse,
+  User as ApiUser,
+  AuthResponse as ApiAuthResponse,
   UsersResponse,
   UserChat,
   ChannelChat,
   CreateChannelData,
   UpdateChannelData,
 } from "../types/types";
+import type {
+  User,
+  AuthResponse,
+  LoginRequest,
+  RegisterRequest,
+  UpdateProfileData,
+} from "../types/auth";
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -51,6 +58,29 @@ axiosInstance.interceptors.response.use(
     }
   }
 );
+
+const adaptUser = (user: ApiUser): User => ({
+  _id: user._id,
+  email: user.email,
+  firstName: user.firstName,
+  lastName: user.lastName,
+  name: user.name,
+  image: user.image,
+  bio: user.bio,
+  phone: user.phone,
+  location: user.location,
+  website: user.website,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+  profileSetup: user.profileSetup,
+  avatar: user.avatar,
+});
+
+const adaptAuthResponse = (response: ApiAuthResponse): AuthResponse => ({
+  user: adaptUser(response.user),
+  token: response.token,
+  message: response.message,
+});
 
 class ApiClient {
   private axiosInstance: AxiosInstance;
@@ -138,10 +168,11 @@ export const userApi = {
       `/api/user/fetch-all-users?${params.toString()}`
     );
   },
-  getUser: (id: string) => apiClient.get<User>(`/users/${id}`),
-  createUser: (user: Omit<User, "_id">) => apiClient.post<User>("/users", user),
-  updateUser: (id: string, user: Partial<User>) =>
-    apiClient.put<User>(`/users/${id}`, user),
+  getUser: (id: string) => apiClient.get<ApiUser>(`/users/${id}`),
+  createUser: (user: Omit<ApiUser, "_id">) =>
+    apiClient.post<ApiUser>("/users", user),
+  updateUser: (id: string, user: Partial<ApiUser>) =>
+    apiClient.put<ApiUser>(`/users/${id}`, user),
   deleteUser: (id: string) => apiClient.delete(`/users/${id}`),
 };
 
@@ -156,35 +187,39 @@ export const postApi = {
   deletePost: (id: number) => apiClient.delete<void>(`/posts/${id}`),
 };
 
-export interface RegisterRequest {
-  email: string;
-  password: string;
-}
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface UpdateProfileRequest {
-  firstName?: string;
-  lastName?: string;
-  image?: string;
-  bio?: string;
-  phone?: string;
-  location?: string;
-  website?: string;
-}
-
 export const authApi = {
-  register: (data: RegisterRequest) =>
-    apiClient.post<AuthResponse>("/api/auth/register", data),
-  login: (data: LoginRequest) =>
-    apiClient.post<AuthResponse>("/api/auth/login", data),
-  logout: () => apiClient.post<void>("/api/auth/logout"),
-  me: () => apiClient.get<AuthResponse>("/api/auth/user-info"),
-  updateProfile: (data: UpdateProfileRequest) =>
-    apiClient.put<AuthResponse>("/api/auth/update-profile", data),
+  register: async (data: RegisterRequest): Promise<AuthResponse> => {
+    const response = await apiClient.post<ApiAuthResponse>(
+      "/api/auth/register",
+      data
+    );
+    return adaptAuthResponse(response);
+  },
+
+  login: async (data: LoginRequest): Promise<AuthResponse> => {
+    const response = await apiClient.post<ApiAuthResponse>(
+      "/api/auth/login",
+      data
+    );
+    return adaptAuthResponse(response);
+  },
+
+  logout: (): Promise<void> => apiClient.post<void>("/api/auth/logout"),
+
+  me: async (): Promise<User> => {
+    const response = await apiClient.get<ApiAuthResponse>(
+      "/api/auth/user-info"
+    );
+    return adaptUser(response.user);
+  },
+
+  updateProfile: async (data: UpdateProfileData): Promise<AuthResponse> => {
+    const response = await apiClient.put<ApiAuthResponse>(
+      "/api/auth/update-profile",
+      data
+    );
+    return adaptAuthResponse(response);
+  },
 };
 
 export interface CreateChatRequest {
@@ -196,6 +231,7 @@ export const chatApi = {
     apiClient.post<Chat>("/api/messages/create-chat", {
       userId,
     } as CreateChatRequest),
+
   getUserChats: (): Promise<UserChat[]> =>
     apiClient.get<UserChat[]>("/api/messages/get-user-chats"),
 
@@ -218,8 +254,8 @@ export const channelApi = {
   getUserChannels: (): Promise<ChannelChat[]> =>
     apiClient.get<ChannelChat[]>("/api/channels/user-channels"),
 
-  getChannelMembers: (channelId: string): Promise<User[]> =>
-    apiClient.get<User[]>(`/api/channels/${channelId}/members`),
+  getChannelMembers: (channelId: string): Promise<ApiUser[]> =>
+    apiClient.get<ApiUser[]>(`/api/channels/${channelId}/members`),
 
   addChannelMember: (channelId: string, userId: string): Promise<ChannelChat> =>
     apiClient.post<ChannelChat>(`/api/channels/${channelId}/members`, {
@@ -233,6 +269,7 @@ export const channelApi = {
     apiClient.delete<ChannelChat>(
       `/api/channels/${channelId}/members/${userId}`
     ),
+
   updateChannelAdmin: (
     channelId: string,
     userId: string,
