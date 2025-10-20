@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import io, { type Socket } from "socket.io-client";
 import { useApp } from "../contexts/appcontext/index";
 import { API_BASE_URL } from "../lib/api";
-import { messageKeys } from "./useChat";
+import { MESSAGE_KEYS as messageKeys } from "../hooks/chats";
 import { SOCKET_EVENTS, SOCKET_CONFIG } from "../constants/socket";
 import type { SocketContextType } from "../types/socket";
 import type { User, Message as ClientMessage } from "../types/types";
@@ -266,29 +266,24 @@ export function useSocketLogic(): SocketContextType {
   }, []);
 
   const sendMessage = useCallback(
-    (
-      chatId: string,
-      senderId: string,
-      content: string,
-      messageType: string = "text"
-    ) => {
+    (messageData: {
+      chatId: string;
+      content: string;
+      messageType: string;
+      sender: User;
+    }) => {
       if (
         socketRef.current?.connected &&
-        chatId &&
-        senderId &&
-        content.trim()
+        messageData.chatId &&
+        messageData.content.trim()
       ) {
-        console.log("📤 Sending message via socket:", {
-          chatId,
-          senderId,
-          content,
-          messageType,
-        });
+        console.log("📤 Sending message via socket:", messageData);
+
         socketRef.current.emit(SOCKET_EVENTS.SEND_MESSAGE, {
-          chatId,
-          senderId,
-          content,
-          messageType,
+          chatId: messageData.chatId,
+          senderId: messageData.sender._id,
+          content: messageData.content,
+          messageType: messageData.messageType,
         });
       } else {
         console.error(
