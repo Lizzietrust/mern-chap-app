@@ -1,32 +1,26 @@
 import { useState } from "react";
-import { useLogout } from "../hooks/useAuth";
+import { useLogout } from "../hooks/auth";
 import LogoutModal from "./modals/logout/LogoutModal";
-import { useSocket } from "../hooks/useSocket";
 
 interface LogoutButtonProps {
   isNav?: boolean;
 }
 
 export function LogoutButton({ isNav = false }: LogoutButtonProps) {
-  const logoutMutation = useLogout();
-  const { updateUserStatus } = useSocket();
+  const logoutMutation = useLogout({
+    onSuccess: () => {
+      setShowModal(false); 
+    },
+  });
   const [showModal, setShowModal] = useState(false);
 
-  const handleLogout = async () => {
-    try {
-      console.log("🔄 Updating user status to offline before logout");
-
-      updateUserStatus(false);
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      await logoutMutation.mutateAsync();
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
+  const handleLogout = () => {
+    logoutMutation.mutate();
+    setShowModal(false);
   };
 
   const openModal = () => setShowModal(true);
+  // const closeModal = () => setShowModal(false);
 
   return (
     <>
@@ -49,15 +43,12 @@ export function LogoutButton({ isNav = false }: LogoutButtonProps) {
         )}
       </button>
 
-      {/* Confirmation Modal */}
-      {showModal && (
-        <LogoutModal
-          showModal={showModal}
-          setShowModal={setShowModal}
-          onConfirm={handleLogout}
-          isLoading={logoutMutation.isPending}
-        />
-      )}
+      <LogoutModal
+        showModal={showModal}
+        setShowModal={setShowModal}
+        onConfirm={handleLogout}
+        isLoading={logoutMutation.isPending}
+      />
     </>
   );
 }
