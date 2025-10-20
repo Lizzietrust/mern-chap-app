@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/appcontext/index";
 import { useNotifications } from "../../contexts";
 import { useTheme } from "../../contexts/theme";
-import { useRegister } from "../../hooks/useAuth";
+import { useRegister } from "../../hooks/auth";
+import type { User } from "../../types/types";
 
 export function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -57,22 +58,26 @@ export function RegisterPage() {
       },
       {
         onSuccess: (response) => {
-          // Console log the response
           console.log("Registration successful response:", response);
 
-          // Convert server response to match our app's user format
-          const userData = {
-            id:
-              parseInt(response.user._id) ||
-              Math.floor(Math.random() * 1000) + 1,
-            name: formData.name,
+          const userData: User = {
+            _id: response.user._id,
+            name:
+              response.user.firstName && response.user.lastName
+                ? `${response.user.firstName} ${response.user.lastName}`
+                : "",
             email: response.user.email,
-            profileSetup: response.user.profileSetup,
+            profileSetup: response.user.profileSetup || false,
             avatar: response.user.image,
             bio: response.user.bio,
             phone: response.user.phone,
             location: response.user.location,
             website: response.user.website,
+            image: response.user.image,
+            firstName: response.user.firstName,
+            lastName: response.user.lastName,
+            createdAt: response.user.createdAt || new Date().toISOString(),
+            updatedAt: response.user.updatedAt || new Date().toISOString(),
           };
 
           console.log("Processed user data:", userData);
@@ -84,7 +89,6 @@ export function RegisterPage() {
         onError: (err) => {
           console.error("Registration error:", err);
 
-          // Handle specific error messages from server
           if (
             err.message &&
             err.message.includes("User with this email already exists")
@@ -111,7 +115,6 @@ export function RegisterPage() {
       [e.target.name]: e.target.value,
     }));
 
-    // Clear error when user starts typing
     if (errors[e.target.name]) {
       setErrors((prev) => ({
         ...prev,
