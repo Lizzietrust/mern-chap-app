@@ -4,11 +4,11 @@ import { useApp } from "../contexts/appcontext/index";
 import { useNotifications } from "../contexts";
 import { useTheme } from "../contexts/theme";
 import { Layout } from "../components/Layout";
-import { useUpdateProfile } from "../hooks/useAuth";
+import { useUpdateProfile } from "../hooks/auth";
 import { LogoutButton } from "../components/LogoutButton";
 
 export function ProfilePage() {
-  const { state, logout, dispatch } = useApp();
+  const { state, dispatch } = useApp();
   const { success, error } = useNotifications();
   const { isDark, theme, setTheme } = useTheme();
   const navigate = useNavigate();
@@ -105,7 +105,7 @@ export function ProfilePage() {
           const updatedUser = {
             ...state.user!,
             name: fullName,
-            profileSetup: response.user.profileSetup,
+            profileSetup: response.user.profileSetup ?? true, // Provide default
             avatar: response.user.image || formData.avatar,
             bio: response.user.bio,
             phone: response.user.phone,
@@ -152,7 +152,6 @@ export function ProfilePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    // Parse first and last name from the full name
     const nameParts = formData.name.trim().split(" ");
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ") || "";
@@ -172,7 +171,7 @@ export function ProfilePage() {
           const updatedUser = {
             ...state.user!,
             name: formData.name,
-            profileSetup: response.user.profileSetup,
+            profileSetup: response.user.profileSetup ?? true,
             avatar: response.user.image || formData.avatar,
             bio: response.user.bio,
             phone: response.user.phone,
@@ -196,12 +195,6 @@ export function ProfilePage() {
     setIsEditing(false);
   };
 
-  const handleLogout = () => {
-    logout();
-    success("You have been logged out successfully");
-    navigate("/login");
-  };
-
   const handleGoToChat = () => {
     navigate("/chat");
   };
@@ -209,7 +202,6 @@ export function ProfilePage() {
   const hasUnsavedChanges =
     JSON.stringify(formData) !== JSON.stringify(initialData);
 
-  // Guard: unauthenticated (placed after hooks to satisfy React Hooks rules)
   if (!state.user) {
     return (
       <Layout>
@@ -235,17 +227,6 @@ export function ProfilePage() {
   const needsSetup = !state.user.profileSetup;
 
   if (needsSetup) {
-    const accentOptions: Array<{
-      key: "blue" | "emerald" | "violet" | "rose" | "amber";
-      label: string;
-      className: string;
-    }> = [
-      { key: "blue", label: "Blue", className: "bg-blue-500" },
-      { key: "emerald", label: "Emerald", className: "bg-emerald-500" },
-      { key: "violet", label: "Violet", className: "bg-violet-500" },
-      { key: "rose", label: "Rose", className: "bg-rose-500" },
-      { key: "amber", label: "Amber", className: "bg-amber-500" },
-    ];
     return (
       <Layout>
         <div
@@ -500,43 +481,6 @@ export function ProfilePage() {
                       </button>
                     </div>
                   </div>
-                  {/* <div>
-                    <h3
-                      className={`text-sm font-semibold uppercase tracking-wider ${
-                        isDark ? "text-gray-300" : "text-gray-700"
-                      }`}
-                    >
-                      Appearance
-                    </h3>
-                    <div className="mt-3 flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setTheme("light")}
-                        className={`px-3 py-2 rounded-md border cursor-pointer ${
-                          theme === "light" ? "ring-2 ring-blue-500" : ""
-                        } ${
-                          isDark
-                            ? "border-gray-600 text-gray-200"
-                            : "border-gray-300 text-gray-700"
-                        }`}
-                      >
-                        Light
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTheme("dark")}
-                        className={`px-3 py-2 rounded-md border cursor-pointer ${
-                          theme === "dark" ? "ring-2 ring-blue-500" : ""
-                        } ${
-                          isDark
-                            ? "border-gray-600 text-gray-200"
-                            : "border-gray-300 text-gray-700"
-                        }`}
-                      >
-                        Dark
-                      </button>
-                    </div>
-                  </div> */}
                 </div>
 
                 <div className="pt-2">
@@ -887,7 +831,6 @@ export function ProfilePage() {
                         value={formData.email}
                         onChange={handleChange}
                         disabled
-                        // readOnly
                         className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm ${
                           isDark
                             ? "border-gray-700 bg-gray-800 text-gray-400"
