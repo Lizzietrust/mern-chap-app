@@ -4,12 +4,12 @@ import type { User } from "./types";
 export interface SocketContextType {
   socket: Socket | null;
   onlineUsers: User[];
-  sendMessage: (
-    chatId: string,
-    senderId: string,
-    content: string,
-    messageType?: string
-  ) => void;
+  sendMessage: (messageData: {
+    chatId: string;
+    content: string;
+    messageType: string;
+    sender: User;
+  }) => void;
   joinChat: (chatId: string) => void;
   leaveChat: (chatId: string) => void;
   isConnected: boolean;
