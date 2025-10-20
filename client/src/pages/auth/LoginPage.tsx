@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useApp } from "../../contexts/appcontext/index";
 import { useNotifications } from "../../contexts";
 import { useTheme } from "../../contexts/theme";
-import { useLogin } from "../../hooks/useAuth";
+import { useLogin } from "../../hooks/auth";
 
 export function LoginPage() {
   const [formData, setFormData] = useState({
@@ -56,15 +56,14 @@ export function LoginPage() {
         onSuccess: (response) => {
           console.log({ response });
 
-          // Convert server response to match our app's user format
           const userData = {
-            _id: response.user._id, // ✅ Use _id instead of id
+            _id: response.user._id,
             name:
               response.user.firstName && response.user.lastName
                 ? `${response.user.firstName} ${response.user.lastName}`
-                : response.user.email.split("@")[0],
+                : "",
             email: response.user.email,
-            profileSetup: response.user.profileSetup,
+            profileSetup: response.user.profileSetup ?? false,
             avatar: response.user.image,
             bio: response.user.bio,
             phone: response.user.phone,
@@ -81,7 +80,7 @@ export function LoginPage() {
 
           success("Successfully logged in!", "Welcome back");
 
-          if (!response.user.profileSetup) {
+          if (!userData.profileSetup) {
             navigate("/profile", { replace: true });
           } else {
             const from = location.state?.from?.pathname || "/profile";
@@ -107,7 +106,6 @@ export function LoginPage() {
       [name]: value,
     }));
 
-    // Clear error when user starts typing
     if (errors[name as keyof typeof errors]) {
       setErrors((prev) => ({
         ...prev,
