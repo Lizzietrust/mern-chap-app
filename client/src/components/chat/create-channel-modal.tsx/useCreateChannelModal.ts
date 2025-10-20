@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useUsers } from "../../../hooks/useUsers";
-import { useCreateChannel } from "../../../hooks/useChannels";
+import { useCreateChannel } from "../../../hooks/channels";
 import { useNotifications } from "../../../contexts";
 import { useApp } from "../../../contexts/appcontext/index";
 import type { ChannelFormData } from "../../../types/CreateChannelModal.types";
