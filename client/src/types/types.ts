@@ -15,6 +15,8 @@ export interface User {
   image?: string;
   isOnline?: boolean;
   lastSeen?: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface UsersResponse {
@@ -22,7 +24,6 @@ export interface UsersResponse {
   totalUsers: number;
 }
 
-// Unified Message Types
 export interface BaseMessage {
   _id: string;
   messageType: "text" | "image" | "file" | "audio" | "video";
@@ -30,7 +31,6 @@ export interface BaseMessage {
   chat: string | Chat;
   createdAt: Date | string;
   updatedAt?: Date | string;
-  // Optimistic messaging properties
   isOptimistic?: boolean;
   isSending?: boolean;
   failed?: boolean;
@@ -39,7 +39,7 @@ export interface BaseMessage {
 export interface TextMessage extends BaseMessage {
   messageType: "text";
   content: string;
-  text?: string; // Alias for content
+  text?: string;
 }
 
 export interface FileMessage extends BaseMessage {
@@ -48,13 +48,12 @@ export interface FileMessage extends BaseMessage {
   fileName?: string;
   fileSize?: number;
   mimeType?: string;
-  content?: string; // Fallback content
-  text?: string; // Fallback text
+  content?: string;
+  text?: string;
 }
 
 export type Message = TextMessage | FileMessage;
 
-// Chat Types
 export interface BaseChat {
   _id: string;
   type: "direct" | "channel";
@@ -93,7 +92,6 @@ export interface ChannelChat extends BaseChat {
 export type Chat = UserChat | ChannelChat;
 export type ChatOrNull = Chat | null;
 
-// Context Types
 export interface SelectedChatContextType {
   selectedChat: ChatOrNull;
   setSelectedChat: Dispatch<SetStateAction<ChatOrNull>>;
@@ -119,7 +117,6 @@ export interface UpdateChannelData {
   isPrivate?: boolean;
 }
 
-// Type Guards
 export const isDirectChat = (chat: Chat): chat is UserChat => {
   return chat.type === "direct";
 };
@@ -148,7 +145,6 @@ export const isSendingMessage = (message: Message): boolean => {
   return !!message.isSending;
 };
 
-// Safe type guard for unknown message types
 export const isValidMessage = (message: unknown): message is Message => {
   if (!message || typeof message !== "object") return false;
 
@@ -156,7 +152,6 @@ export const isValidMessage = (message: unknown): message is Message => {
   return !!(msg._id && msg.messageType && msg.sender);
 };
 
-// Helper function to safely access message properties
 export const getMessageContent = (message: Message): string => {
   if (isTextMessage(message)) {
     return message.content || message.text || "";
@@ -166,12 +161,10 @@ export const getMessageContent = (message: Message): string => {
     return message.content || message.text || "";
   }
 
-  // Fallback for any message type
   const fallbackMessage = message as { content?: string; text?: string };
   return fallbackMessage.content || fallbackMessage.text || "";
 };
 
-// Helper function to safely access file URL
 export const getMessageFileUrl = (message: Message): string => {
   if (isFileMessage(message)) {
     return message.fileUrl;
@@ -179,7 +172,6 @@ export const getMessageFileUrl = (message: Message): string => {
   return "";
 };
 
-// Helper function to safely access file name
 export const getMessageFileName = (message: Message): string => {
   if (isFileMessage(message)) {
     return message.fileName || "file";
@@ -187,7 +179,6 @@ export const getMessageFileName = (message: Message): string => {
   return "file";
 };
 
-// Helper function to safely access file size
 export const getMessageFileSize = (message: Message): number | undefined => {
   if (isFileMessage(message)) {
     return message.fileSize;
@@ -195,7 +186,6 @@ export const getMessageFileSize = (message: Message): number | undefined => {
   return undefined;
 };
 
-// Helper Functions
 export const getChatDisplayName = (
   chat: Chat,
   currentUserId?: string
