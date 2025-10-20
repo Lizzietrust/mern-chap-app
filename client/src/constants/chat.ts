@@ -1,3 +1,5 @@
+import type { ChatSubtitleConfig } from "../types/chat";
+
 export const CHAT_KEYS = {
   all: ["chats"] as const,
   lists: () => [...CHAT_KEYS.all, "list"] as const,
@@ -29,4 +31,17 @@ export const MESSAGES_QUERY_OPTIONS = {
   refetchOnWindowFocus: false,
   refetchOnMount: true,
   gcTime: 5 * 60 * 1000,
+} as const;
+
+export const DEFAULT_SUBTITLE_CONFIG: ChatSubtitleConfig = {
+  showMemberCount: true,
+  showPrivacyStatus: true,
+  showLastSeen: true,
+  timeFormat: "12h",
+} as const;
+
+export const STATUS_TEXTS = {
+  ONLINE: "Online",
+  OFFLINE: "Offline",
+  TYPING: "Typing...",
 } as const;
