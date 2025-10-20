@@ -7,7 +7,7 @@ import {
   useUpdateChannel,
   useRemoveChannelMember,
   useUpdateChannelAdmin,
-} from "../../../hooks/useChannels";
+} from "../../../hooks/channels";
 
 export const useChannelSettings = (
   channel: ChannelChat,
