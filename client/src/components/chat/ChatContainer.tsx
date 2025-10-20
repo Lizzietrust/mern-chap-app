@@ -1,7 +1,7 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { useApp } from "../../contexts/appcontext/index";
-import { useSocket } from "../../hooks/useSocket";
-import { isChannelChat, isDirectChat } from "../../types/types";
+import { useChatSubtitle } from "../../hooks/useChatSubtitle";
+import { isChannelChat } from "../../types/types";
 import type { ChatContainerProps } from "../../types/chat-container.types";
 import {
   getSenderName,
@@ -30,38 +30,15 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   onShowChannelSettings,
 }) => {
   const { state } = useApp();
-  const { onlineUsers } = useSocket();
+
+  const { chatSubtitle } = useChatSubtitle({
+    showLastSeen: true,
+    timeFormat: "12h",
+  });
 
   const isChannel = selectedChat && isChannelChat(selectedChat);
-  // const isDirect = selectedChat && isDirectChat(selectedChat);
 
-  const chatSubtitle = useMemo(() => {
-    if (!selectedChat) return "";
-
-    if (isChannelChat(selectedChat)) {
-      return `${selectedChat.members?.length || 0} members • ${
-        selectedChat.isPrivate ? "Private" : "Public"
-      }`;
-    }
-
-    if (isDirectChat(selectedChat)) {
-      const otherUser = selectedChat.participants?.find(
-        (p) => p._id !== state.user?._id
-      );
-
-      if (otherUser) {
-        const onlineUser = onlineUsers.find((u) => u._id === otherUser._id);
-        const isOnline = onlineUser?.isOnline || false;
-        const lastSeen = onlineUser?.lastSeen || otherUser.lastSeen;
-
-        if (isOnline) return "Online";
-        if (lastSeen) return `Last seen ${formatTime(lastSeen)}`;
-        return "Offline";
-      }
-    }
-
-    return "";
-  }, [selectedChat, state.user?._id, onlineUsers, formatTime]);
+  const subtitle = chatSubtitle(selectedChat, state.user);
 
   const handleDownloadFile = async (fileUrl: string, fileName: string) => {
     await downloadFile(fileUrl, fileName);
@@ -82,7 +59,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
           selectedChat.members?.length || 0
         } members\n\n• View all members\n• See online status\n• Manage roles\n• Add/remove members`
       );
-    } else if (isDirectChat(selectedChat)) {
+    } else {
       const otherUser = selectedChat.participants?.find(
         (p) => p._id !== state.user?._id
       );
@@ -194,7 +171,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
         isDark={isDark}
         onBack={() => setSelectedChat(null)}
         title={getChatTitle()}
-        subtitle={chatSubtitle}
+        subtitle={subtitle}
         onSearch={handleSearchClick}
         onMenu={handleMenuClick}
         onParticipants={handleParticipantsClick}
