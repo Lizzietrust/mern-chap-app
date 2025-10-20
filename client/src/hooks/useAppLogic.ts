@@ -1,23 +1,19 @@
 import { useEffect } from "react";
 import { authApi } from "../lib/api";
-import { useMe } from "./useAuth";
+import { useMe } from "./useAuthLogic";
 import { useSelectedChat } from "../contexts/selectedChatContext";
 import type {
   User,
   AppNotification,
   AppState,
   AppAction,
-  ApiUser,
+  // ApiUser,
 } from "../types/app";
 
 interface UseAppLogicProps {
   state: AppState;
   dispatch: React.Dispatch<AppAction>;
 }
-
-// interface AuthResponse {
-//   user: ApiUser;
-// }
 
 export function useAppLogic({ state, dispatch }: UseAppLogicProps) {
   const { clearSelectedChat } = useSelectedChat();
@@ -28,8 +24,8 @@ export function useAppLogic({ state, dispatch }: UseAppLogicProps) {
   }, [meQuery.isFetching, dispatch]);
 
   useEffect(() => {
-    if (meQuery.data?.user) {
-      const userData = transformUserResponse(meQuery.data.user);
+    if (meQuery.data) {
+      const userData = transformUserResponse(meQuery.data);
       dispatch({ type: "SET_USER", payload: userData });
     }
   }, [meQuery.data, dispatch]);
@@ -97,7 +93,11 @@ export function useAppLogic({ state, dispatch }: UseAppLogicProps) {
   };
 }
 
-function transformUserResponse(userData: ApiUser): User {
+function transformUserResponse(userData: User): User {
+  if (userData.name) {
+    return userData;
+  }
+
   const name =
     userData.firstName && userData.lastName
       ? `${userData.firstName} ${userData.lastName}`
@@ -106,7 +106,7 @@ function transformUserResponse(userData: ApiUser): User {
   return {
     ...userData,
     name,
-    avatar: userData.image,
+    avatar: userData.image || userData.avatar,
   };
 }
 
