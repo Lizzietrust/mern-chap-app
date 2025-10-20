@@ -36,3 +36,16 @@ export const isUserChat = (chat: Chat): chat is UserChat => {
 export const isChannelChat = (chat: Chat): chat is ChannelChat => {
   return chat.type === "channel";
 };
+
+export interface ChatSubtitleConfig {
+  showMemberCount?: boolean;
+  showPrivacyStatus?: boolean;
+  showLastSeen?: boolean;
+  timeFormat?: "12h" | "24h";
+}
+
+export interface UserStatus {
+  isOnline: boolean;
+  lastSeen?: Date;
+  statusText: string;
+}
