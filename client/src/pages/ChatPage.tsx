@@ -20,11 +20,11 @@ import {
   useUserChats,
   useMessages,
   useCreateChat,
-  messageKeys,
+  MESSAGE_KEYS as messageKeys,
   useUploadFile,
   useSendMessage,
   useMarkAsRead,
-} from "../hooks/useChat";
+} from "../hooks/chats";
 import Sidebar from "../components/chat/sidebar/Sidebar";
 import { useQueryClient } from "@tanstack/react-query";
 import { useChannels } from "../hooks/channels";
@@ -138,11 +138,6 @@ export function ChatPage() {
     });
 
     const result = Array.from(chatMap.values());
-    console.log("🎯 Deduplication complete:", {
-      input: chats.length,
-      output: result.length,
-      removed: chats.length - result.length,
-    });
 
     return result;
   };
@@ -441,35 +436,32 @@ export function ChatPage() {
         queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
           if (!oldMessages) return [message];
 
-          // Check if message already exists (either as real message or optimistic)
-          const existingIndex = oldMessages.findIndex(
+          // Remove any optimistic messages with the same content
+          const filteredMessages = oldMessages.filter(
             (msg) =>
-              msg._id === message._id ||
-              (msg.isOptimistic &&
-                msg.content === message.content &&
-                msg.sender._id === message.sender._id)
+              !msg.isOptimistic ||
+              msg.content !== message.content ||
+              (typeof message.sender === "object" &&
+                typeof msg.sender === "object" &&
+                msg.sender._id !== message.sender._id)
           );
 
-          if (existingIndex >= 0) {
-            // Replace the existing message (could be optimistic or duplicate)
-            const newMessages = [...oldMessages];
-            newMessages[existingIndex] = {
-              ...message,
-              isOptimistic: false,
-              isSending: false,
-            };
-            return newMessages;
+          // Check if message already exists
+          const exists = filteredMessages.some(
+            (msg) => msg._id === message._id
+          );
+          if (!exists) {
+            return [...filteredMessages, message];
           }
 
-          // Add new message
-          return [
-            ...oldMessages,
-            { ...message, isOptimistic: false, isSending: false },
-          ];
+          return filteredMessages;
         });
 
-        // AUTO-READ: If this message is in the currently opened chat, mark it as read
-        if (message.sender._id !== state.user?._id) {
+        // Auto-mark as read
+        if (
+          typeof message.sender === "object" &&
+          message.sender._id !== state.user?._id
+        ) {
           markAsReadMutation.mutate(selectedChat._id);
         }
       }
@@ -526,16 +518,15 @@ export function ChatPage() {
       messageType: "text",
       content: content,
       text: content,
+      chat: chatId,
       chatId: chatId,
       createdAt: new Date(),
       timestamp: new Date(),
       isOptimistic: true,
-      isSending: true, // Add this flag for styling
+      isSending: true,
     };
 
     const messagesQueryKey = messageKeys.list(chatId);
-    const previousMessages =
-      queryClient.getQueryData<Message[]>(messagesQueryKey);
 
     // Add optimistic message
     queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
@@ -554,49 +545,30 @@ export function ChatPage() {
     }
 
     try {
-      // Wait for the message to be sent
-      const response = await sendMessageMutation.mutateAsync({
+      // Send the message via HTTP
+      await sendMessageMutation.mutateAsync({
         chatId,
         messageType: "text",
         content: content,
       });
 
-      console.log("✅ Message sent successfully via HTTP:", response._id);
+      console.log("✅ Message sent successfully via HTTP");
 
-      // Update the optimistic message to show it's sent successfully
-      queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
-        if (!oldMessages) return [];
-
-        return oldMessages.map((msg) =>
-          msg._id === tempMessageId
-            ? { ...response, isOptimistic: false, isSending: false }
-            : msg
-        );
-      });
-
-      // The socket should handle the final message, but we keep this as backup
+      // The socket should handle the real message, but we'll remove the optimistic one after a delay
       setTimeout(() => {
         queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
-          return (
-            oldMessages?.filter(
-              (msg) => !(msg._id === tempMessageId && msg.isOptimistic)
-            ) || []
-          );
+          return oldMessages?.filter((msg) => msg._id !== tempMessageId) || [];
         });
-
-        // Refresh to ensure we have the latest
-        queryClient.invalidateQueries({ queryKey: messageKeys.list(chatId) });
-      }, 2000);
+      }, 3000);
     } catch (err) {
       console.error("❌ Failed to send message:", err);
 
-      // Revert optimistic update on error - mark as failed instead of removing
+      // Mark optimistic message as failed
       queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
         if (!oldMessages) return [];
-
         return oldMessages.map((msg) =>
           msg._id === tempMessageId
-            ? { ...msg, isOptimistic: true, isSending: false, failed: true }
+            ? { ...msg, failed: true, isSending: false }
             : msg
         );
       });
