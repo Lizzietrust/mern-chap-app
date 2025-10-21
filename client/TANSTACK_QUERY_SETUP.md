@@ -24,7 +24,7 @@ This project is configured with TanStack Query (formerly React Query) for effici
 - Wraps the app with QueryClientProvider
 - Includes ReactQueryDevtools for development
 
-### 3. API Layer (`src/lib/api.ts`)
+### 3. API Layer (`src/lib/api`)
 
 - Generic API client with TypeScript support
 - Example endpoints for Users and Posts
@@ -145,7 +145,7 @@ The ReactQueryDevtools are included and can be accessed by:
 
 ## Adding New API Endpoints
 
-1. Add the API function to `src/lib/api.ts`
+1. Add the API function to `src/lib/api`
 2. Create corresponding hooks in a new file under `src/hooks/`
 3. Define query keys for the new resource
 4. Implement query and mutation hooks following the existing patterns
