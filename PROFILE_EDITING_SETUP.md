@@ -57,7 +57,7 @@ authRoutes.get("/user-info", verifyToken, getUserInfo);
 
 ## Client-Side Implementation
 
-### 1. Enhanced API Client (`client/src/lib/api.ts`)
+### 1. Enhanced API Client (`client/src/lib/api`)
 
 The `authApi.updateProfile` function now accepts all profile fields:
 
