@@ -1,4 +1,3 @@
-// Query key factory with type safety
 export const POST_QUERY_KEYS = {
   all: ["posts"] as const,
   lists: () => [...POST_QUERY_KEYS.all, "list"] as const,
@@ -9,10 +8,9 @@ export const POST_QUERY_KEYS = {
   byUser: (userId: number) => [...POST_QUERY_KEYS.all, "user", userId] as const,
 } as const;
 
-// Default query configurations
 export const DEFAULT_QUERY_CONFIG = {
-  staleTime: 5 * 60 * 1000, // 5 minutes
-  gcTime: 10 * 60 * 1000, // 10 minutes
+  staleTime: 5 * 60 * 1000,
+  gcTime: 10 * 60 * 1000,
   retry: 3,
   retryDelay: (attemptIndex: number) =>
     Math.min(1000 * 2 ** attemptIndex, 30000),
@@ -20,5 +18,5 @@ export const DEFAULT_QUERY_CONFIG = {
 
 export const DETAIL_QUERY_CONFIG = {
   ...DEFAULT_QUERY_CONFIG,
-  staleTime: 2 * 60 * 1000, // 2 minutes for detail pages
+  staleTime: 2 * 60 * 1000,
 } as const;
