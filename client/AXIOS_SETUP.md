@@ -14,7 +14,7 @@ Your project now has both a custom fetch-based API client and an Axios-based imp
 
 ## Current Setup
 
-### 1. Axios Instance Configuration (`src/lib/api.ts`)
+### 1. Axios Instance Configuration (`src/lib/api`)
 
 The main Axios instance is configured with:
 
