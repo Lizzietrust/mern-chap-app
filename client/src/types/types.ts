@@ -278,3 +278,9 @@ export interface StateCard {
   title: string;
   items: { label: string; value: string | boolean | number }[];
 }
+
+export interface ApiAuthResponse {
+  user: User;
+  token?: string;
+  message?: string;
+}
