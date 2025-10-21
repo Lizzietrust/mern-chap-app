@@ -5,7 +5,7 @@ import {
   createMutationFn,
   handleQueryError,
   retryConfig,
-} from "../lib/axios-utils";
+} from "../lib/utils/axios-utils";
 
 // Example interfaces
 interface Todo {
