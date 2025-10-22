@@ -48,6 +48,41 @@ const Sidebar: React.FC<SidebarProps> = ({
     getChannelDisplayUnreadCount,
   });
 
+  const totalUnreadCount = React.useMemo(() => {
+    const directUnread =
+      sortedDirectChats?.reduce((total, chat) => {
+        return total + (getDisplayUnreadCount(chat) || 0);
+      }, 0) || 0;
+
+    const channelUnread =
+      sortedChannels?.reduce((total, channel) => {
+        return total + (getChannelDisplayUnreadCount(channel) || 0);
+      }, 0) || 0;
+
+    return directUnread + channelUnread;
+  }, [
+    sortedDirectChats,
+    sortedChannels,
+    getDisplayUnreadCount,
+    getChannelDisplayUnreadCount,
+  ]);
+
+  const directUnreadCount = React.useMemo(() => {
+    return (
+      sortedDirectChats?.reduce((total, chat) => {
+        return total + (getDisplayUnreadCount(chat) || 0);
+      }, 0) || 0
+    );
+  }, [sortedDirectChats, getDisplayUnreadCount]);
+
+  const channelUnreadCount = React.useMemo(() => {
+    return (
+      sortedChannels?.reduce((total, channel) => {
+        return total + (getChannelDisplayUnreadCount(channel) || 0);
+      }, 0) || 0
+    );
+  }, [sortedChannels, getChannelDisplayUnreadCount]);
+
   return (
     <>
       <div
@@ -64,6 +99,9 @@ const Sidebar: React.FC<SidebarProps> = ({
           onToggleSidebar={toggleSidebar}
           onTabChange={setActiveTab}
           onNewChat={openNewChatModal}
+          totalUnreadCount={totalUnreadCount}
+          directUnreadCount={directUnreadCount}
+          channelUnreadCount={channelUnreadCount}
         />
 
         <ChatList
@@ -89,6 +127,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             user={currentUser}
             sidebarCollapsed={sidebarCollapsed}
             isDark={isDark}
+            unreadCount={sidebarCollapsed ? totalUnreadCount : undefined}
           />
         </div>
       </div>
