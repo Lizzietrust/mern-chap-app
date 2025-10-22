@@ -22,6 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   searchTerm,
   handleSearch,
   onCreateChannel,
+  onShowChannelSettings,
   getDisplayUnreadCount,
   getChannelDisplayUnreadCount,
 }) => {
@@ -38,14 +39,14 @@ const Sidebar: React.FC<SidebarProps> = ({
     sortedDirectChats,
     sortedChannels,
     currentUser,
-  } = useSidebar(
-    directChats, 
-    channels, 
+  } = useSidebar({
+    directChats,
+    channels,
     setSelectedChat,
     handleSelectUser,
     getDisplayUnreadCount,
-    getChannelDisplayUnreadCount
-  );
+    getChannelDisplayUnreadCount,
+  });
 
   return (
     <>
@@ -72,6 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           selectedChat={selectedChat}
           onChatSelect={handleChatSelect}
           onCreateChannel={onCreateChannel}
+          onShowChannelSettings={onShowChannelSettings}
           directChats={sortedDirectChats || []}
           channels={sortedChannels || []}
           getDisplayUnreadCount={getDisplayUnreadCount}
