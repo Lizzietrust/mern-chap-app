@@ -261,13 +261,31 @@ const LoginRequired: React.FC<{ isDark: boolean }> = ({ isDark }) => (
     }`}
   >
     <div className="text-center">
+      <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg
+          className="w-8 h-8 text-white"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+          />
+        </svg>
+      </div>
       <h2
-        className={`text-2xl font-bold ${
+        className={`text-2xl font-bold mb-2 ${
           isDark ? "text-white" : "text-gray-900"
         }`}
       >
         Please log in to access the chat
       </h2>
+      <p className={isDark ? "text-gray-400" : "text-gray-600"}>
+        Sign in to start chatting with your friends
+      </p>
     </div>
   </div>
 );
@@ -279,34 +297,145 @@ const LoadingState: React.FC<{ isDark: boolean }> = ({ isDark }) => (
     }`}
   >
     <div className="text-center">
+      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
       <h2
-        className={`text-2xl font-bold ${
+        className={`text-2xl font-bold mb-2 ${
           isDark ? "text-white" : "text-gray-900"
         }`}
       >
-        Loading your conversations...
+        Loading your conversations
       </h2>
+      <div className="flex justify-center space-x-1">
+        <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
+        <div
+          className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+          style={{ animationDelay: "0.1s" }}
+        ></div>
+        <div
+          className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+          style={{ animationDelay: "0.2s" }}
+        ></div>
+      </div>
     </div>
   </div>
 );
 
 const LoadingSidebar: React.FC<{ isDark: boolean }> = ({ isDark }) => (
   <div
-    className={`flex items-center justify-center w-80 ${
-      isDark ? "text-white" : "text-black"
-    }`}
+    className={`w-80 flex flex-col ${
+      isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+    } border-r`}
   >
-    <div>Loading chats...</div>
+    {/* Sidebar Header Skeleton */}
+    <div
+      className={`p-4 border-b ${
+        isDark ? "border-gray-700" : "border-gray-200"
+      }`}
+    >
+      <div className="flex justify-between items-center">
+        <div className="h-6 bg-gray-300 dark:bg-gray-600 rounded w-32 animate-pulse"></div>
+        <div className="flex space-x-2">
+          <div className="h-8 w-8 bg-gray-300 dark:bg-gray-600 rounded animate-pulse"></div>
+          <div className="h-8 w-8 bg-gray-300 dark:bg-gray-600 rounded animate-pulse"></div>
+        </div>
+      </div>
+    </div>
+
+    {/* Chat List Skeleton */}
+    <div className="flex-1 p-4 space-y-4">
+      {[...Array(6)].map((_, i) => (
+        <div key={i} className="flex items-center space-x-3">
+          <div className="h-12 w-12 bg-gray-300 dark:bg-gray-600 rounded-full animate-pulse"></div>
+          <div className="flex-1">
+            <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-3/4 mb-2 animate-pulse"></div>
+            <div className="h-3 bg-gray-300 dark:bg-gray-600 rounded w-1/2 animate-pulse"></div>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* User Profile Skeleton */}
+    <div
+      className={`p-4 border-t ${
+        isDark ? "border-gray-700" : "border-gray-200"
+      }`}
+    >
+      <div className="flex items-center space-x-3">
+        <div className="h-10 w-10 bg-gray-300 dark:bg-gray-600 rounded-full animate-pulse"></div>
+        <div className="flex-1">
+          <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-24 mb-1 animate-pulse"></div>
+          <div className="h-3 bg-gray-300 dark:bg-gray-600 rounded w-16 animate-pulse"></div>
+        </div>
+      </div>
+    </div>
   </div>
 );
 
 const LoadingMessages: React.FC<{ isDark: boolean }> = ({ isDark }) => (
   <div
-    className={`flex-1 flex items-center justify-center ${
-      isDark ? "text-white" : "text-black"
-    }`}
+    className={`flex-1 flex flex-col ${isDark ? "bg-gray-800" : "bg-white"}`}
   >
-    <div>Loading messages...</div>
+    {/* Chat Header Skeleton */}
+    <div
+      className={`p-4 border-b ${
+        isDark ? "border-gray-700" : "border-gray-200"
+      }`}
+    >
+      <div className="flex items-center space-x-3">
+        <div className="h-12 w-12 bg-gray-300 dark:bg-gray-600 rounded-full animate-pulse"></div>
+        <div>
+          <div className="h-5 bg-gray-300 dark:bg-gray-600 rounded w-32 mb-2 animate-pulse"></div>
+          <div className="h-3 bg-gray-300 dark:bg-gray-600 rounded w-24 animate-pulse"></div>
+        </div>
+      </div>
+    </div>
+
+    {/* Messages Area Skeleton */}
+    <div className="flex-1 p-4 space-y-6">
+      {/* Incoming message skeleton */}
+      <div className="flex space-x-3">
+        <div className="h-10 w-10 bg-gray-300 dark:bg-gray-600 rounded-full animate-pulse"></div>
+        <div className="flex-1 space-y-2">
+          <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-16 animate-pulse"></div>
+          <div className="h-16 bg-gray-300 dark:bg-gray-600 rounded-lg w-3/4 animate-pulse"></div>
+        </div>
+      </div>
+
+      {/* Outgoing message skeleton */}
+      <div className="flex space-x-3 justify-end">
+        <div className="flex-1 space-y-2 max-w-3/4">
+          <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-16 ml-auto animate-pulse"></div>
+          <div className="h-16 bg-blue-200 dark:bg-blue-900 rounded-lg w-2/3 ml-auto animate-pulse"></div>
+        </div>
+        <div className="h-10 w-10 bg-gray-300 dark:bg-gray-600 rounded-full animate-pulse"></div>
+      </div>
+
+      {/* Center loading spinner */}
+      <div className="flex justify-center items-center py-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+          <p
+            className={
+              isDark ? "text-gray-400 text-sm" : "text-gray-600 text-sm"
+            }
+          >
+            Loading messages...
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {/* Message Input Skeleton */}
+    <div
+      className={`p-4 border-t ${
+        isDark ? "border-gray-700" : "border-gray-200"
+      }`}
+    >
+      <div className="flex space-x-2">
+        <div className="flex-1 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"></div>
+        <div className="h-12 w-12 bg-gray-300 dark:bg-gray-600 rounded-lg animate-pulse"></div>
+      </div>
+    </div>
   </div>
 );
 
