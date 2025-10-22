@@ -77,6 +77,8 @@ export const useLoginForm = () => {
               image: response.user.image,
               firstName: response.user.firstName,
               lastName: response.user.lastName,
+              createdAt: response.user.createdAt || new Date().toISOString(),
+              updatedAt: response.user.updatedAt || new Date().toISOString(),
             };
 
             login(userData);
