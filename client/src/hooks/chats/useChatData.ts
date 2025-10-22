@@ -1,18 +1,33 @@
 import { useUsers } from "../useUsers";
 import { useUserChats } from "../chats";
 import { useChannels } from "../channels";
-import { useChatLogic } from "./useChatLogic";
 import { useCallback } from "react";
-import type { UserChat, ChannelChat, Chat } from "../../types/types";
+import type { UserChat, ChannelChat, Chat, User } from "../../types/types";
 
-export const useChatData = () => {
-  const { currentPage, searchTerm, user } = useChatLogic();
+interface UseChatDataParams {
+  currentPage: number;
+  searchTerm: string;
+  user: User | null;
+}
 
+export const useChatData = ({
+  currentPage,
+  searchTerm,
+  user,
+}: UseChatDataParams) => {
   const { data: usersData, isLoading: isLoadingUsers } = useUsers(
     currentPage,
     10,
     searchTerm
   );
+
+  console.log(
+    "useChatData - currentPage:",
+    currentPage,
+    "searchTerm:",
+    searchTerm
+  );
+  console.log({ usersData });
 
   const {
     data: chats = [],
