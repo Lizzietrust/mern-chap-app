@@ -1,6 +1,6 @@
 import React from "react";
+import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import type { ChannelItemProps } from "../../../../types/Sidebar.types";
-
 
 export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
   ({
@@ -9,15 +9,25 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
     hasUnread,
     unreadCount,
     lastMessageTime,
-    displayText, 
+    displayText,
     onSelect,
     isDark,
     sidebarCollapsed,
+    onShowSettings,
   }) => {
+    const handleSettingsClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onShowSettings?.();
+    };
+
+    const handleChannelClick = () => {
+      onSelect?.();
+    };
+
     if (sidebarCollapsed) {
       return (
         <button
-          onClick={onSelect}
+          onClick={handleChannelClick}
           className={`w-full p-1 rounded-lg mb-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
             isSelected ? (isDark ? "bg-gray-700" : "bg-gray-100") : ""
           } ${hasUnread ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}
@@ -36,11 +46,19 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
     }
 
     return (
-      <button
-        onClick={onSelect}
+      <div
+        onClick={handleChannelClick}
         className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
           isSelected ? (isDark ? "bg-gray-700" : "bg-gray-100") : ""
         } ${hasUnread ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleChannelClick();
+          }
+        }}
       >
         <div className="flex items-center space-x-3">
           <div
@@ -52,13 +70,27 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-1">
-              <p
-                className={`font-medium truncate ${
-                  isDark ? "text-white" : "text-gray-900"
-                } ${hasUnread ? "font-semibold" : ""}`}
-              >
-                {channel.name}
-              </p>
+              <div className="flex items-center space-x-2 flex-1 min-w-0">
+                <p
+                  className={`font-medium truncate ${
+                    isDark ? "text-white" : "text-gray-900"
+                  } ${hasUnread ? "font-semibold" : ""}`}
+                >
+                  {channel.name}
+                </p>
+
+                {onShowSettings && (
+                  <button
+                    onClick={handleSettingsClick}
+                    className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors ${
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    }`}
+                    title="Channel Settings"
+                  >
+                    <Cog6ToothIcon className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
               <div className="flex items-center space-x-2">
                 {lastMessageTime && (
                   <span
@@ -91,7 +123,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
             </div>
           </div>
         </div>
-      </button>
+      </div>
     );
   }
 );
