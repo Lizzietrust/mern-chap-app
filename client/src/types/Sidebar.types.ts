@@ -22,6 +22,7 @@ export interface SidebarProps {
   getChannelDisplayUnreadCount: (channel: ChannelChat) => number;
 }
 
+// In your Sidebar.types.ts
 export interface SidebarHeaderProps {
   isDark: boolean;
   sidebarCollapsed: boolean;
@@ -29,6 +30,16 @@ export interface SidebarHeaderProps {
   onToggleSidebar: () => void;
   onTabChange: (tab: "direct" | "channels") => void;
   onNewChat: () => void;
+  totalUnreadCount?: number;
+  directUnreadCount?: number;
+  channelUnreadCount?: number;
+}
+
+export interface UserProfileProps {
+  user: User | null;
+  sidebarCollapsed: boolean;
+  isDark: boolean;
+  unreadCount?: number;
 }
 
 export interface ChatListProps {
