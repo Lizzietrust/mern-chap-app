@@ -28,11 +28,13 @@ export interface User {
   phone?: string;
   location?: string;
   website?: string;
-  image?: string;
   firstName?: string;
   lastName?: string;
+  image?: string;
   isOnline?: boolean;
   lastSeen?: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AppNotification {
