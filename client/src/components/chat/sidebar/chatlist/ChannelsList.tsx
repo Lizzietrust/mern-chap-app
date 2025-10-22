@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { PlusIcon } from "@heroicons/react/24/solid";
 import { ChannelItem } from "./ChannelItem";
 import {
   formatLastMessageTime,
   getSenderDisplayName,
 } from "../../../../utils/sidebar.utils";
-import type { ChannelChat, ChatOrNull } from "../../../../types/types";
+import type { ChannelChat, ChatOrNull, User } from "../../../../types/types";
+import { useSocket } from "../../../../hooks/useSocket";
 
 export interface ChannelListProps {
   isDark: boolean;
@@ -18,6 +19,14 @@ export interface ChannelListProps {
   getDisplayUnreadCount: (channel: ChannelChat) => number;
 }
 
+const isUserObject = (member: string | User): member is User => {
+  return typeof member !== "string" && (member as User)._id !== undefined;
+};
+
+const getMemberId = (member: string | User): string => {
+  return isUserObject(member) ? member._id : member;
+};
+
 export const ChannelsList: React.FC<ChannelListProps> = React.memo(
   ({
     isDark,
@@ -29,6 +38,50 @@ export const ChannelsList: React.FC<ChannelListProps> = React.memo(
     collapsed,
     getDisplayUnreadCount,
   }) => {
+    const { onlineUsers } = useSocket();
+
+    const updatedChannels = useMemo(() => {
+      return channels.map((channel) => {
+        if (channel.type === "channel" && channel.members) {
+          return {
+            ...channel,
+            members: channel.members.map((member) => {
+              const memberId = getMemberId(member);
+              const onlineUser = onlineUsers.find((u) => u._id === memberId);
+
+              if (isUserObject(member)) {
+                return {
+                  ...member,
+                  isOnline: onlineUser?.isOnline || member.isOnline || false,
+                  lastSeen: onlineUser?.lastSeen || member.lastSeen,
+                };
+              } else {
+                const onlineUser = onlineUsers.find((u) => u._id === member);
+                return {
+                  _id: member,
+                  firstName: "User",
+                  lastName: "",
+                  isOnline: onlineUser?.isOnline || false,
+                  lastSeen: onlineUser?.lastSeen || new Date(),
+                } as User;
+              }
+            }),
+          };
+        }
+        return channel;
+      });
+    }, [channels, onlineUsers]);
+
+    const getOnlineMemberCount = (channel: ChannelChat): number => {
+      if (!channel.members || channel.members.length === 0) return 0;
+
+      return channel.members.filter((member) => {
+        const memberId = getMemberId(member);
+        const onlineUser = onlineUsers.find((u) => u._id === memberId);
+        return onlineUser?.isOnline || false;
+      }).length;
+    };
+
     const CreateChannelButton = () => (
       <button
         onClick={onCreateChannel}
@@ -93,11 +146,13 @@ export const ChannelsList: React.FC<ChannelListProps> = React.memo(
       <div className="p-2">
         <CreateChannelButton />
 
-        {channels.map((channel) => {
+        {updatedChannels.map((channel) => {
           const unreadCount = getDisplayUnreadCount(channel);
           const isSelected = selectedChat?._id === channel._id;
           const hasUnread = unreadCount > 0 && !isSelected;
           const lastMessageTime = formatLastMessageTime(channel.lastMessageAt);
+          const totalMembers = channel.members ? channel.members.length : 0;
+          const onlineMembers = getOnlineMemberCount(channel);
 
           const getDisplayText = (): string => {
             if (channel.lastMessage) {
@@ -111,7 +166,11 @@ export const ChannelsList: React.FC<ChannelListProps> = React.memo(
               return channel.lastMessage;
             }
 
-            let displayText = `${channel.memberCount || 0} members`;
+            let displayText = `${totalMembers} members`;
+            if (onlineMembers > 0) {
+              displayText += ` • ${onlineMembers} online`;
+            }
+
             if (channel.description) {
               displayText += ` • ${channel.description}`;
             }
