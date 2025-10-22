@@ -2,12 +2,25 @@ import React from "react";
 import { useTheme } from "../../contexts/theme";
 import { InputField } from "../ui/form/InputField";
 import { SubmitButton } from "../ui/form/SubmitButton";
-import { useRegisterForm } from "../../hooks/auth/useRegisterform";
+import { useRegisterForm } from "../../hooks/auth/useRegisterForm";
 
 export const RegisterForm: React.FC = () => {
   const { isDark } = useTheme();
   const { formData, errors, isLoading, handleChange, handleSubmit } =
     useRegisterForm();
+
+  // Add state for password visibility for both password fields
+  const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
+    React.useState(false);
+
+  const togglePasswordVisibility = () => {
+    setIsPasswordVisible(!isPasswordVisible);
+  };
+
+  const toggleConfirmPasswordVisibility = () => {
+    setIsConfirmPasswordVisible(!isConfirmPasswordVisible);
+  };
 
   return (
     <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -36,6 +49,9 @@ export const RegisterForm: React.FC = () => {
           autoComplete="new-password"
           error={errors.password}
           isDark={isDark}
+          showPasswordToggle={true}
+          isPasswordVisible={isPasswordVisible}
+          onTogglePasswordVisibility={togglePasswordVisibility}
         />
 
         <InputField
@@ -49,6 +65,9 @@ export const RegisterForm: React.FC = () => {
           autoComplete="new-password"
           error={errors.confirmPassword}
           isDark={isDark}
+          showPasswordToggle={true}
+          isPasswordVisible={isConfirmPasswordVisible}
+          onTogglePasswordVisibility={toggleConfirmPasswordVisibility}
         />
       </div>
 
