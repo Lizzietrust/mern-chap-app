@@ -8,7 +8,7 @@ export interface SidebarProps {
   directChats: UserChat[];
   channels: ChannelChat[];
   setSelectedChat: Dispatch<SetStateAction<ChatOrNull>>;
-  handleSelectUser?: (userId: string) => void;
+  handleSelectUser: (userId: string) => void;
   currentPage: number;
   totalUsers: number;
   onPageChange: (page: number) => void;
@@ -20,9 +20,10 @@ export interface SidebarProps {
   onShowChannelSettings: () => void;
   getDisplayUnreadCount: (chat: UserChat) => number;
   getChannelDisplayUnreadCount: (channel: ChannelChat) => number;
+  onNextPage: () => void;
+  onPrevPage: () => void;
 }
 
-// In your Sidebar.types.ts
 export interface SidebarHeaderProps {
   isDark: boolean;
   sidebarCollapsed: boolean;
