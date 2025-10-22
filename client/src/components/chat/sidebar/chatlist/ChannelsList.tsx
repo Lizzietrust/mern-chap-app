@@ -7,31 +7,33 @@ import {
 } from "../../../../utils/sidebar.utils";
 import type { ChannelChat, ChatOrNull } from "../../../../types/types";
 
-interface ChannelsListProps {
+export interface ChannelListProps {
   isDark: boolean;
-  sidebarCollapsed: boolean;
-  selectedChat: ChatOrNull;
   channels: ChannelChat[];
-  onChatSelect: (channel: ChannelChat) => void;
+  selectedChat: ChatOrNull;
+  onChatSelect: (chat: ChatOrNull) => void;
   onCreateChannel: () => void;
-  getChannelDisplayUnreadCount: (channel: ChannelChat) => number;
+  onShowChannelSettings: () => void;
+  collapsed: boolean;
+  getDisplayUnreadCount: (channel: ChannelChat) => number;
 }
 
-export const ChannelsList: React.FC<ChannelsListProps> = React.memo(
+export const ChannelsList: React.FC<ChannelListProps> = React.memo(
   ({
     isDark,
-    sidebarCollapsed,
-    selectedChat,
     channels,
+    selectedChat,
     onChatSelect,
     onCreateChannel,
-    getChannelDisplayUnreadCount,
+    onShowChannelSettings,
+    collapsed,
+    getDisplayUnreadCount,
   }) => {
     const CreateChannelButton = () => (
       <button
         onClick={onCreateChannel}
         className={`w-full ${
-          sidebarCollapsed ? "p-1" : "p-3"
+          collapsed ? "p-1" : "p-3"
         } rounded-lg mb-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer border border-dashed ${
           isDark
             ? "border-gray-600 text-gray-300 hover:border-gray-500"
@@ -40,13 +42,13 @@ export const ChannelsList: React.FC<ChannelsListProps> = React.memo(
       >
         <div
           className={`flex items-center ${
-            sidebarCollapsed ? "justify-center" : "space-x-3"
+            collapsed ? "justify-center" : "space-x-3"
           }`}
         >
           <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center text-white font-semibold">
             <PlusIcon className="h-5 w-5" />
           </div>
-          {!sidebarCollapsed && (
+          {!collapsed && (
             <div className="flex-1 min-w-0">
               <p
                 className={`font-medium ${
@@ -92,7 +94,7 @@ export const ChannelsList: React.FC<ChannelsListProps> = React.memo(
         <CreateChannelButton />
 
         {channels.map((channel) => {
-          const unreadCount = getChannelDisplayUnreadCount(channel);
+          const unreadCount = getDisplayUnreadCount(channel);
           const isSelected = selectedChat?._id === channel._id;
           const hasUnread = unreadCount > 0 && !isSelected;
           const lastMessageTime = formatLastMessageTime(channel.lastMessageAt);
@@ -129,7 +131,8 @@ export const ChannelsList: React.FC<ChannelsListProps> = React.memo(
               displayText={displayText}
               onSelect={() => onChatSelect(channel)}
               isDark={isDark}
-              sidebarCollapsed={sidebarCollapsed}
+              sidebarCollapsed={collapsed}
+              onShowSettings={onShowChannelSettings}
             />
           );
         })}
