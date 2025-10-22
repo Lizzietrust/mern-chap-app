@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useApp } from "../../../contexts/appcontext/index";
 import { useSocket } from "../../../hooks/useSocket";
 import { useMarkAsRead } from "../../../hooks/useMarkAsRead";
@@ -25,11 +25,21 @@ export const useSidebar = ({
 }: UseSidebarProps) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"direct" | "channels">("direct");
+
+  const [activeTab, setActiveTab] = useState<"direct" | "channels">(() => {
+    const savedTab = localStorage.getItem("sidebar-active-tab");
+    return savedTab === "direct" || savedTab === "channels"
+      ? savedTab
+      : "direct";
+  });
 
   const { state } = useApp();
   const { onlineUsers } = useSocket();
   const markAsReadMutation = useMarkAsRead();
+
+  useEffect(() => {
+    localStorage.setItem("sidebar-active-tab", activeTab);
+  }, [activeTab]);
 
   const handleUserSelect = useCallback(
     async (userId: string) => {
@@ -83,6 +93,10 @@ export const useSidebar = ({
 
   const closeNewChatModal = useCallback(() => {
     setShowNewChatModal(false);
+  }, []);
+
+  const handleTabChange = useCallback((tab: "direct" | "channels") => {
+    setActiveTab(tab);
   }, []);
 
   const enhancedChats = useMemo(() => {
@@ -150,7 +164,7 @@ export const useSidebar = ({
     sidebarCollapsed,
     showNewChatModal,
     activeTab,
-    setActiveTab,
+    setActiveTab: handleTabChange,
     handleUserSelect,
     handleChatSelect,
     toggleSidebar,
