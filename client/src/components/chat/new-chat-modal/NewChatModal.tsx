@@ -1,5 +1,4 @@
 import React from "react";
-// import { XMarkIcon } from "@heroicons/react/24/solid";
 import { Modal } from "../../modals/Modal";
 import { useNewChatModal } from "./useNewChatModal";
 import { SearchInput } from "../../shared/search-input/SearchInput";
@@ -19,24 +18,22 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
   isLoading = false,
   searchTerm,
   onSearchTermChange,
+  onNextPage,
+  onPrevPage,
 }) => {
-  const {
-    totalPages,
-    handleUserSelect,
-    handleNextPage,
-    handlePrevPage,
-    clearSearch,
-    handleSearchChange,
-  } = useNewChatModal({
-    onClose,
-    handleSelectUser,
-    currentPage,
-    totalUsers,
-    onPageChange,
-    onSearch,
-    searchTerm,
-    onSearchTermChange,
-  });
+  const { totalPages, handleUserSelect, clearSearch, handleSearchChange } =
+    useNewChatModal({
+      onClose,
+      handleSelectUser,
+      currentPage,
+      totalUsers,
+      onPageChange,
+      onSearch,
+      searchTerm,
+      onSearchTermChange,
+    });
+
+  console.log("NewChatModal render", { currentPage, totalPages, totalUsers });
 
   return (
     <Modal isDark={isDark} onClose={onClose} title="New Chat" size="md">
@@ -60,8 +57,8 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
         <Pagination
           currentPage={currentPage}
           totalPages={totalPages}
-          onNextPage={handleNextPage}
-          onPrevPage={handlePrevPage}
+          onNextPage={onNextPage}
+          onPrevPage={onPrevPage}
           isLoading={isLoading}
           isDark={isDark}
         />
