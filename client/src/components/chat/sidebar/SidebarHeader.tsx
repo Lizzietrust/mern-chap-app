@@ -21,9 +21,9 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
                   isDark ? "text-white" : "text-gray-900"
                 }`}
               >
-                {activeTab === "dms" ? "Messages" : "Channels"}
+                {activeTab === "direct" ? "Messages" : "Channels"}
               </h2>
-              {activeTab === "dms" && (
+              {activeTab === "direct" && (
                 <button
                   onClick={onNewChat}
                   className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
@@ -56,9 +56,9 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
               }`}
             >
               <button
-                onClick={() => onTabChange("dms")}
+                onClick={() => onTabChange("direct")}
                 className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors cursor-pointer ${
-                  activeTab === "dms"
+                  activeTab === "direct"
                     ? isDark
                       ? "bg-gray-600 text-white"
                       : "bg-white text-gray-900 shadow-sm"
