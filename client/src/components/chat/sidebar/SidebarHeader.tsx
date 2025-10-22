@@ -10,19 +10,30 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
     onToggleSidebar,
     onTabChange,
     onNewChat,
+    totalUnreadCount = 0,
+    directUnreadCount = 0,
+    channelUnreadCount = 0,
   }) => {
     return (
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between">
           {!sidebarCollapsed && (
             <div className="flex items-center gap-2">
-              <h2
-                className={`font-bold text-lg ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                {activeTab === "direct" ? "Messages" : "Channels"}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2
+                  className={`font-bold text-lg ${
+                    isDark ? "text-white" : "text-gray-900"
+                  }`}
+                >
+                  Messages
+                </h2>
+                {/* Total unread count badge */}
+                {totalUnreadCount > 0 && (
+                  <span className="bg-blue-500 text-white text-[10px] rounded-full px-1 py-1 min-w-[20px] text-center">
+                    {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+                  </span>
+                )}
+              </div>
               {activeTab === "direct" && (
                 <button
                   onClick={onNewChat}
@@ -35,6 +46,13 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
                 </button>
               )}
             </div>
+          )}
+
+          {/* Unread count in collapsed mode */}
+          {sidebarCollapsed && totalUnreadCount > 0 && (
+            <span className="bg-blue-500 text-white text-[10px] rounded-full px-1 py-1 text-center">
+              {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+            </span>
           )}
 
           <button
@@ -57,7 +75,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
             >
               <button
                 onClick={() => onTabChange("direct")}
-                className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors cursor-pointer ${
+                className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors cursor-pointer relative ${
                   activeTab === "direct"
                     ? isDark
                       ? "bg-gray-600 text-white"
@@ -68,10 +86,16 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
                 }`}
               >
                 Direct Messages
+                {/* Unread count for direct messages tab */}
+                {directUnreadCount > 0 && (
+                  <span className="absolute top-1 right-1 bg-blue-500 text-white text-[10px] rounded-full px-0.5 py-0.5 min-w-[18px] text-center">
+                    {directUnreadCount > 99 ? "99+" : directUnreadCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => onTabChange("channels")}
-                className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors cursor-pointer ${
+                className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors cursor-pointer relative ${
                   activeTab === "channels"
                     ? isDark
                       ? "bg-gray-600 text-white"
@@ -82,6 +106,12 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
                 }`}
               >
                 Channels
+                {/* Unread count for channels tab */}
+                {channelUnreadCount > 0 && (
+                  <span className="absolute top-1 right-1 bg-blue-500 text-white text-[10px] rounded-full px-0.5 py-0.5 min-w-[18px] text-center">
+                    {channelUnreadCount > 99 ? "99+" : channelUnreadCount}
+                  </span>
+                )}
               </button>
             </div>
           </div>
