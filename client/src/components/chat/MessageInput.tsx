@@ -1,5 +1,7 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { MessageInputProps } from "../../types/chat-container.types";
+import EmojiPicker, { Theme } from "emoji-picker-react";
+import type { EmojiClickData } from "emoji-picker-react";
 
 const MessageInput: React.FC<MessageInputProps> = React.memo(
   ({
@@ -12,6 +14,24 @@ const MessageInput: React.FC<MessageInputProps> = React.memo(
     onFileSelect,
   }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const emojiPickerRef = useRef<HTMLDivElement>(null);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+    useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+        if (
+          emojiPickerRef.current &&
+          !emojiPickerRef.current.contains(event.target as Node)
+        ) {
+          setShowEmojiPicker(false);
+        }
+      };
+
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }, []);
 
     const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -23,21 +43,78 @@ const MessageInput: React.FC<MessageInputProps> = React.memo(
       }
     };
 
+    const handleEmojiClick = (emojiData: EmojiClickData) => {
+      onMessageChange(newMessage + emojiData.emoji);
+      setShowEmojiPicker(false);
+    };
+
+    const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (newMessage.trim() && !isSending) {
+          const mockEvent = {
+            preventDefault: () => {},
+          } as React.FormEvent<HTMLFormElement>;
+          onSendMessage(mockEvent);
+        }
+      }
+    };
+
+    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      onSendMessage(e);
+    };
+
     return (
       <div
         className={`border-t px-4 md:px-6 py-4 ${
           isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
         }`}
       >
-        <form onSubmit={onSendMessage}>
-          <div className="flex items-center space-x-2 md:space-x-4">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileInputChange}
-              className="hidden cursor-pointer"
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+        {/* Emoji Picker */}
+        {showEmojiPicker && (
+          <div
+            ref={emojiPickerRef}
+            className="absolute bottom-8 left-4 md:left-[340px] z-50"
+          >
+            <EmojiPicker
+              onEmojiClick={handleEmojiClick}
+              theme={isDark ? Theme.DARK : Theme.LIGHT}
+              height={400}
+              width={300}
             />
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="flex items-center space-x-2 md:space-x-4">
+            {/* Emoji Button */}
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className={`p-3 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
+                isDark ? "text-gray-300" : "text-gray-600"
+              } ${showEmojiPicker ? "bg-gray-200 dark:bg-gray-600" : ""}`}
+              aria-label="Add emoji"
+              title="Add emoji"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </button>
+
+            {/* File Attachment Button */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -62,11 +139,22 @@ const MessageInput: React.FC<MessageInputProps> = React.memo(
                 />
               </svg>
             </button>
-            <div className="flex-1">
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileInputChange}
+              className="hidden cursor-pointer"
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+            />
+
+            {/* Message Input */}
+            <div className="flex-1 relative">
               <input
                 type="text"
                 value={newMessage}
                 onChange={(e) => onMessageChange(e.target.value)}
+                onKeyPress={handleKeyPress}
                 placeholder={placeholder}
                 disabled={isSending}
                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -76,6 +164,8 @@ const MessageInput: React.FC<MessageInputProps> = React.memo(
                 }`}
               />
             </div>
+
+            {/* Send Button */}
             <button
               type="submit"
               disabled={!newMessage.trim() || isSending}
