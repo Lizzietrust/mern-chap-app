@@ -9,7 +9,7 @@ interface LogoutButtonProps {
 export function LogoutButton({ isNav = false }: LogoutButtonProps) {
   const logoutMutation = useLogout({
     onSuccess: () => {
-      setShowModal(false); 
+      setShowModal(false);
     },
   });
   const [showModal, setShowModal] = useState(false);
@@ -20,27 +20,35 @@ export function LogoutButton({ isNav = false }: LogoutButtonProps) {
   };
 
   const openModal = () => setShowModal(true);
-  // const closeModal = () => setShowModal(false);
 
   return (
     <>
       <button
         onClick={openModal}
         disabled={logoutMutation.isPending}
-        className={`px-4 py-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 ${
+        className={`relative px-4 py-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ${
           isNav
             ? "text-sm font-medium text-white bg-red-600 hover:bg-red-700"
             : "font-regular text-red-600 hover:bg-red-50 border border-red-200"
         }`}
       >
-        {logoutMutation.isPending ? (
-          <div className="flex items-center">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-            Logging out...
+        {/* Loading spinner */}
+        {logoutMutation.isPending && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current"></div>
           </div>
-        ) : (
-          "Logout"
         )}
+
+        {/* Button text with opacity control for loading state */}
+        <span
+          className={
+            logoutMutation.isPending
+              ? "opacity-0"
+              : "opacity-100 transition-opacity"
+          }
+        >
+          Logout
+        </span>
       </button>
 
       <LogoutModal
