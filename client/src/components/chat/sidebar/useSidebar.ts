@@ -4,17 +4,26 @@ import { useSocket } from "../../../hooks/useSocket";
 import { useMarkAsRead } from "../../../hooks/useMarkAsRead";
 import type { UserChat, ChannelChat, ChatOrNull } from "../../../types/types";
 
-export const useSidebar = (
-  directChats: UserChat[],
-  channels: ChannelChat[],
-  setSelectedChat: (chat: ChatOrNull) => void,
-  handleSelectUser: (userId: string) => void,
-  getDisplayUnreadCount: (chat: UserChat) => number,
-  getChannelDisplayUnreadCount: (channel: ChannelChat) => number
-) => {
+interface UseSidebarProps {
+  directChats: UserChat[];
+  channels: ChannelChat[];
+  setSelectedChat: (chat: ChatOrNull) => void;
+  handleSelectUser?: (userId: string) => void;
+  getDisplayUnreadCount: (chat: UserChat) => number;
+  getChannelDisplayUnreadCount: (channel: ChannelChat) => number;
+}
+
+export const useSidebar = ({
+  directChats,
+  channels,
+  setSelectedChat,
+  handleSelectUser,
+  getDisplayUnreadCount,
+  getChannelDisplayUnreadCount,
+}: UseSidebarProps) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dms" | "channels">("dms");
+  const [activeTab, setActiveTab] = useState<"direct" | "channels">("direct");
 
   const { state } = useApp();
   const { onlineUsers } = useSocket();
@@ -23,7 +32,11 @@ export const useSidebar = (
   const handleUserSelect = useCallback(
     async (userId: string) => {
       try {
-        await handleSelectUser(userId);
+        if (handleSelectUser) {
+          await handleSelectUser(userId);
+        } else {
+          console.warn("handleSelectUser not provided for user:", userId);
+        }
         setShowNewChatModal(false);
       } catch (error) {
         console.error("Failed to create chat:", error);
@@ -33,7 +46,12 @@ export const useSidebar = (
   );
 
   const handleChatSelect = useCallback(
-    (chat: UserChat | ChannelChat) => {
+    (chat: ChatOrNull) => {
+      if (!chat) {
+        setSelectedChat(null);
+        return;
+      }
+
       setSelectedChat(chat);
 
       const unreadCount =
