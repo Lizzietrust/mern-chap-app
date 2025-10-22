@@ -8,7 +8,7 @@ export const useNewChatModal = ({
   totalUsers,
   onPageChange,
   onSearch,
-//   searchTerm,
+  //   searchTerm,
   onSearchTermChange,
 }: Pick<
   NewChatModalProps,
@@ -54,6 +54,7 @@ export const useNewChatModal = ({
       onSearchTermChange(value);
       onSearch(value);
     },
+
     [onSearchTermChange, onSearch]
   );
 
