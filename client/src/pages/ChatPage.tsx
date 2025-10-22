@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useTheme } from "../contexts/theme";
 import { Layout } from "../components/Layout";
 import { useSocket } from "../hooks/useSocket";
@@ -20,6 +20,8 @@ import {
   formatTime,
   getDisplayUnreadCount,
 } from "../utils/chat/chatUtils";
+import { chatApi } from "../lib/api";
+import type { User } from "../types/auth";
 
 export function ChatPage() {
   const { isDark } = useTheme();
@@ -42,7 +44,7 @@ export function ChatPage() {
     uniqueDirectChats,
     separatedChannelChats,
     refetchChannels,
-  } = useChatData();
+  } = useChatData({ currentPage, searchTerm, user });
   const {
     isSending,
     newMessage,
@@ -58,12 +60,16 @@ export function ChatPage() {
 
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
 
   const { data: messages, isLoading: messagesLoading } = useMessages(
     selectedChat?._id
   );
 
   const currentChatRoomRef = useRef<string | null>(null);
+
+  const usersPerPage = 10;
+  const totalPages = Math.ceil((usersData?.totalUsers || 0) / usersPerPage);
 
   useEffect(() => {
     const chatId = selectedChat?._id;
@@ -104,6 +110,48 @@ export function ChatPage() {
     return getChatTitle(selectedChat, user);
   };
 
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      handlePageChange(currentPage + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      handlePageChange(currentPage - 1);
+    }
+  };
+
+  const handleSelectUser = useCallback(
+    async (userId: string) => {
+      try {
+        setIsCreatingChat(true);
+
+        const existingChat = uniqueDirectChats.find(
+          (chat) =>
+            chat.type === "direct" &&
+            chat.participants.some(
+              (participant: User) => participant._id === userId
+            )
+        );
+
+        if (existingChat) {
+          setSelectedChat(existingChat);
+        } else {
+          const newChat = await chatApi.createChat(userId);
+          setSelectedChat(newChat);
+
+          refetchChats();
+        }
+      } catch (error) {
+        console.error("Failed to create or select chat:", error);
+      } finally {
+        setIsCreatingChat(false);
+      }
+    },
+    [uniqueDirectChats, setSelectedChat, refetchChats]
+  );
+
   if (!user) {
     return <LoginRequired isDark={isDark} />;
   }
@@ -135,7 +183,7 @@ export function ChatPage() {
             totalUsers={usersData?.totalUsers || 0}
             onPageChange={handlePageChange}
             onSearch={handleSearch}
-            isLoadingUsers={isLoadingUsers}
+            isLoadingUsers={isLoadingUsers || isCreatingChat}
             searchTerm={searchTerm}
             onCreateChannel={() => setShowCreateChannelModal(true)}
             onShowChannelSettings={() => setShowChannelSettings(true)}
@@ -145,6 +193,9 @@ export function ChatPage() {
             getChannelDisplayUnreadCount={(channel) =>
               getDisplayUnreadCount(channel, selectedChat?._id, user._id)
             }
+            onNextPage={handleNextPage}
+            onPrevPage={handlePrevPage}
+            handleSelectUser={handleSelectUser}
           />
         )}
 
@@ -182,6 +233,7 @@ export function ChatPage() {
             onChannelCreated={(channel) => {
               setSelectedChat(channel);
               setShowCreateChannelModal(false);
+              refetchChannels();
             }}
           />
         )}
