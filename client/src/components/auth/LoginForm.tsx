@@ -29,6 +29,7 @@ export const LoginForm: React.FC = () => {
           autoComplete="email"
           error={errors.email}
           isDark={isDark}
+          disabled={isLoading}
         />
 
         <InputField
@@ -45,6 +46,7 @@ export const LoginForm: React.FC = () => {
           showPasswordToggle={true}
           isPasswordVisible={isPasswordVisible}
           onTogglePasswordVisibility={togglePasswordVisibility}
+          disabled={isLoading}
         />
       </div>
 
@@ -54,21 +56,29 @@ export const LoginForm: React.FC = () => {
             id="remember-me"
             name="remember-me"
             type="checkbox"
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isLoading}
           />
           <label
             htmlFor="remember-me"
             className={`ml-2 block text-sm ${
               isDark ? "text-gray-300" : "text-gray-900"
-            }`}
+            } ${isLoading ? "opacity-50" : ""}`}
           >
             Remember me
           </label>
         </div>
       </div>
 
-      <SubmitButton isLoading={isLoading} loadingText="Signing in...">
-        Sign in
+      <SubmitButton isLoading={isLoading} disabled={isLoading}>
+        {isLoading ? (
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+            Signing in
+          </div>
+        ) : (
+          "Sign in"
+        )}
       </SubmitButton>
     </form>
   );
