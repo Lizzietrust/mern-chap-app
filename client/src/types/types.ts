@@ -81,7 +81,7 @@ export interface ChannelChat extends BaseChat {
   isPrivate: boolean;
   createdBy: string;
   admins: string[];
-  members: string[];
+  members: string[] | User[];
   name?: string;
   lastMessage?: string;
   lastMessageAt?: Date;
@@ -152,6 +152,75 @@ export const isValidMessage = (message: unknown): message is Message => {
   return !!(msg._id && msg.messageType && msg.sender);
 };
 
+export const isUserObject = (item: string | User): item is User => {
+  return typeof item !== "string" && (item as User)._id !== undefined;
+};
+
+export const getUserId = (user: string | User): string => {
+  return isUserObject(user) ? user._id : user;
+};
+
+export const getUserObject = (user: string | User): User | null => {
+  return isUserObject(user) ? user : null;
+};
+
+export const isUserAdmin = (chat: ChannelChat, userId?: string): boolean => {
+  if (!userId) return false;
+  return chat.admins.includes(userId);
+};
+
+export const isUserMember = (chat: ChannelChat, userId?: string): boolean => {
+  if (!userId) return false;
+
+  return chat.members.some((member) => {
+    if (isUserObject(member)) {
+      return member._id === userId;
+    } else {
+      return member === userId;
+    }
+  });
+};
+
+export const canUserManageChannel = (
+  chat: ChannelChat,
+  userId?: string
+): boolean => {
+  return isUserAdmin(chat, userId) || chat.createdBy === userId;
+};
+
+export const getMemberCount = (chat: ChannelChat): number => {
+  return chat.members.length;
+};
+
+export const getOnlineMemberCount = (
+  chat: ChannelChat,
+  onlineUsers: User[]
+): number => {
+  return chat.members.filter((member) => {
+    const memberId = getUserId(member);
+    return onlineUsers.some(
+      (onlineUser) => onlineUser._id === memberId && onlineUser.isOnline
+    );
+  }).length;
+};
+
+export const getMemberObjects = (chat: ChannelChat): User[] => {
+  return chat.members.map((member) => {
+    if (isUserObject(member)) {
+      return member;
+    } else {
+      return {
+        _id: member,
+        name: "Unknown User",
+        email: "",
+        profileSetup: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  });
+};
+
 export const getMessageContent = (message: Message): string => {
   if (isTextMessage(message)) {
     return message.content || message.text || "";
@@ -210,7 +279,11 @@ export const getChatDisplayName = (
   }
 };
 
-export const getChatSubtitle = (chat: Chat, currentUserId?: string): string => {
+export const getChatSubtitle = (
+  chat: Chat,
+  currentUserId?: string,
+  onlineUsers: User[] = []
+): string => {
   if (isDirectChat(chat)) {
     const otherParticipant = chat.participants?.find(
       (p) => p._id !== currentUserId
@@ -223,9 +296,13 @@ export const getChatSubtitle = (chat: Chat, currentUserId?: string): string => {
     }
     return "";
   } else {
-    return `${chat.memberCount || 0} members • ${
-      chat.isPrivate ? "Private" : "Public"
-    }`;
+    const channelChat = chat as ChannelChat;
+    const totalMembers = getMemberCount(channelChat);
+    const onlineMembers = getOnlineMemberCount(channelChat, onlineUsers);
+
+    return `${totalMembers} members${
+      onlineMembers > 0 ? ` • ${onlineMembers} online` : ""
+    } • ${channelChat.isPrivate ? "Private" : "Public"}`;
   }
 };
 
@@ -235,21 +312,6 @@ export const formatTime = (date: Date | string): string => {
     hour: "2-digit",
     minute: "2-digit",
   });
-};
-
-export const isUserAdmin = (chat: ChannelChat, userId?: string): boolean => {
-  return !!userId && chat.admins.includes(userId);
-};
-
-export const isUserMember = (chat: ChannelChat, userId?: string): boolean => {
-  return !!userId && chat.members.includes(userId);
-};
-
-export const canUserManageChannel = (
-  chat: ChannelChat,
-  userId?: string
-): boolean => {
-  return isUserAdmin(chat, userId) || chat.createdBy === userId;
 };
 
 export interface LogoutModalProps {
