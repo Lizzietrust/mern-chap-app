@@ -10,25 +10,25 @@ import type { UserChat, ChatOrNull } from "../../../../types/types";
 
 interface DirectMessagesListProps {
   isDark: boolean;
-  sidebarCollapsed: boolean;
+  chats: UserChat[];
   selectedChat: ChatOrNull;
-  directChats: UserChat[];
-  onChatSelect: (chat: UserChat) => void;
+  onChatSelect: (chat: ChatOrNull) => void;
+  collapsed: boolean;
   getDisplayUnreadCount: (chat: UserChat) => number;
 }
 
 export const DirectMessagesList: React.FC<DirectMessagesListProps> = React.memo(
   ({
     isDark,
-    sidebarCollapsed,
+    chats,
     selectedChat,
-    directChats,
     onChatSelect,
+    collapsed,
     getDisplayUnreadCount,
   }) => {
     const { state } = useApp();
 
-    if (directChats.length === 0) {
+    if (chats.length === 0) {
       return (
         <div className="p-4 text-center">
           <p className={`${isDark ? "text-gray-400" : "text-gray-500"}`}>
@@ -40,7 +40,7 @@ export const DirectMessagesList: React.FC<DirectMessagesListProps> = React.memo(
 
     return (
       <div className="p-2">
-        {directChats.map((chat) => {
+        {chats.map((chat) => {
           const otherParticipant = getOtherParticipant(chat, state.user?._id);
           const unreadCount = getDisplayUnreadCount(chat);
           const isSelected = selectedChat?._id === chat._id;
@@ -73,7 +73,7 @@ export const DirectMessagesList: React.FC<DirectMessagesListProps> = React.memo(
               initials={initials}
               onSelect={() => onChatSelect(chat)}
               isDark={isDark}
-              sidebarCollapsed={sidebarCollapsed}
+              sidebarCollapsed={collapsed}
             />
           );
         })}
