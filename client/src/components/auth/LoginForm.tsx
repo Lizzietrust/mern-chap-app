@@ -9,6 +9,12 @@ export const LoginForm: React.FC = () => {
   const { formData, errors, isLoading, handleChange, handleSubmit } =
     useLoginForm();
 
+  const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
+
+  const togglePasswordVisibility = () => {
+    setIsPasswordVisible(!isPasswordVisible);
+  };
+
   return (
     <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
       <div className="space-y-4">
@@ -36,6 +42,9 @@ export const LoginForm: React.FC = () => {
           autoComplete="current-password"
           error={errors.password}
           isDark={isDark}
+          showPasswordToggle={true}
+          isPasswordVisible={isPasswordVisible}
+          onTogglePasswordVisibility={togglePasswordVisibility}
         />
       </div>
 
