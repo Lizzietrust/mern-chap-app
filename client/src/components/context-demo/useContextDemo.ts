@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { User, NotificationDemo } from "../../types/types";
 import { useApp } from "../../contexts/appcontext/index";
-import { useTheme } from "../../contexts/ThemeContext";
+import { useTheme } from "../../hooks/useTheme";
 import { useNotifications } from "../../contexts";
 
 export const useContextDemo = () => {
