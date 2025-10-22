@@ -1,20 +1,22 @@
-import type { Message, ChatOrNull, Chat } from "./types";
+import type { Dispatch, SetStateAction } from "react";
+import type { Message, ChatOrNull, Chat, User } from "./types";
 
 export interface ChatContainerProps {
   selectedChat: ChatOrNull;
   isDark: boolean;
-  setSelectedChat: (chat: ChatOrNull) => void;
+  setSelectedChat: Dispatch<SetStateAction<ChatOrNull>>;
   getChatTitle: () => string;
   messages: Message[];
-  formatTime: (timestamp: Date | string) => string;
+  formatTime: (date: Date | string) => string;
   isTyping: boolean;
-  messagesEndRef: React.RefObject<HTMLDivElement | null>;
-  handleSendMessage: (e: React.FormEvent<HTMLFormElement>) => void;
+  messagesEndRef?: React.RefObject<HTMLDivElement>;
+  handleSendMessage: (e: React.FormEvent) => void;
   handleFileSelect: (file: File) => void;
   newMessage: string;
   setNewMessage: (message: string) => void;
   isSending?: boolean;
   onShowChannelSettings: () => void;
+  stateUser: User;
 }
 
 export interface MessageDisplayProps {
