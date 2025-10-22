@@ -6,7 +6,6 @@ import {
   ActionButtons,
   ContextInfo,
 } from "./ContextDemoSubcomponents";
-import { UserList } from "../UserList";
 
 export function ContextDemo() {
   const {
@@ -35,14 +34,6 @@ export function ContextDemo() {
           onTestNotifications={handleTestNotifications}
           onToggleLoading={toggleLoading}
         />
-
-        {/* User Management Section */}
-        <div className={styles.section(isDark)}>
-          <h2 className="text-xl font-semibold mb-4">
-            User Management (with TanStack Query)
-          </h2>
-          <UserList />
-        </div>
 
         <ContextInfo isDark={isDark} />
       </div>
