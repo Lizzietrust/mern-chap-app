@@ -1,21 +1,23 @@
+import type { Dispatch, SetStateAction } from "react";
 import type { ChatOrNull, User, UserChat, ChannelChat } from "./types";
 
 export interface SidebarProps {
   isDark: boolean;
   selectedChat: ChatOrNull;
   users?: User[];
-  setSelectedChat: (chat: ChatOrNull) => void;
-  channels: ChannelChat[];
   directChats: UserChat[];
-  handleSelectUser: (userId: string) => void;
+  channels: ChannelChat[];
+  setSelectedChat: Dispatch<SetStateAction<ChatOrNull>>;
+  handleSelectUser?: (userId: string) => void;
   currentPage: number;
   totalUsers: number;
   onPageChange: (page: number) => void;
-  onSearch: (searchTerm: string) => void;
+  onSearch: (search: string) => void;
   isLoadingUsers?: boolean;
   searchTerm: string;
-  handleSearch: (searchTerm: string) => void;
+  handleSearch: (search: string) => void;
   onCreateChannel: () => void;
+  onShowChannelSettings: () => void;
   getDisplayUnreadCount: (chat: UserChat) => number;
   getChannelDisplayUnreadCount: (channel: ChannelChat) => number;
 }
@@ -23,23 +25,35 @@ export interface SidebarProps {
 export interface SidebarHeaderProps {
   isDark: boolean;
   sidebarCollapsed: boolean;
-  activeTab: "dms" | "channels";
+  activeTab: "direct" | "channels";
   onToggleSidebar: () => void;
-  onTabChange: (tab: "dms" | "channels") => void;
+  onTabChange: (tab: "direct" | "channels") => void;
   onNewChat: () => void;
 }
 
 export interface ChatListProps {
   isDark: boolean;
   sidebarCollapsed: boolean;
-  activeTab: "dms" | "channels";
+  activeTab: "direct" | "channels";
   selectedChat: ChatOrNull;
-  onChatSelect: (chat: UserChat | ChannelChat) => void;
+  onChatSelect: (chat: ChatOrNull) => void;
   onCreateChannel: () => void;
+  onShowChannelSettings: () => void;
   directChats: UserChat[];
   channels: ChannelChat[];
   getDisplayUnreadCount: (chat: UserChat) => number;
   getChannelDisplayUnreadCount: (channel: ChannelChat) => number;
+}
+
+export interface ChannelsListProps {
+  isDark: boolean;
+  channels: ChannelChat[];
+  selectedChat: ChatOrNull;
+  onChatSelect: (chat: ChatOrNull) => void;
+  onCreateChannel: () => void;
+  onShowChannelSettings: () => void;
+  collapsed: boolean;
+  getDisplayUnreadCount: (channel: ChannelChat) => number;
 }
 
 export interface ChatItemProps {
@@ -68,6 +82,7 @@ export interface ChannelItemProps {
   isDark: boolean;
   sidebarCollapsed: boolean;
   displayText: string;
+  onShowSettings?: () => void;
 }
 
 export interface UserProfileProps {
