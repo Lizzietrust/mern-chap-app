@@ -3,7 +3,7 @@ import { ThemeToggle } from "../ui/ThemeToggle";
 // import { UserList } from "../chat/new-chat-modal/UserList";
 import { styles } from "../../styles/styles";
 import type { StateCard } from "../../types/types";
-import type { AppState } from "../../contexts/AppContext";
+import type { AppState } from "../../types/app";
 
 interface HeaderProps {
   isDark: boolean;
