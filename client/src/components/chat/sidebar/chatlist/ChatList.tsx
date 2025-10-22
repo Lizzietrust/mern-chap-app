@@ -3,50 +3,72 @@ import { DirectMessagesList } from "./DirectMessagesList";
 import { ChannelsList } from "./ChannelsList";
 import type { ChatListProps } from "../../../../types/Sidebar.types";
 
-export const ChatList: React.FC<ChatListProps> = React.memo(
-  ({
-    isDark,
-    sidebarCollapsed,
-    activeTab,
-    selectedChat,
-    onChatSelect,
-    onCreateChannel,
-    directChats,
-    channels,
-    getDisplayUnreadCount,
-    getChannelDisplayUnreadCount,
-  }) => {
+export const ChatList: React.FC<ChatListProps> = ({
+  isDark,
+  sidebarCollapsed,
+  activeTab,
+  selectedChat,
+  onChatSelect,
+  onCreateChannel,
+  onShowChannelSettings,
+  directChats,
+  channels,
+  getDisplayUnreadCount,
+  getChannelDisplayUnreadCount,
+}) => {
+  if (sidebarCollapsed) {
     return (
-      <div
-        className={`flex-1 overflow-y-auto ${
-          sidebarCollapsed ? "hidden md:block" : ""
-        }`}
-      >
-        {activeTab === "dms" && (
+      <div className="flex-1 overflow-y-auto">
+        {activeTab === "direct" && (
           <DirectMessagesList
             isDark={isDark}
-            sidebarCollapsed={sidebarCollapsed}
+            chats={directChats}
             selectedChat={selectedChat}
-            directChats={directChats}
             onChatSelect={onChatSelect}
+            collapsed={true}
             getDisplayUnreadCount={getDisplayUnreadCount}
           />
         )}
-
         {activeTab === "channels" && (
           <ChannelsList
             isDark={isDark}
-            sidebarCollapsed={sidebarCollapsed}
-            selectedChat={selectedChat}
             channels={channels}
+            selectedChat={selectedChat}
             onChatSelect={onChatSelect}
             onCreateChannel={onCreateChannel}
-            getChannelDisplayUnreadCount={getChannelDisplayUnreadCount}
+            onShowChannelSettings={onShowChannelSettings} 
+            collapsed={true}
+            getDisplayUnreadCount={getChannelDisplayUnreadCount}
           />
         )}
       </div>
     );
   }
-);
 
-ChatList.displayName = "ChatList";
+  return (
+    <div className="flex-1 overflow-y-auto">
+      {activeTab === "direct" && (
+        <DirectMessagesList
+          isDark={isDark}
+          chats={directChats}
+          selectedChat={selectedChat}
+          onChatSelect={onChatSelect}
+          collapsed={false}
+          getDisplayUnreadCount={getDisplayUnreadCount}
+        />
+      )}
+      {activeTab === "channels" && (
+        <ChannelsList
+          isDark={isDark}
+          channels={channels}
+          selectedChat={selectedChat}
+          onChatSelect={onChatSelect}
+          onCreateChannel={onCreateChannel}
+          onShowChannelSettings={onShowChannelSettings}
+          collapsed={false}
+          getDisplayUnreadCount={getChannelDisplayUnreadCount}
+        />
+      )}
+    </div>
+  );
+};
