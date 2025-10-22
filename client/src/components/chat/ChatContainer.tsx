@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useApp } from "../../contexts/appcontext/index";
 import { useChatSubtitle } from "../../hooks/useChatSubtitle";
 import { isChannelChat } from "../../types/types";
@@ -12,6 +12,7 @@ import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
 import MessageComponent from "./MessageComponent";
 import TypingIndicator from "./TypingIndicator";
+import { useSocket } from "../../hooks/useSocket";
 
 const ChatContainer: React.FC<ChatContainerProps> = ({
   selectedChat,
@@ -30,6 +31,27 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   onShowChannelSettings,
 }) => {
   const { state } = useApp();
+  const { onlineUsers } = useSocket();
+
+  const displayChat = useMemo(() => {
+    if (!selectedChat) return null;
+
+    if (selectedChat.type === "direct" && selectedChat.participants) {
+      return {
+        ...selectedChat,
+        participants: selectedChat.participants.map((p) => {
+          const onlineUser = onlineUsers.find((u) => u._id === p._id);
+          return {
+            ...p,
+            isOnline: onlineUser?.isOnline || p.isOnline || false,
+            lastSeen: onlineUser?.lastSeen || p.lastSeen,
+          };
+        }),
+      };
+    }
+
+    return selectedChat;
+  }, [selectedChat, onlineUsers]);
 
   const { chatSubtitle } = useChatSubtitle({
     showLastSeen: true,
@@ -38,7 +60,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
 
   const isChannel = selectedChat && isChannelChat(selectedChat);
 
-  const subtitle = chatSubtitle(selectedChat, state.user);
+  const subtitle = chatSubtitle(displayChat, state.user);
 
   const handleDownloadFile = async (fileUrl: string, fileName: string) => {
     await downloadFile(fileUrl, fileName);
@@ -51,20 +73,23 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   };
 
   const handleParticipantsClick = () => {
-    if (!selectedChat) return;
+    if (!displayChat) return;
 
-    if (isChannelChat(selectedChat)) {
+    if (isChannelChat(displayChat)) {
       alert(
         `Channel Members: ${
-          selectedChat.members?.length || 0
+          displayChat.members?.length || 0
         } members\n\n• View all members\n• See online status\n• Manage roles\n• Add/remove members`
       );
-    } else {
-      const otherUser = selectedChat.participants?.find(
+    } else if (displayChat.type === "direct" && displayChat.participants) {
+      const otherUser = displayChat.participants.find(
         (p) => p._id !== state.user?._id
       );
+
       alert(
-        `Chat with: ${otherUser?.firstName} ${otherUser?.lastName}\n\n• View profile\n• Shared media\n• Common groups`
+        `Chat with: ${otherUser?.firstName} ${otherUser?.lastName}\n\nStatus: ${
+          otherUser?.isOnline ? "Online" : "Offline"
+        }\n\n• View profile\n• Shared media\n• Common groups`
       );
     }
   };
