@@ -9,7 +9,7 @@ export const RegisterForm: React.FC = () => {
   const { formData, errors, isLoading, handleChange, handleSubmit } =
     useRegisterForm();
 
-  // Add state for password visibility for both password fields
+
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
     React.useState(false);
@@ -73,9 +73,17 @@ export const RegisterForm: React.FC = () => {
 
       <TermsCheckbox isDark={isDark} />
 
-      <SubmitButton isLoading={isLoading} loadingText="Creating account...">
-        Create account
+      <SubmitButton isLoading={isLoading} disabled={isLoading}>
+        {isLoading ? (
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+            Creating account
+          </div>
+        ) : (
+          "Create account"
+        )}
       </SubmitButton>
+      
     </form>
   );
 };
