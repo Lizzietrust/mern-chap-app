@@ -25,6 +25,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onShowChannelSettings,
   getDisplayUnreadCount,
   getChannelDisplayUnreadCount,
+  onNextPage,
+  onPrevPage,
 }) => {
   const {
     sidebarCollapsed,
@@ -46,6 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     handleSelectUser,
     getDisplayUnreadCount,
     getChannelDisplayUnreadCount,
+    selectedChat,
   });
 
   const totalUnreadCount = React.useMemo(() => {
@@ -145,6 +148,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           isLoading={isLoadingUsers}
           searchTerm={searchTerm}
           onSearchTermChange={handleSearch}
+          onNextPage={onNextPage}
+          onPrevPage={onPrevPage}
         />
       )}
     </>
