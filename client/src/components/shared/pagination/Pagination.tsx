@@ -14,10 +14,38 @@ export const Pagination: React.FC<PaginationProps> = React.memo(
   ({ currentPage, totalPages, onNextPage, onPrevPage, isLoading, isDark }) => {
     if (totalPages <= 1) return null;
 
+    const handlePrevClick = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log("Prev button clicked", {
+        currentPage,
+        totalPages,
+        isLoading,
+      });
+      if (currentPage > 1 && !isLoading) {
+        console.log("Calling onPrevPage");
+        onPrevPage();
+      }
+    };
+
+    const handleNextClick = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log("Next button clicked", {
+        currentPage,
+        totalPages,
+        isLoading,
+      });
+      if (currentPage < totalPages && !isLoading) {
+        console.log("Calling onNextPage");
+        onNextPage();
+      }
+    };
+
     return (
       <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700 mt-4">
         <button
-          onClick={onPrevPage}
+          onClick={handlePrevClick}
           disabled={currentPage === 1 || isLoading}
           className={`flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors ${
             currentPage === 1 || isLoading
@@ -36,7 +64,7 @@ export const Pagination: React.FC<PaginationProps> = React.memo(
         </span>
 
         <button
-          onClick={onNextPage}
+          onClick={handleNextClick}
           disabled={currentPage === totalPages || isLoading}
           className={`flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors ${
             currentPage === totalPages || isLoading
