@@ -12,6 +12,8 @@ export interface NewChatModalProps {
   isLoading?: boolean;
   searchTerm: string;
   onSearchTermChange: (searchTerm: string) => void;
+  onNextPage: () => void;
+  onPrevPage: () => void;
 }
 
 export interface SearchInputProps {
