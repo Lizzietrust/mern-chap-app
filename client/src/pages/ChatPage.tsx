@@ -1,701 +1,115 @@
-import { useState, useRef, useEffect, useContext } from "react";
-import { useApp } from "../contexts/appcontext/index";
-import { useNotifications } from "../contexts";
+import React, { useState, useEffect, useRef } from "react";
 import { useTheme } from "../contexts/theme";
 import { Layout } from "../components/Layout";
-import { SelectedChatContext } from "../contexts/selectedChatContext/SelectedChatContext";
 import { useSocket } from "../hooks/useSocket";
-import {
-  type Message,
-  type Chat,
-  type User,
-  type SelectedChatContextType,
-  isChannelChat,
-  type UserChat,
-  type ChannelChat,
-} from "../types/types";
-import ChatContainer from "../components/chat/ChatContainer";
-import { useUsers } from "../hooks/useUsers";
-import {
-  useUserChats,
-  useMessages,
-  useCreateChat,
-  MESSAGE_KEYS as messageKeys,
-  useUploadFile,
-  useSendMessage,
-  useMarkAsRead,
-} from "../hooks/chats";
+import { useMessages } from "../hooks/chats";
+import { isChannelChat } from "../types/types";
+
+import { useChatLogic } from "../hooks/chats/useChatLogic";
+import { useChatData } from "../hooks/chats/useChatData";
+import { useMessageHandling } from "../hooks/chats/useMessageHandling";
+import { useSocketHandlers } from "../hooks/chats/useSocketHandlers";
+
 import Sidebar from "../components/chat/sidebar/Sidebar";
-import { useQueryClient } from "@tanstack/react-query";
-import { useChannels } from "../hooks/channels";
+import ChatContainer from "../components/chat/ChatContainer";
 import CreateChannelModal from "../components/chat/create-channel-modal.tsx/CreateChannelModal";
 import ChannelSettingsModal from "../components/chat/channel-settings/ChannelSettingsModal";
 
+import {
+  getChatTitle,
+  formatTime,
+  getDisplayUnreadCount,
+} from "../utils/chat/chatUtils";
+
 export function ChatPage() {
-  const { state } = useApp();
-  const { success, error } = useNotifications();
   const { isDark } = useTheme();
 
-  const { selectedChat, setSelectedChat } = useContext(
-    SelectedChatContext
-  ) as SelectedChatContextType;
-  const { sendMessage, joinChat, leaveChat, isConnected, onlineUsers, socket } =
-    useSocket();
-  const queryClient = useQueryClient();
-  const [isSending, setIsSending] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers(
-    currentPage,
-    10,
-    searchTerm
-  );
-
   const {
-    data: chats = [],
-    isLoading: chatsLoading,
-    isFetching: chatsFetching,
-    refetch: refetchChats,
-  } = useUserChats();
+    user,
+    selectedChat,
+    setSelectedChat,
+    currentPage,
+    searchTerm,
+    handlePageChange,
+    handleSearch,
+  } = useChatLogic();
+  const {
+    usersData,
+    isLoadingUsers,
+    chatsLoading,
+    chatsFetching,
+    refetchChats,
+    uniqueDirectChats,
+    separatedChannelChats,
+    refetchChannels,
+  } = useChatData();
+  const {
+    isSending,
+    newMessage,
+    setNewMessage,
+    typingUsers,
+    handleTyping,
+    handleFileSelect,
+    handleSendMessage,
+  } = useMessageHandling(selectedChat, user);
+  useSocketHandlers();
 
-  useEffect(() => {
-    if (state.user?._id && !chatsLoading) {
-      console.log("🔄 User authenticated, fetching chats...");
-      refetchChats();
-    }
-  }, [state.user?._id, chatsLoading, refetchChats]);
+  const { joinChat, leaveChat, isConnected } = useSocket();
 
-  // Enhanced deduplication function
-  const removeDuplicateChats = (chats: UserChat[]): UserChat[] => {
-    const chatMap = new Map();
-
-    chats.forEach((chat) => {
-      // Skip chats with no participants or empty participants
-      if (!chat.participants || chat.participants.length === 0) {
-        console.log("🚫 Skipping chat with no participants:", chat._id);
-        return;
-      }
-
-      const otherParticipant = chat.participants.find(
-        (p) => p._id !== state.user?._id
-      );
-
-      // Skip if no other participant found (shouldn't happen with proper data)
-      if (!otherParticipant) {
-        console.log("🚫 Skipping chat with no other participant:", chat._id);
-        return;
-      }
-
-      const participantId = otherParticipant._id;
-      const existingChat = chatMap.get(participantId);
-
-      if (!existingChat) {
-        // First time seeing this participant
-        chatMap.set(participantId, chat);
-        console.log(
-          "✅ Added new chat for participant:",
-          participantId,
-          chat._id
-        );
-      } else {
-        // Compare timestamps to keep the most recent chat
-        const existingTime = existingChat.lastMessageAt
-          ? new Date(existingChat.lastMessageAt).getTime()
-          : 0;
-        const currentTime = chat.lastMessageAt
-          ? new Date(chat.lastMessageAt).getTime()
-          : 0;
-        const existingCreated = new Date(existingChat.createdAt).getTime();
-        const currentCreated = new Date(chat.createdAt).getTime();
-
-        // Prefer the chat with the most recent activity, or the newest created if no messages
-        if (
-          currentTime > existingTime ||
-          (currentTime === existingTime && currentCreated > existingCreated)
-        ) {
-          chatMap.set(participantId, chat);
-          console.log(
-            "🔄 Replaced chat for participant:",
-            participantId,
-            "old:",
-            existingChat._id,
-            "new:",
-            chat._id
-          );
-        } else {
-          console.log(
-            "➖ Keeping existing chat for participant:",
-            participantId,
-            existingChat._id
-          );
-        }
-      }
-    });
-
-    const result = Array.from(chatMap.values());
-
-    return result;
-  };
-
-  // ==================== ADD THIS SEPARATION LOGIC ====================
-  // Separate mixed chats array into direct chats and channel chats
-  const separateChats = (allChats: Chat[] = []) => {
-    const directChats = allChats.filter(
-      (chat) => chat?.type === "direct"
-    ) as UserChat[];
-
-    const channelChats = allChats.filter(
-      (chat) => chat?.type === "channel"
-    ) as ChannelChat[];
-
-    return { directChats, channelChats };
-  };
-
-  const { directChats, channelChats: separatedChannelChats } =
-    separateChats(chats);
-
-  const uniqueDirectChats = removeDuplicateChats(directChats);
-
-  const allChannels = separatedChannelChats;
-
-  useEffect(() => {
-    console.log("🔍 Chat Separation Debug:", {
-      allChatsCount: chats.length,
-      directChatsCount: directChats.length,
-      separatedChannelChatsCount: separatedChannelChats.length,
-      directChats: directChats,
-      separatedChannelChats: separatedChannelChats,
-    });
-  }, [chats, directChats, separatedChannelChats]);
-  // ==================== END SEPARATION LOGIC ====================
+  const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+  const [showChannelSettings, setShowChannelSettings] = useState(false);
 
   const { data: messages, isLoading: messagesLoading } = useMessages(
     selectedChat?._id
   );
 
-  const createChatMutation = useCreateChat();
-  const uploadFileMutation = useUploadFile();
-  const sendMessageMutation = useSendMessage();
-  const markAsReadMutation = useMarkAsRead();
+  const currentChatRoomRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (createChatMutation.isError) {
-      console.error("Chat creation error:", createChatMutation.error);
-      error("Failed to create chat");
-    }
-  }, [createChatMutation.isError, createChatMutation.error, error]);
+    const chatId = selectedChat?._id;
 
-  const [newMessage, setNewMessage] = useState("");
-
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleTyping = (data: {
-      userId: string;
-      isTyping: boolean;
-      chatId: string;
-    }) => {
-      if (
-        data.chatId === selectedChat?._id &&
-        data.userId !== state.user?._id
-      ) {
-        setTypingUsers((prev) => ({
-          ...prev,
-          [data.userId]: data.isTyping,
-        }));
+    if (!chatId || !isConnected) {
+      if (currentChatRoomRef.current) {
+        leaveChat(currentChatRoomRef.current);
+        currentChatRoomRef.current = null;
       }
-    };
-
-    socket.on("typing", handleTyping);
-
-    return () => {
-      socket.off("typing", handleTyping);
-    };
-  }, [socket, selectedChat?._id, state.user?._id]);
-
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleSocketConnect = () => {
-      console.log("✅ Socket connected for messaging");
-    };
-
-    const handleSocketDisconnect = () => {
-      console.log("❌ Socket disconnected");
-    };
-
-    socket.on("connect", handleSocketConnect);
-    socket.on("disconnect", handleSocketDisconnect);
-
-    return () => {
-      socket.off("connect", handleSocketConnect);
-      socket.off("disconnect", handleSocketDisconnect);
-    };
-  }, [socket]);
-
-  const handleTyping = () => {
-    if (!selectedChat || !socket) return;
-
-    socket.emit("typing", {
-      chatId: selectedChat._id,
-      isTyping: true,
-    });
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("typing", {
-        chatId: selectedChat._id,
-        isTyping: false,
-      });
-    }, 2000);
-  };
-
-  const handleFileSelect = async (file: File) => {
-    if (!file || !state.user || !selectedChat || isSending) {
       return;
     }
 
-    const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-      error(`File too large. Maximum size is ${formatFileSize(maxSize)}`);
+    if (currentChatRoomRef.current === chatId) {
       return;
     }
 
-    console.log("Uploading file:", file.name);
-
-    const sender: User = state.user;
-    const chatId: string = selectedChat._id;
-    const tempMessageId = `temp-${Date.now()}`;
-    const messageType = getMessageTypeFromFile(file);
-
-    setIsSending(true);
-    const tempMessage: Message = {
-      _id: tempMessageId,
-      sender: sender,
-      messageType: messageType,
-      content: `Uploading ${file.name}...`,
-      text: `Uploading ${file.name}...`,
-      chatId: chatId,
-      createdAt: new Date(),
-      timestamp: new Date(),
-      isOptimistic: true,
-    };
-
-    const messagesQueryKey = messageKeys.list(chatId);
-    const previousMessages =
-      queryClient.getQueryData<Message[]>(messagesQueryKey);
-    queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
-      return oldMessages ? [...oldMessages, tempMessage] : [tempMessage];
-    });
-
-    try {
-      const uploadResponse = await uploadFileMutation.mutateAsync(file);
-
-      console.log("File uploaded:", uploadResponse);
-
-      await sendMessageMutation.mutateAsync({
-        chatId,
-        messageType,
-        fileUrl: uploadResponse.fileUrl,
-        fileName: uploadResponse.fileName,
-        fileSize: uploadResponse.fileSize,
-        content: file.name,
-      });
-      success(`File "${file.name}" sent successfully!`);
-
-      setTimeout(() => {
-        queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
-          return oldMessages
-            ? oldMessages.filter((msg) => msg._id !== tempMessageId)
-            : [];
-        });
-      }, 1000);
-    } catch (err) {
-      console.error("File upload failed:", err);
-      queryClient.setQueryData<Message[]>(
-        messagesQueryKey,
-        previousMessages || []
-      );
-      error("Failed to send file. Please try again.");
-    } finally {
-      setIsSending(false);
+    if (currentChatRoomRef.current) {
+      leaveChat(currentChatRoomRef.current);
     }
-  };
 
-  const getMessageTypeFromFile = (file: File): "text" | "image" | "file" => {
-    if (file.type.startsWith("image/")) return "image";
-    if (file.type.startsWith("video/")) return "file";
-    if (file.type.startsWith("audio/")) return "file";
-    return "file";
-  };
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
-
-  const {
-    data: channels = [],
-    isLoading: channelsLoading,
-    refetch: refetchChannels,
-  } = useChannels();
-
-  useEffect(() => {
-    console.log("🔍 Channel Debug (Using only separated channels):", {
-      allChatsCount: chats.length,
-      directChatsCount: directChats.length,
-      separatedChannelChatsCount: separatedChannelChats.length,
-      separatedChannelChats: separatedChannelChats.map((c) => ({
-        id: c._id,
-        name: c.name,
-      })),
-    });
-  }, [chats, directChats, separatedChannelChats]);
-
-  const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
-  const [showChannelSettings, setShowChannelSettings] = useState(false);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  useEffect(() => {
-    if (selectedChat && isConnected) {
-      joinChat(selectedChat._id);
-
-      return () => {
-        leaveChat(selectedChat._id);
-      };
-    }
-  }, [selectedChat, isConnected, joinChat, leaveChat]);
-
-  // In your ChatPage component, add a function to enhance participants with online status
-  const getEnhancedParticipants = (chat: Chat) => {
-    if (!chat.participants) return chat.participants;
-
-    return chat.participants.map((participant) => {
-      const onlineUser = onlineUsers.find((u) => u._id === participant._id);
-      return {
-        ...participant,
-        isOnline: onlineUser?.isOnline || participant.isOnline || false,
-        lastSeen: onlineUser?.lastSeen || participant.lastSeen,
-      };
-    });
-  };
-
-  useEffect(() => {
-    if (selectedChat && selectedChat.type === "direct") {
-      const enhancedParticipants = getEnhancedParticipants(selectedChat);
-      setSelectedChat({
-        ...selectedChat,
-        participants: enhancedParticipants,
-      });
-    }
-  }, [onlineUsers, selectedChat?._id]);
-
-  useEffect(() => {
-    if (selectedChat && state.user?._id) {
-      // Automatically mark chat as read when selected
-      const markAsRead = async () => {
-        try {
-          await markAsReadMutation.mutateAsync(selectedChat._id);
-          console.log(`✅ Auto-marked chat ${selectedChat._id} as read`);
-        } catch (error) {
-          console.error("❌ Failed to auto-mark chat as read:", error);
-        }
-      };
-
-      markAsRead();
-    }
-  }, [selectedChat?._id, state.user?._id]);
-
-  useEffect(() => {
-    if (!socket || !selectedChat) return;
-
-    const handleNewMessage = (message: Message) => {
-      console.log("📨 Received new message via socket:", message._id);
-
-      if (message.chatId === selectedChat._id) {
-        const messagesQueryKey = messageKeys.list(selectedChat._id);
-
-        queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
-          if (!oldMessages) return [message];
-
-          // Remove any optimistic messages with the same content
-          const filteredMessages = oldMessages.filter(
-            (msg) =>
-              !msg.isOptimistic ||
-              msg.content !== message.content ||
-              (typeof message.sender === "object" &&
-                typeof msg.sender === "object" &&
-                msg.sender._id !== message.sender._id)
-          );
-
-          // Check if message already exists
-          const exists = filteredMessages.some(
-            (msg) => msg._id === message._id
-          );
-          if (!exists) {
-            return [...filteredMessages, message];
-          }
-
-          return filteredMessages;
-        });
-
-        // Auto-mark as read
-        if (
-          typeof message.sender === "object" &&
-          message.sender._id !== state.user?._id
-        ) {
-          markAsReadMutation.mutate(selectedChat._id);
-        }
-      }
-    };
-
-    socket.on("newMessage", handleNewMessage);
+    joinChat(chatId);
+    currentChatRoomRef.current = chatId;
 
     return () => {
-      socket.off("newMessage", handleNewMessage);
-    };
-  }, [socket, selectedChat, queryClient, state.user?._id, markAsReadMutation]);
-
-  const handleSelectUser = async (userId: string) => {
-    try {
-      const chat: Chat = await createChatMutation.mutateAsync(userId);
-      setSelectedChat(chat);
-      console.log("Chat created/selected:", chat);
-
-      await refetchChats();
-    } catch (err) {
-      console.error("Error creating or fetching chat:", err);
-      error("Failed to create or open chat");
-    }
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const handleSearch = (search: string) => {
-    setSearchTerm(search);
-    setCurrentPage(1);
-  };
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!newMessage.trim() || !state.user || !selectedChat || isSending) {
-      return;
-    }
-
-    const sender: User = state.user;
-    const chatId: string = selectedChat._id;
-    const content: string = newMessage.trim();
-    const tempMessageId = `temp-${Date.now()}-${sender._id}`;
-
-    console.log("Sending message:", { chatId, senderId: sender._id, content });
-
-    setIsSending(true);
-
-    const tempMessage: Message = {
-      _id: tempMessageId,
-      sender: sender,
-      messageType: "text",
-      content: content,
-      text: content,
-      chat: chatId,
-      chatId: chatId,
-      createdAt: new Date(),
-      timestamp: new Date(),
-      isOptimistic: true,
-      isSending: true,
-    };
-
-    const messagesQueryKey = messageKeys.list(chatId);
-
-    // Add optimistic message
-    queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
-      if (!oldMessages) return [tempMessage];
-      return [...oldMessages, tempMessage];
-    });
-
-    setNewMessage("");
-
-    // Stop typing indicator
-    if (socket) {
-      socket.emit("typing", {
-        chatId: selectedChat._id,
-        isTyping: false,
-      });
-    }
-
-    try {
-      // Send the message via HTTP
-      await sendMessageMutation.mutateAsync({
-        chatId,
-        messageType: "text",
-        content: content,
-      });
-
-      console.log("✅ Message sent successfully via HTTP");
-
-      // The socket should handle the real message, but we'll remove the optimistic one after a delay
-      setTimeout(() => {
-        queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
-          return oldMessages?.filter((msg) => msg._id !== tempMessageId) || [];
-        });
-      }, 3000);
-    } catch (err) {
-      console.error("❌ Failed to send message:", err);
-
-      // Mark optimistic message as failed
-      queryClient.setQueryData<Message[]>(messagesQueryKey, (oldMessages) => {
-        if (!oldMessages) return [];
-        return oldMessages.map((msg) =>
-          msg._id === tempMessageId
-            ? { ...msg, failed: true, isSending: false }
-            : msg
-        );
-      });
-
-      // Restore the message content for retry
-      setNewMessage(content);
-      error("Failed to send message. Please try again.");
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const formatTime = (date: Date | string): string => {
-    const dateObj = typeof date === "string" ? new Date(date) : date;
-
-    return dateObj.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const getChatTitle = (): string => {
-    if (!selectedChat) return "Select a chat";
-
-    if (selectedChat.type === "channel") {
-      return selectedChat.name || "Channel";
-    }
-
-    if (selectedChat.type === "direct") {
-      const otherUser = selectedChat.participants.find(
-        (p) => p._id !== state.user?._id
-      );
-
-      if (otherUser) {
-        return (
-          otherUser.name ||
-          `${otherUser.firstName || ""} ${otherUser.lastName || ""}`.trim() ||
-          otherUser.email ||
-          "Unknown User"
-        );
+      if (currentChatRoomRef.current === chatId) {
+        leaveChat(chatId);
+        currentChatRoomRef.current = null;
       }
-      return "Unknown User";
-    }
-
-    return "Select a chat";
-  };
-
-  const getDisplayUnreadCount = (chat: UserChat): number => {
-    // If this chat is currently selected/opened, return 0
-    if (selectedChat?._id === chat._id) {
-      return 0;
-    }
-
-    if (typeof chat.unreadCount === "number") {
-      return chat.unreadCount;
-    }
-
-    // If unreadCount is an object/map, extract the count for current user
-    if (chat.unreadCount && typeof chat.unreadCount === "object") {
-      const userCount = chat.unreadCount[state.user?._id || ""];
-      return typeof userCount === "number" ? userCount : 0;
-    }
-
-    // Default to 0
-    return 0;
-  };
-
-  const getChannelDisplayUnreadCount = (channel: ChannelChat): number => {
-    // If this channel is currently selected/opened, return 0
-    if (selectedChat?._id === channel._id) {
-      return 0;
-    }
-
-    if (typeof channel.unreadCount === "number") {
-      return channel.unreadCount;
-    }
-
-    if (channel.unreadCount && typeof channel.unreadCount === "object") {
-      const userCount = channel.unreadCount[state.user?._id || ""];
-      return typeof userCount === "number" ? userCount : 0;
-    }
-
-    return 0;
-  };
+    };
+  }, [selectedChat?._id, isConnected, joinChat, leaveChat]);
 
   const isTyping = Object.values(typingUsers).some((isTyping) => isTyping);
+  const showLoading =
+    chatsLoading || (chatsFetching && uniqueDirectChats.length === 0);
 
-  const showLoading = chatsLoading || (chatsFetching && chats.length === 0);
+  const getSafeChatTitle = () => {
+    if (!selectedChat) return "Select a chat";
+    return getChatTitle(selectedChat, user);
+  };
 
-  if (!state.user) {
-    return (
-      <div
-        className={`min-h-screen flex items-center justify-center ${
-          isDark ? "bg-gray-900" : "bg-gray-50"
-        }`}
-      >
-        <div className="text-center">
-          <h2
-            className={`text-2xl font-bold ${
-              isDark ? "text-white" : "text-gray-900"
-            }`}
-          >
-            Please log in to access the chat
-          </h2>
-        </div>
-      </div>
-    );
+  if (!user) {
+    return <LoginRequired isDark={isDark} />;
   }
 
   if (showLoading) {
-    return (
-      <div
-        className={`min-h-screen flex items-center justify-center ${
-          isDark ? "bg-gray-900" : "bg-gray-50"
-        }`}
-      >
-        <div className="text-center">
-          <h2
-            className={`text-2xl font-bold ${
-              isDark ? "text-white" : "text-gray-900"
-            }`}
-          >
-            Loading your conversations...
-          </h2>
-        </div>
-      </div>
-    );
+    return <LoadingState isDark={isDark} />;
   }
 
   return (
@@ -706,57 +120,45 @@ export function ChatPage() {
         }`}
       >
         {showLoading ? (
-          <div
-            className={`flex items-center justify-center w-80 ${
-              isDark ? "text-white" : "text-black"
-            }`}
-          >
-            <div>Loading chats...</div>
-          </div>
+          <LoadingSidebar isDark={isDark} />
         ) : (
           <Sidebar
-            key={state.user?._id}
+            key={user._id}
             isDark={isDark}
             selectedChat={selectedChat}
             users={usersData?.users}
+            handleSearch={handleSearch}
             directChats={uniqueDirectChats}
-            channels={allChannels}
+            channels={separatedChannelChats}
             setSelectedChat={setSelectedChat}
-            handleSelectUser={handleSelectUser}
             currentPage={currentPage}
             totalUsers={usersData?.totalUsers || 0}
             onPageChange={handlePageChange}
             onSearch={handleSearch}
             isLoadingUsers={isLoadingUsers}
             searchTerm={searchTerm}
-            handleSearch={handleSearch}
-            channelsLoading={false}
             onCreateChannel={() => setShowCreateChannelModal(true)}
             onShowChannelSettings={() => setShowChannelSettings(true)}
-            getDisplayUnreadCount={getDisplayUnreadCount}
-            getChannelDisplayUnreadCount={getChannelDisplayUnreadCount}
+            getDisplayUnreadCount={(chat) =>
+              getDisplayUnreadCount(chat, selectedChat?._id, user._id)
+            }
+            getChannelDisplayUnreadCount={(channel) =>
+              getDisplayUnreadCount(channel, selectedChat?._id, user._id)
+            }
           />
         )}
 
         {messagesLoading ? (
-          <div
-            className={`flex-1 flex items-center justify-center ${
-              isDark ? "text-white" : "text-black"
-            }`}
-          >
-            <div>Loading messages...</div>
-          </div>
+          <LoadingMessages isDark={isDark} />
         ) : (
           <ChatContainer
             selectedChat={selectedChat}
             isDark={isDark}
             setSelectedChat={setSelectedChat}
-            getChatTitle={getChatTitle}
-            // getChatSubtitle={getChatSubtitle}
+            getChatTitle={getSafeChatTitle}
             messages={messages || []}
             formatTime={formatTime}
             isTyping={isTyping}
-            messagesEndRef={messagesEndRef}
             handleSendMessage={handleSendMessage}
             handleFileSelect={handleFileSelect}
             newMessage={newMessage}
@@ -768,10 +170,11 @@ export function ChatPage() {
             }}
             isSending={isSending}
             onShowChannelSettings={() => setShowChannelSettings(true)}
-            stateUser={state.user}
+            stateUser={user}
           />
         )}
 
+        {/* Modals */}
         {showCreateChannelModal && (
           <CreateChannelModal
             isDark={isDark}
@@ -798,3 +201,61 @@ export function ChatPage() {
     </Layout>
   );
 }
+
+const LoginRequired: React.FC<{ isDark: boolean }> = ({ isDark }) => (
+  <div
+    className={`min-h-screen flex items-center justify-center ${
+      isDark ? "bg-gray-900" : "bg-gray-50"
+    }`}
+  >
+    <div className="text-center">
+      <h2
+        className={`text-2xl font-bold ${
+          isDark ? "text-white" : "text-gray-900"
+        }`}
+      >
+        Please log in to access the chat
+      </h2>
+    </div>
+  </div>
+);
+
+const LoadingState: React.FC<{ isDark: boolean }> = ({ isDark }) => (
+  <div
+    className={`min-h-screen flex items-center justify-center ${
+      isDark ? "bg-gray-900" : "bg-gray-50"
+    }`}
+  >
+    <div className="text-center">
+      <h2
+        className={`text-2xl font-bold ${
+          isDark ? "text-white" : "text-gray-900"
+        }`}
+      >
+        Loading your conversations...
+      </h2>
+    </div>
+  </div>
+);
+
+const LoadingSidebar: React.FC<{ isDark: boolean }> = ({ isDark }) => (
+  <div
+    className={`flex items-center justify-center w-80 ${
+      isDark ? "text-white" : "text-black"
+    }`}
+  >
+    <div>Loading chats...</div>
+  </div>
+);
+
+const LoadingMessages: React.FC<{ isDark: boolean }> = ({ isDark }) => (
+  <div
+    className={`flex-1 flex items-center justify-center ${
+      isDark ? "text-white" : "text-black"
+    }`}
+  >
+    <div>Loading messages...</div>
+  </div>
+);
+
+export default ChatPage;
