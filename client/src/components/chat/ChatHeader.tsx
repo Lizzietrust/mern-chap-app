@@ -1,5 +1,7 @@
 import React from "react";
 import type { ChatHeaderProps } from "../../types/chat-container.types";
+import { useSocket } from "../../hooks/useSocket";
+import { getUserId } from "../../types/types";
 
 const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
   ({
@@ -10,9 +12,26 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
     subtitle,
     onSearch,
     onMenu,
-    // onParticipants,
+    onParticipants,
+    // onSettings,
   }) => {
+    const { onlineUsers } = useSocket();
     const isChannel = selectedChat?.type === "channel";
+
+    const getMemberInfo = () => {
+      if (!isChannel || !selectedChat?.members) return subtitle;
+
+      const totalMembers = selectedChat.members.length;
+
+      const onlineMembers = selectedChat.members.filter((member) => {
+        const memberId = getUserId(member);
+        return onlineUsers.some(
+          (onlineUser) => onlineUser._id === memberId && onlineUser.isOnline
+        );
+      }).length;
+
+      return `${totalMembers} members • ${onlineMembers} online`;
+    };
 
     return (
       <div
@@ -67,7 +86,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
                     isDark ? "text-gray-400" : "text-gray-500"
                   }`}
                 >
-                  {subtitle}
+                  {isChannel ? getMemberInfo() : subtitle}
                 </p>
               </div>
             </div>
@@ -76,6 +95,15 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
             <button onClick={onSearch} title="Search messages" className="p-2">
               🔍
             </button>
+            {onParticipants && (
+              <button
+                onClick={onParticipants}
+                title="View participants"
+                className="p-2"
+              >
+                👥
+              </button>
+            )}
             <button onClick={onMenu} title="More options" className="p-2">
               ⋮
             </button>
