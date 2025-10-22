@@ -11,6 +11,7 @@ interface UseSidebarProps {
   handleSelectUser?: (userId: string) => void;
   getDisplayUnreadCount: (chat: UserChat) => number;
   getChannelDisplayUnreadCount: (channel: ChannelChat) => number;
+  selectedChat?: ChatOrNull;
 }
 
 export const useSidebar = ({
@@ -20,6 +21,7 @@ export const useSidebar = ({
   handleSelectUser,
   getDisplayUnreadCount,
   getChannelDisplayUnreadCount,
+  selectedChat,
 }: UseSidebarProps) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
@@ -105,20 +107,44 @@ export const useSidebar = ({
   }, [directChats, onlineUsers]);
 
   const sortedDirectChats = useMemo(() => {
-    return enhancedChats?.sort((a, b) => {
+    if (!enhancedChats) return [];
+
+    return [...enhancedChats].sort((a, b) => {
+      if (selectedChat && a._id === selectedChat._id) return -1;
+      if (selectedChat && b._id === selectedChat._id) return 1;
+
       const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
       const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
-      return timeB - timeA;
+
+      const createTimeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const createTimeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+
+      const finalTimeA = timeA || createTimeA;
+      const finalTimeB = timeB || createTimeB;
+
+      return finalTimeB - finalTimeA;
     });
-  }, [enhancedChats]);
+  }, [enhancedChats, selectedChat]);
 
   const sortedChannels = useMemo(() => {
-    return channels?.sort((a, b) => {
+    if (!channels) return [];
+
+    return [...channels].sort((a, b) => {
+      if (selectedChat && a._id === selectedChat._id) return -1;
+      if (selectedChat && b._id === selectedChat._id) return 1;
+
       const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
       const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
-      return timeB - timeA;
+
+      const createTimeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const createTimeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+
+      const finalTimeA = timeA || createTimeA;
+      const finalTimeB = timeB || createTimeB;
+
+      return finalTimeB - finalTimeA;
     });
-  }, [channels]);
+  }, [channels, selectedChat]);
 
   return {
     sidebarCollapsed,
