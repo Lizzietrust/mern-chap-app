@@ -8,6 +8,9 @@ import {
   markChatAsRead,
   getUnreadCounts,
   debugChats,
+  markMessageAsDelivered,
+  markMessageAsRead,
+  getMessageStatus,
 } from "../controllers/MessageController.js";
 import { verifyToken } from "../middlewares/AuthMiddleware.js";
 import multer from "multer";
@@ -49,5 +52,16 @@ messageRoutes.get("/chats/unread-counts", verifyToken, getUnreadCounts);
 messageRoutes.delete("/chats/cleanup", verifyToken, cleanupChats);
 messageRoutes.post("/chats/fix-unread-counts", fixUnreadCounts);
 messageRoutes.get("/chats/debug", debugChats);
+messageRoutes.patch(
+  "/:messageId/delivered",
+  verifyToken,
+  markMessageAsDelivered
+);
+messageRoutes.patch(
+  "/:messageId/read",
+  verifyToken,
+  markMessageAsRead
+);
+messageRoutes.get("/:messageId/status", verifyToken, getMessageStatus);
 
 export default messageRoutes;
