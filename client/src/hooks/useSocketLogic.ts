@@ -18,6 +18,12 @@ interface ServerMessage {
   fileUrl?: string;
   fileName?: string;
   fileSize?: number;
+  status?: "sent" | "delivered" | "read";
+  readBy?: string[] | User[];
+  readReceipts?: Array<{
+    user: string | User;
+    readAt: Date;
+  }>;
 }
 
 interface UserOnlineData {
@@ -28,6 +34,13 @@ interface UserOnlineData {
 interface UserOfflineData {
   userId: string;
   lastSeen: Date;
+}
+
+interface MessageStatusUpdateData {
+  messageId: string;
+  status: "sent" | "delivered" | "read";
+  readBy?: string[] | User[];
+  chatId: string;
 }
 
 export function useSocketLogic(): SocketContextType {
@@ -49,15 +62,25 @@ export function useSocketLogic(): SocketContextType {
         _id: serverMessage._id,
         id: serverMessage._id,
         sender: serverMessage.sender,
-        messageType: serverMessage.messageType,
+        messageType: serverMessage.messageType as
+          | "text"
+          | "image"
+          | "file"
+          | "audio"
+          | "video"
+          | "system",
         content: serverMessage.content || "",
         chatId: serverMessage.chatId,
         chat: serverMessage.chatId,
-        timestamp: new Date(serverMessage.createdAt),
-        createdAt: new Date(serverMessage.createdAt),
+        timestamp: new Date(serverMessage.createdAt).toISOString(),
+        createdAt: new Date(serverMessage.createdAt).toISOString(),
         fileUrl: serverMessage.fileUrl,
         fileName: serverMessage.fileName,
         fileSize: serverMessage.fileSize,
+        status:
+          (serverMessage.status as "sent" | "delivered" | "read") || "sent",
+        readBy: serverMessage.readBy || [],
+        readReceipts: serverMessage.readReceipts || [],
       };
 
       if (serverMessage.messageType === "text") {
@@ -130,6 +153,36 @@ export function useSocketLogic(): SocketContextType {
     }, 1000);
   }, [queryClient]);
 
+  const handleMessageStatusUpdate = useCallback(
+    (data: MessageStatusUpdateData) => {
+      console.log(
+        `📨 Message status update: ${data.messageId} -> ${data.status}`
+      );
+
+      const { messageId, status, readBy, chatId } = data;
+
+      const messagesQueryKey = messageKeys.list(chatId);
+
+      queryClient.setQueryData<ClientMessage[]>(
+        messagesQueryKey,
+        (oldMessages = []) => {
+          return oldMessages.map((msg) =>
+            msg._id === messageId
+              ? {
+                  ...msg,
+                  status,
+                  readBy: readBy || msg.readBy,
+                }
+              : msg
+          );
+        }
+      );
+
+      queryClient.invalidateQueries({ queryKey: ["chats"] });
+    },
+    [queryClient]
+  );
+
   const eventHandlersRef = useRef({
     handleNewMessage: (serverMessage: ServerMessage) => {
       const clientMessage = transformServerMessage(serverMessage);
@@ -187,6 +240,10 @@ export function useSocketLogic(): SocketContextType {
         )
       );
     },
+
+    handleMessageStatusUpdate: (data: MessageStatusUpdateData) => {
+      handleMessageStatusUpdate(data);
+    },
   });
 
   useEffect(() => {
@@ -217,11 +274,18 @@ export function useSocketLogic(): SocketContextType {
     eventHandlersRef.current.handleChatUpdated = () => {
       debouncedHandleChatUpdated();
     };
+
+    eventHandlersRef.current.handleMessageStatusUpdate = (
+      data: MessageStatusUpdateData
+    ) => {
+      handleMessageStatusUpdate(data);
+    };
   }, [
     transformServerMessage,
     filterAndAddMessage,
     queryClient,
     debouncedHandleChatUpdated,
+    handleMessageStatusUpdate,
   ]);
 
   const initializeSocket = useCallback(() => {
@@ -236,6 +300,9 @@ export function useSocketLogic(): SocketContextType {
     newSocket.on(SOCKET_EVENTS.CONNECT, () => {
       console.log("✅ Socket connected:", newSocket.id);
       setIsConnected(true);
+
+      newSocket.emit("userOnline", user._id);
+      console.log(`🟢 Emitted userOnline for user: ${user._id}`);
     });
 
     newSocket.on(SOCKET_EVENTS.CONNECT_ERROR, (error: Error) => {
@@ -260,6 +327,12 @@ export function useSocketLogic(): SocketContextType {
     );
     newSocket.on(SOCKET_EVENTS.CHAT_UPDATED, () =>
       eventHandlersRef.current.handleChatUpdated()
+    );
+
+    newSocket.on(
+      SOCKET_EVENTS.MESSAGE_STATUS_UPDATE,
+      (data: MessageStatusUpdateData) =>
+        eventHandlersRef.current.handleMessageStatusUpdate(data)
     );
 
     newSocket.on(SOCKET_EVENTS.DISCONNECT, (reason: string) => {
