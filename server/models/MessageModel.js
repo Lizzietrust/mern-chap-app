@@ -42,7 +42,6 @@ const messageSchema = new mongoose.Schema(
       required: true,
     },
 
-    // CORRECTED: Simple array of user IDs for readBy
     readBy: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -50,7 +49,6 @@ const messageSchema = new mongoose.Schema(
       },
     ],
 
-    // OPTIONAL: If you want to track read timestamps separately
     readReceipts: [
       {
         user: {
@@ -78,7 +76,8 @@ const messageSchema = new mongoose.Schema(
 // Indexes for better performance
 messageSchema.index({ chatId: 1, createdAt: -1 });
 messageSchema.index({ sender: 1 });
-messageSchema.index({ readBy: 1 }); // Add this for readBy queries
+messageSchema.index({ readBy: 1 }); 
+messageSchema.index({ status: 1 });
 
 const Message = mongoose.model("Message", messageSchema);
 
