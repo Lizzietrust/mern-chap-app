@@ -1,6 +1,8 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import User from "./models/UserModel.js";
+import Message from "./models/MessageModel.js";
+import Chat from "./models/ChatModel.js";
 
 const setupSocket = (server) => {
   const io = new Server(server, {
@@ -17,7 +19,6 @@ const setupSocket = (server) => {
     try {
       console.log("🔐 Socket authentication attempt via cookies");
 
-      // Get the token from cookies instead of socket auth
       const cookies = socket.handshake.headers.cookie;
       console.log("🍪 All cookies received:", cookies);
 
@@ -26,7 +27,6 @@ const setupSocket = (server) => {
         return next(new Error("Authentication error: No cookies provided"));
       }
 
-      // Look specifically for the 'jwt' cookie (based on your auth controller)
       const jwtCookie = cookies
         .split(";")
         .find((c) => c.trim().startsWith("jwt="));
@@ -48,14 +48,12 @@ const setupSocket = (server) => {
         return next(new Error("Authentication error: Empty token"));
       }
 
-      // Verify the token - NOTE: Use JWT_KEY (not JWT_SECRET)
       const decoded = jwt.verify(
         token,
         process.env.JWT_KEY || process.env.JWT_SECRET
       );
       console.log("✅ Token decoded for user:", decoded.userId);
 
-      // Find the user
       const user = await User.findById(decoded.userId).select(
         "_id firstName lastName email image isOnline lastSeen"
       );
@@ -65,7 +63,6 @@ const setupSocket = (server) => {
         return next(new Error("Authentication error: User not found"));
       }
 
-      // Update user as online when they connect - use findByIdAndUpdate to avoid pre-save hook
       await User.findByIdAndUpdate(
         decoded.userId,
         {
@@ -75,7 +72,6 @@ const setupSocket = (server) => {
         { new: true }
       );
 
-      // Store user in connected users map
       connectedUsers.set(user._id.toString(), {
         socketId: socket.id,
         user: {
@@ -115,10 +111,8 @@ const setupSocket = (server) => {
   io.on("connection", (socket) => {
     console.log(`✅ User ${socket.userId} connected with socket ${socket.id}`);
 
-    // Join user to their personal room
     socket.join(socket.userId);
 
-    // Get all currently online users
     const getOnlineUsers = async () => {
       try {
         const onlineUsers = await User.find({
@@ -133,7 +127,6 @@ const setupSocket = (server) => {
       }
     };
 
-    // Send current online users to the newly connected user
     getOnlineUsers().then((onlineUsers) => {
       socket.emit("onlineUsers", onlineUsers);
       console.log(
@@ -141,7 +134,6 @@ const setupSocket = (server) => {
       );
     });
 
-    // Broadcast to ALL other users that this user came online
     socket.broadcast.emit("userOnline", {
       userId: socket.userId,
       user: socket.user,
@@ -150,7 +142,52 @@ const setupSocket = (server) => {
       `📢 Broadcasted userOnline for ${socket.userId} to all other users`
     );
 
-    // Handle manual status updates (for logout)
+    socket.on("userOnline", async (userId) => {
+      try {
+        console.log(
+          `🟢 User ${userId} came online, marking messages as delivered`
+        );
+
+        const undeliveredMessages = await Message.find({
+          status: "sent",
+          chatId: {
+            $in: await Chat.find({
+              $or: [{ participants: userId }, { members: userId }],
+            }).distinct("_id"),
+          },
+          sender: { $ne: userId },
+        });
+
+        console.log(
+          `📨 Found ${undeliveredMessages.length} undelivered messages for user ${userId}`
+        );
+
+        for (const message of undeliveredMessages) {
+          const updatedMessage = await Message.findByIdAndUpdate(
+            message._id,
+            {
+              status: "delivered",
+              $addToSet: { readBy: userId },
+            },
+            { new: true }
+          ).populate("readBy", "_id firstName lastName email image");
+
+          io.to(message.chatId.toString()).emit("messageStatusUpdate", {
+            messageId: message._id,
+            status: "delivered",
+            readBy: updatedMessage.readBy,
+            chatId: message.chatId,
+          });
+
+          console.log(
+            `✅ Marked message ${message._id} as delivered to user ${userId}`
+          );
+        }
+      } catch (error) {
+        console.error("❌ Error marking messages as delivered:", error);
+      }
+    });
+
     socket.on("updateUserStatus", async (data) => {
       try {
         const { isOnline } = data;
@@ -160,7 +197,6 @@ const setupSocket = (server) => {
           }`
         );
 
-        // Update user status in database
         await User.findByIdAndUpdate(
           socket.userId,
           {
@@ -170,18 +206,15 @@ const setupSocket = (server) => {
           { new: true }
         );
 
-        // Update the user object in the connected users map
         if (connectedUsers.has(socket.userId)) {
           const userData = connectedUsers.get(socket.userId);
           userData.user.isOnline = isOnline;
           userData.user.lastSeen = new Date();
         }
 
-        // Update socket user object
         socket.user.isOnline = isOnline;
         socket.user.lastSeen = new Date();
 
-        // Broadcast the status change to all other users
         if (isOnline) {
           socket.broadcast.emit("userOnline", {
             userId: socket.userId,
@@ -212,7 +245,6 @@ const setupSocket = (server) => {
       console.log(`👋 User ${socket.userId} left chat ${chatId}`);
     });
 
-    // Handle typing events
     socket.on("typing", (data) => {
       const { chatId, isTyping } = data;
       socket.to(chatId).emit("typing", {
@@ -232,10 +264,8 @@ const setupSocket = (server) => {
       console.log(`❌ User ${socket.userId} disconnected. Reason: ${reason}`);
 
       try {
-        // Remove from connected users map
         connectedUsers.delete(socket.userId);
 
-        // Update user as offline in database - use findByIdAndUpdate to avoid pre-save hook
         await User.findByIdAndUpdate(
           socket.userId,
           {
@@ -245,7 +275,6 @@ const setupSocket = (server) => {
           { new: true }
         );
 
-        // Broadcast to ALL other users that this user went offline
         socket.broadcast.emit("userOffline", {
           userId: socket.userId,
           lastSeen: new Date(),
@@ -259,21 +288,17 @@ const setupSocket = (server) => {
       }
     });
 
-    // Handle connection errors
     socket.on("error", (error) => {
       console.error(`Socket error for user ${socket.userId}:`, error);
     });
   });
 
-  // Periodic cleanup of disconnected users (optional)
   setInterval(async () => {
     try {
-      // Find users marked as online but not in connectedUsers map
       const onlineUsers = await User.find({ isOnline: true });
 
       for (const user of onlineUsers) {
         if (!connectedUsers.has(user._id.toString())) {
-          // User is marked online but not connected - mark as offline
           await User.findByIdAndUpdate(user._id, {
             isOnline: false,
             lastSeen: new Date(),
@@ -284,7 +309,7 @@ const setupSocket = (server) => {
     } catch (error) {
       console.error("Error in periodic cleanup:", error);
     }
-  }, 60000); // Run every minute
+  }, 60000);
 
   return io;
 };
