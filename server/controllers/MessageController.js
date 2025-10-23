@@ -58,12 +58,11 @@ export const createChat = async (req, res, next) => {
         .json({ message: "Cannot create chat with yourself" });
     }
 
-    // More robust duplicate check
     const existingChat = await Chat.findOne({
       type: "direct",
       participants: {
         $all: [req.userId, userId],
-        $size: 2, // Ensure exactly 2 participants
+        $size: 2,
       },
     }).populate(
       "participants",
@@ -76,7 +75,7 @@ export const createChat = async (req, res, next) => {
     }
 
     const newChat = new Chat({
-      type: "direct", // Explicitly set type
+      type: "direct",
       participants: [req.userId, userId],
     });
 
@@ -133,7 +132,6 @@ export const sendMessage = async (req, res, next) => {
       participants: chat.participants,
     });
 
-    // Verify user permissions
     if (chat.type === "direct") {
       if (!chat.participants.includes(sender)) {
         return res
@@ -148,7 +146,6 @@ export const sendMessage = async (req, res, next) => {
       }
     }
 
-    // Create and save message
     const newMessage = new Message({
       sender,
       messageType,
@@ -157,20 +154,25 @@ export const sendMessage = async (req, res, next) => {
       fileName,
       fileSize,
       chatId,
+      status: "sent",
+      readBy: [sender],
+      readReceipts: [
+        {
+          user: sender,
+          readAt: new Date(),
+        },
+      ],
     });
 
     console.log("💾 Saving message to database...");
     const savedMessage = await newMessage.save();
     console.log("✅ Message saved to database:", savedMessage._id);
 
-    // ==================== FIXED UNREAD COUNT LOGIC ====================
     console.log("🔄 Updating unread counts...");
 
     try {
-      // First, ensure the chat has valid unreadCount structure
       const db = mongoose.connection.db;
 
-      // Check if unreadCount is an array and fix it if needed
       const chatDoc = await db.collection("chats").findOne({ _id: chat._id });
       if (Array.isArray(chatDoc.unreadCount)) {
         console.log("🔄 Fixing array unreadCount before update...");
@@ -179,12 +181,10 @@ export const sendMessage = async (req, res, next) => {
           .updateOne({ _id: chat._id }, { $set: { unreadCount: {} } });
       }
 
-      // Now update unread counts using direct MongoDB operations
       if (chat.type === "direct") {
         for (const participantId of chat.participants) {
           const participantStr = participantId.toString();
           if (participantStr !== sender) {
-            // Increment for other participants
             await db.collection("chats").updateOne(
               { _id: chat._id },
               {
@@ -195,7 +195,6 @@ export const sendMessage = async (req, res, next) => {
               `📈 Incremented unread count for participant: ${participantStr}`
             );
           } else {
-            // Reset for sender
             await db.collection("chats").updateOne(
               { _id: chat._id },
               {
@@ -206,11 +205,9 @@ export const sendMessage = async (req, res, next) => {
           }
         }
       } else if (chat.type === "channel") {
-        // FIXED: For channels, increment unread count for ALL members except sender
         for (const memberId of chat.members) {
           const memberStr = memberId.toString();
           if (memberStr !== sender) {
-            // Increment for other members
             await db.collection("chats").updateOne(
               { _id: chat._id },
               {
@@ -219,7 +216,6 @@ export const sendMessage = async (req, res, next) => {
             );
             console.log(`📈 Incremented unread count for member: ${memberStr}`);
           } else {
-            // Reset for sender
             await db.collection("chats").updateOne(
               { _id: chat._id },
               {
@@ -234,18 +230,15 @@ export const sendMessage = async (req, res, next) => {
       console.error("❌ Error updating unread counts:", unreadError);
       console.log("⚠️ Continuing without unread count update");
     }
-    // ==================== END FIXED UNREAD COUNT LOGIC ====================
 
-    // Update chat with last message info
     await Chat.findByIdAndUpdate(chatId, {
       lastMessage: content?.trim() || fileName || "File shared",
       lastMessageTime: new Date(),
     });
 
-    const populatedMessage = await Message.findById(savedMessage._id).populate(
-      "sender",
-      "_id firstName lastName email image"
-    );
+    const populatedMessage = await Message.findById(savedMessage._id)
+      .populate("sender", "_id firstName lastName email image")
+      .populate("readBy", "_id firstName lastName email image");
 
     const io = req.app.get("io");
 
@@ -264,9 +257,11 @@ export const sendMessage = async (req, res, next) => {
         chatId: populatedMessage.chatId.toString(),
         createdAt: populatedMessage.createdAt.toISOString(),
         timestamp: populatedMessage.createdAt.toISOString(),
+        status: populatedMessage.status,
+        readBy: populatedMessage.readBy,
+        readReceipts: populatedMessage.readReceipts,
       };
 
-      // Emit to relevant users
       if (chat.type === "direct") {
         chat.participants.forEach((participantId) => {
           io.to(participantId.toString()).emit("newMessage", messagePayload);
@@ -331,11 +326,27 @@ export const getMessages = async (req, res, next) => {
 
     const messages = await Message.find({ chatId })
       .populate("sender", "_id firstName lastName email image")
+      .populate("readBy", "_id firstName lastName email image")
+      .populate("readReceipts.user", "_id firstName lastName email image")
       .sort({ createdAt: 1 });
+
+    console.log(`📨 Retrieved ${messages.length} messages for chat ${chatId}`);
+
+    const statusCount = {
+      sent: 0,
+      delivered: 0,
+      read: 0,
+    };
+
+    messages.forEach((msg) => {
+      statusCount[msg.status] = (statusCount[msg.status] || 0) + 1;
+    });
+
+    console.log("📊 Message status summary:", statusCount);
 
     res.status(200).json(messages);
   } catch (error) {
-    console.error("Error in getMessages:", error);
+    console.error("❌ Error in getMessages:", error);
     next(error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
@@ -390,10 +401,9 @@ export const getUserChats = async (req, res, next) => {
           isValidDirectChat: true,
         },
       },
-      // ==================== SIMPLIFIED UNREAD COUNT ====================
+
       {
         $addFields: {
-          // Use the unreadCount field directly if it exists and is valid
           calculatedUnreadCount: {
             $cond: {
               if: {
@@ -419,7 +429,7 @@ export const getUserChats = async (req, res, next) => {
           },
         },
       },
-      // ==================== END SIMPLIFIED UNREAD COUNT ====================
+
       {
         $lookup: {
           from: "users",
@@ -472,7 +482,7 @@ export const getUserChats = async (req, res, next) => {
           members: 1,
           createdAt: 1,
           updatedAt: 1,
-          unreadCount: "$calculatedUnreadCount", // Use the calculated field
+          unreadCount: "$calculatedUnreadCount",
           lastMessage: { $arrayElemAt: ["$lastMessageInfo.content", 0] },
           lastMessageAt: { $arrayElemAt: ["$lastMessageInfo.createdAt", 0] },
           lastMessageSender: { $arrayElemAt: ["$lastMessageInfo.sender", 0] },
@@ -515,16 +525,13 @@ export const markChatAsRead = async (req, res, next) => {
       return res.status(404).json({ message: "Chat not found" });
     }
 
-    // Defensive check for unreadCount structure
     if (Array.isArray(chat.unreadCount) || !chat.unreadCount) {
       console.log("🔄 Fixing unreadCount structure in markAsRead...");
       chat.unreadCount = new Map();
     }
 
-    // Use the schema method to reset unread count for this user
     await chat.resetUnreadCount(userId);
 
-    // Also mark messages as read
     await Message.updateMany(
       {
         chatId,
@@ -548,7 +555,6 @@ export const markChatAsRead = async (req, res, next) => {
   } catch (error) {
     console.error("Error marking chat as read:", error);
 
-    // If schema method fails, try direct MongoDB update
     try {
       console.log("🔄 Attempting direct MongoDB update for markAsRead...");
       await mongoose.connection.db.collection("chats").updateOne(
@@ -651,5 +657,187 @@ export const debugChats = async (req, res, next) => {
   } catch (error) {
     console.error("Error in debugChats:", error);
     next(error);
+  }
+};
+
+export const markMessageAsRead = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const readerId = req.userId;
+
+    console.log(`👁️ Marking message ${messageId} as read by user ${readerId}`);
+
+    const currentMessage = await Message.findById(messageId);
+    if (!currentMessage) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    const isAlreadyRead = currentMessage.readBy.some(
+      (readByItem) => readByItem.toString() === readerId
+    );
+
+    if (isAlreadyRead) {
+      console.log(`ℹ️ User ${readerId} already marked this message as read`);
+
+      if (currentMessage.status !== "read") {
+        console.log(
+          `🔄 Updating message status from "${currentMessage.status}" to "read"`
+        );
+
+        const updatedMessage = await Message.findByIdAndUpdate(
+          messageId,
+          {
+            status: "read",
+          },
+          { new: true }
+        )
+          .populate("sender", "_id firstName lastName email image")
+          .populate("readBy", "_id firstName lastName email image");
+
+        const io = req.app.get("io");
+        if (io) {
+          io.to(updatedMessage.chatId.toString()).emit("messageStatusUpdate", {
+            messageId: updatedMessage._id,
+            status: updatedMessage.status,
+            readBy: updatedMessage.readBy,
+            chatId: updatedMessage.chatId,
+          });
+        }
+
+        return res.status(200).json({
+          message: "Message status updated to read",
+          data: updatedMessage,
+        });
+      }
+
+      return res.status(200).json({
+        message: "Message already marked as read by user",
+        data: currentMessage,
+      });
+    }
+
+    const message = await Message.findByIdAndUpdate(
+      messageId,
+      {
+        status: "read",
+        $addToSet: {
+          readBy: readerId,
+          readReceipts: {
+            user: readerId,
+            readAt: new Date(),
+          },
+        },
+      },
+      { new: true }
+    )
+      .populate("sender", "_id firstName lastName email image")
+      .populate("readBy", "_id firstName lastName email image");
+
+    console.log(`✅ Message ${messageId} status updated to: ${message.status}`);
+    console.log(`✅ ReadBy count: ${message.readBy.length}`);
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(message.chatId.toString()).emit("messageStatusUpdate", {
+        messageId: message._id,
+        status: message.status,
+        readBy: message.readBy,
+        chatId: message.chatId,
+      });
+      console.log(`📢 Emitted messageStatusUpdate for message: ${messageId}`);
+    }
+
+    res.status(200).json({
+      message: "Message marked as read",
+      data: message,
+    });
+  } catch (error) {
+    console.error("❌ Error marking message as read:", error);
+    res.status(500).json({
+      message: "Failed to mark message as read",
+      error: error.message,
+    });
+  }
+};
+
+export const markMessageAsDelivered = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.userId;
+
+    console.log(
+      `📨 Marking message ${messageId} as delivered to user ${userId}`
+    );
+
+    const currentMessage = await Message.findById(messageId);
+    if (!currentMessage) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    const updateData = {
+      $addToSet: {
+        readBy: userId,
+      },
+    };
+
+    if (currentMessage.status === "sent") {
+      updateData.status = "delivered";
+    }
+
+    const message = await Message.findByIdAndUpdate(messageId, updateData, {
+      new: true,
+    })
+      .populate("sender", "_id firstName lastName email image")
+      .populate("readBy", "_id firstName lastName email image");
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(message.chatId.toString()).emit("messageStatusUpdate", {
+        messageId: message._id,
+        status: message.status,
+        readBy: message.readBy,
+        chatId: message.chatId,
+      });
+      console.log(`📢 Emitted messageStatusUpdate for message: ${messageId}`);
+    }
+
+    res.status(200).json({
+      message: "Message marked as delivered",
+      data: message,
+    });
+  } catch (error) {
+    console.error("❌ Error marking message as delivered:", error);
+    res.status(500).json({
+      message: "Failed to mark message as delivered",
+      error: error.message,
+    });
+  }
+};
+
+export const getMessageStatus = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+
+    const message = await Message.findById(messageId)
+      .populate("readBy", "_id firstName lastName email image")
+      .select("status readBy readReceipts");
+
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    res.status(200).json({
+      messageId: message._id,
+      status: message.status,
+      readBy: message.readBy,
+      readReceipts: message.readReceipts,
+      totalRead: message.readBy.length,
+    });
+  } catch (error) {
+    console.error("❌ Error getting message status:", error);
+    res.status(500).json({
+      message: "Failed to get message status",
+      error: error.message,
+    });
   }
 };
