@@ -1,15 +1,17 @@
 import { useEffect, useContext, useCallback, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSocket } from "../useSocket";
-import { useMarkAsRead, MESSAGE_KEYS } from "../chats";
+import { MESSAGE_KEYS, useMessages } from "../chats";
 import { SelectedChatContext } from "../../contexts/selectedChatContext/SelectedChatContext";
 import type {
   SelectedChatContextType,
   Message,
   Chat,
   UserChat,
+  User,
 } from "../../types/types";
 import { useApp } from "../../contexts/appcontext/index";
+import { messageApi, chatApi } from "../../lib/api";
 
 export const useSocketHandlers = () => {
   const { socket, onlineUsers } = useSocket();
@@ -18,9 +20,23 @@ export const useSocketHandlers = () => {
   ) as SelectedChatContextType;
   const { state } = useApp();
   const queryClient = useQueryClient();
-  const markAsReadMutation = useMarkAsRead();
+
+  const { data: messages } = useMessages(selectedChat?._id);
+
+  const markChatAsReadMutation = useMutation({
+    mutationFn: async (chatId: string) => {
+      return await chatApi.markChatAsRead(chatId);
+    },
+  });
+
+  const markMessageAsReadMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      return await messageApi.markAsRead(messageId);
+    },
+  });
 
   const markedAsReadRef = useRef<string | null>(null);
+  const processingMessagesRef = useRef<Set<string>>(new Set());
 
   const isUserChat = (chat: Chat): chat is UserChat => {
     return chat.type === "direct" && "participants" in chat;
@@ -44,37 +60,150 @@ export const useSocketHandlers = () => {
     [onlineUsers]
   );
 
+  const markMessagesAsRead = useCallback(
+    async (messagesToMark: Message[]) => {
+      if (!state.user?._id) return;
+
+      const unreadMessages = messagesToMark.filter(
+        (msg) =>
+          (msg.status === "sent" || msg.status === "delivered") &&
+          (typeof msg.sender === "object"
+            ? msg.sender._id !== state.user!._id
+            : msg.sender !== state.user!._id) &&
+          !processingMessagesRef.current.has(msg._id)
+      );
+
+      if (unreadMessages.length === 0) {
+        return;
+      }
+
+      console.log(`👁️ Marking ${unreadMessages.length} messages as read`);
+
+      unreadMessages.forEach((msg) =>
+        processingMessagesRef.current.add(msg._id)
+      );
+
+      try {
+        const promises = unreadMessages.map(async (message) => {
+          try {
+            await markMessageAsReadMutation.mutateAsync(message._id);
+            console.log(`✅ Marked message ${message._id} as read`);
+          } catch (error) {
+            console.error(
+              `Failed to mark message ${message._id} as read:`,
+              error
+            );
+
+            processingMessagesRef.current.delete(message._id);
+          }
+        });
+
+        await Promise.all(promises);
+      } catch (error) {
+        console.error("Error in markMessagesAsRead:", error);
+      }
+    },
+    [state.user, markMessageAsReadMutation]
+  );
+
+  const handleMessageStatusUpdate = useCallback(
+    (data: {
+      messageId: string;
+      status: "sent" | "delivered" | "read";
+      readBy?: string[] | User[];
+      chatId: string;
+    }) => {
+      console.log(
+        `📨 Message status update in handler: ${data.messageId} -> ${data.status}`
+      );
+
+      const { messageId, status, readBy, chatId } = data;
+
+      processingMessagesRef.current.delete(messageId);
+
+      const messagesQueryKey = MESSAGE_KEYS.list(chatId);
+
+      queryClient.setQueryData<Message[]>(
+        messagesQueryKey,
+        (oldMessages = []) => {
+          return oldMessages.map((msg) =>
+            msg._id === messageId
+              ? {
+                  ...msg,
+                  status,
+                  readBy: readBy || msg.readBy,
+                }
+              : msg
+          );
+        }
+      );
+    },
+    [queryClient]
+  );
+
   useEffect(() => {
     const chatId = selectedChat?._id;
     const userId = state.user?._id;
 
-    if (!chatId || !userId) {
+    if (!chatId || !userId || !messages) {
       return;
     }
 
-    if (markedAsReadRef.current === chatId) {
+    if (markedAsReadRef.current === chatId || messages.length === 0) {
       return;
     }
 
-    const markAsRead = async () => {
+    const hasUnreadMessages = messages.some(
+      (msg) =>
+        (msg.status === "sent" || msg.status === "delivered") &&
+        (typeof msg.sender === "object"
+          ? msg.sender._id !== userId
+          : msg.sender !== userId)
+    );
+
+    if (!hasUnreadMessages) {
+      markedAsReadRef.current = chatId;
+      return;
+    }
+
+    const markChatAndMessagesAsRead = async () => {
       try {
-        await markAsReadMutation.mutateAsync(chatId);
+        console.log(
+          `🔄 Processing chat ${chatId} with ${messages.length} messages`
+        );
+
+        await markChatAsReadMutation.mutateAsync(chatId);
+
+        await markMessagesAsRead(messages);
+
         markedAsReadRef.current = chatId;
+        console.log(`✅ Chat ${chatId} and all messages marked as read`);
       } catch (error) {
-        console.error("❌ Failed to auto-mark chat as read:", error);
+        console.error("❌ Failed to auto-mark chat/messages as read:", error);
       }
     };
 
-    const timeoutId = setTimeout(markAsRead, 500);
+    const timeoutId = setTimeout(markChatAndMessagesAsRead, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [selectedChat?._id, state.user?._id, markAsReadMutation]);
+  }, [
+    selectedChat?._id,
+    state.user?._id,
+    messages,
+    markChatAsReadMutation,
+    markMessagesAsRead,
+  ]);
 
   useEffect(() => {
-    if (!socket || !selectedChat?._id) return;
+    markedAsReadRef.current = null;
+    processingMessagesRef.current.clear();
+  }, [selectedChat?._id]);
+
+  useEffect(() => {
+    if (!socket || !selectedChat?._id || !state.user?._id) return;
 
     const chatId = selectedChat._id;
-    const userId = state.user?._id;
+    const userId = state.user._id;
 
     const handleNewMessage = (message: Message) => {
       const messageChatId = "chatId" in message ? message.chatId : message.chat;
@@ -107,24 +236,41 @@ export const useSocketHandlers = () => {
 
         if (
           typeof message.sender === "object" &&
-          message.sender._id !== userId
+          message.sender._id !== userId &&
+          message.status === "sent"
         ) {
-          markAsReadMutation.mutate(chatId);
+          console.log(
+            `📨 Auto-marking new message ${message._id} as delivered`
+          );
+          messageApi.markAsDelivered(message._id).catch(console.error);
         }
       }
     };
 
+    const handleSocketMessageStatusUpdate = (data: {
+      messageId: string;
+      status: "sent" | "delivered" | "read";
+      readBy?: string[] | User[];
+      chatId: string;
+    }) => {
+      if (data.chatId === chatId) {
+        handleMessageStatusUpdate(data);
+      }
+    };
+
     socket.on("newMessage", handleNewMessage);
+    socket.on("messageStatusUpdate", handleSocketMessageStatusUpdate);
 
     return () => {
       socket.off("newMessage", handleNewMessage);
+      socket.off("messageStatusUpdate", handleSocketMessageStatusUpdate);
     };
   }, [
     socket,
     selectedChat?._id,
     state.user?._id,
     queryClient,
-    markAsReadMutation,
+    handleMessageStatusUpdate,
   ]);
 
   return {
