@@ -12,6 +12,7 @@ export const SOCKET_EVENTS = {
   JOIN_CHAT: "joinChat",
   LEAVE_CHAT: "leaveChat",
   UPDATE_USER_STATUS: "updateUserStatus",
+  MESSAGE_STATUS_UPDATE: "messageStatusUpdate",
 } as const;
 
 export const SOCKET_CONFIG = {
