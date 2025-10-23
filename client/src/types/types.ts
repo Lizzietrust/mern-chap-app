@@ -26,7 +26,7 @@ export interface UsersResponse {
 
 export interface BaseMessage {
   _id: string;
-  messageType: "text" | "image" | "file" | "audio" | "video";
+  messageType: "text" | "image" | "file" | "audio" | "video" | "system";
   sender: string | User;
   chat: string | Chat;
   createdAt: Date | string;
@@ -34,6 +34,9 @@ export interface BaseMessage {
   isOptimistic?: boolean;
   isSending?: boolean;
   failed?: boolean;
+  status: "sent" | "delivered" | "read";
+  readBy?: string[] | User[];
+  timestamp: string;
 }
 
 export interface TextMessage extends BaseMessage {
@@ -52,7 +55,12 @@ export interface FileMessage extends BaseMessage {
   text?: string;
 }
 
-export type Message = TextMessage | FileMessage;
+export interface SystemMessage extends BaseMessage {
+  messageType: "system";
+  content: string;
+}
+
+export type Message = TextMessage | FileMessage | SystemMessage;
 
 export interface BaseChat {
   _id: string;
@@ -131,6 +139,10 @@ export const isTextMessage = (message: Message): message is TextMessage => {
 
 export const isFileMessage = (message: Message): message is FileMessage => {
   return ["image", "file", "audio", "video"].includes(message.messageType);
+};
+
+export const isSystemMessage = (message: Message): message is SystemMessage => {
+  return message.messageType === "system";
 };
 
 export const isOptimisticMessage = (message: Message): boolean => {
@@ -230,6 +242,10 @@ export const getMessageContent = (message: Message): string => {
     return message.content || message.text || "";
   }
 
+  if (isSystemMessage(message)) {
+    return message.content;
+  }
+
   const fallbackMessage = message as { content?: string; text?: string };
   return fallbackMessage.content || fallbackMessage.text || "";
 };
@@ -279,6 +295,28 @@ export const getChatDisplayName = (
   }
 };
 
+// Helper function to format time (moved from inline)
+const formatTimeHelper = (date: Date | string): string => {
+  const dateObj = typeof date === "string" ? new Date(date) : date;
+  const now = new Date();
+  const diffInMs = now.getTime() - dateObj.getTime();
+  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+  if (diffInMinutes < 1) {
+    return "just now";
+  } else if (diffInMinutes < 60) {
+    return `${diffInMinutes}m ago`;
+  } else if (diffInHours < 24) {
+    return `${diffInHours}h ago`;
+  } else if (diffInDays < 7) {
+    return `${diffInDays}d ago`;
+  } else {
+    return dateObj.toLocaleDateString();
+  }
+};
+
 export const getChatSubtitle = (
   chat: Chat,
   currentUserId?: string,
@@ -291,7 +329,7 @@ export const getChatSubtitle = (
     if (otherParticipant) {
       if (otherParticipant.isOnline) return "Online";
       if (otherParticipant.lastSeen)
-        return `Last seen ${formatTime(otherParticipant.lastSeen)}`;
+        return `Last seen ${formatTimeHelper(otherParticipant.lastSeen)}`;
       return "Offline";
     }
     return "";
@@ -345,4 +383,60 @@ export interface ApiAuthResponse {
   user: User;
   token?: string;
   message?: string;
+}
+
+// Message status helper functions
+export const getMessageStatus = (
+  message: Message
+): "sent" | "delivered" | "read" => {
+  return message.status || "sent";
+};
+
+export const isMessageRead = (message: Message): boolean => {
+  return message.status === "read";
+};
+
+export const isMessageDelivered = (message: Message): boolean => {
+  return message.status === "delivered" || message.status === "read";
+};
+
+export const getReadByCount = (message: Message): number => {
+  return message.readBy?.length || 0;
+};
+
+export const hasUserReadMessage = (
+  message: Message,
+  userId: string
+): boolean => {
+  if (!message.readBy) return false;
+
+  if (message.readBy.length > 0 && typeof message.readBy[0] === "string") {
+    return (message.readBy as string[]).includes(userId);
+  }
+
+  return (message.readBy as User[]).some((user) =>
+    typeof user === "string" ? user === userId : user._id === userId
+  );
+};
+
+export interface UpdateMessageStatusData {
+  messageId: string;
+  status: "delivered" | "read";
+  userId?: string;
+}
+
+export interface MessageStatusUpdate {
+  messageId: string;
+  chatId: string;
+  status: "sent" | "delivered" | "read";
+  userId?: string;
+  timestamp: Date;
+}
+
+export interface MessageStatusResponse {
+  messageId: string;
+  status: "sent" | "delivered" | "read";
+  readBy: string[];
+  deliveredTo: string[];
+  updatedAt: string;
 }
