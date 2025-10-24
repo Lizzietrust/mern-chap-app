@@ -9,6 +9,7 @@ import type {
   Chat,
   UserChat,
   User,
+  MessageUpdateEvent,
 } from "../../types/types";
 import { useApp } from "../../contexts/appcontext/index";
 import { messageApi, chatApi } from "../../lib/api";
@@ -141,6 +142,48 @@ export const useSocketHandlers = () => {
     [queryClient]
   );
 
+  const handleMessageUpdate = useCallback(
+    (data: MessageUpdateEvent) => {
+      console.log("📨 Message update received:", data);
+
+      if (data.chatId === selectedChat?._id) {
+        const messagesQueryKey = MESSAGE_KEYS.list(data.chatId);
+
+        if (data.action === "edited" && data.message) {
+          queryClient.setQueryData<Message[]>(
+            messagesQueryKey,
+            (oldMessages = []) =>
+              oldMessages.map((msg) =>
+                msg._id === data.message!._id ? data.message! : msg
+              )
+          );
+          console.log(`✅ Updated edited message: ${data.message._id}`);
+        } else if (data.action === "deleted") {
+          if (data.deletedForEveryone) {
+            queryClient.setQueryData<Message[]>(
+              messagesQueryKey,
+              (oldMessages = []) =>
+                oldMessages.filter((msg) => msg._id !== data.messageId)
+            );
+            console.log(`🗑️ Removed deleted message: ${data.messageId}`);
+          } else if (data.message) {
+            queryClient.setQueryData<Message[]>(
+              messagesQueryKey,
+              (oldMessages = []) =>
+                oldMessages.map((msg) =>
+                  msg._id === data.message!._id ? data.message! : msg
+                )
+            );
+            console.log(
+              `🔄 Updated deleted message state: ${data.message._id}`
+            );
+          }
+        }
+      }
+    },
+    [selectedChat?._id, queryClient]
+  );
+
   useEffect(() => {
     const chatId = selectedChat?._id;
     const userId = state.user?._id;
@@ -260,10 +303,12 @@ export const useSocketHandlers = () => {
 
     socket.on("newMessage", handleNewMessage);
     socket.on("messageStatusUpdate", handleSocketMessageStatusUpdate);
+    socket.on("messageUpdated", handleMessageUpdate);
 
     return () => {
       socket.off("newMessage", handleNewMessage);
       socket.off("messageStatusUpdate", handleSocketMessageStatusUpdate);
+      socket.off("messageUpdated", handleMessageUpdate);
     };
   }, [
     socket,
@@ -271,6 +316,7 @@ export const useSocketHandlers = () => {
     state.user?._id,
     queryClient,
     handleMessageStatusUpdate,
+    handleMessageUpdate,
   ]);
 
   return {
