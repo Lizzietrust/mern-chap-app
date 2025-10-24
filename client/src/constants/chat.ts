@@ -17,6 +17,10 @@ export const MESSAGE_KEYS = {
   detail: (id: string) => [...MESSAGE_KEYS.details(), id] as const,
   status: (messageId: string) =>
     [...MESSAGE_KEYS.all, "status", messageId] as const,
+  edit: (messageId: string) =>
+    [...MESSAGE_KEYS.all, "edit", messageId] as const,
+  delete: (messageId: string) =>
+    [...MESSAGE_KEYS.all, "delete", messageId] as const,
 } as const;
 
 export const DEFAULT_QUERY_OPTIONS = {
