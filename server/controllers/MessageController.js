@@ -841,3 +841,164 @@ export const getMessageStatus = async (req, res, next) => {
     });
   }
 };
+
+export const editMessage = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const { content } = req.body;
+    const userId = req.userId;
+
+    console.log(`✏️ Editing message ${messageId} by user ${userId}`);
+
+    if (!content?.trim()) {
+      return res.status(400).json({ message: "Content is required" });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    if (message.sender.toString() !== userId) {
+      return res
+        .status(403)
+        .json({ message: "You can only edit your own messages" });
+    }
+
+    const editTimeLimit = 15 * 60 * 1000;
+    const messageAge = Date.now() - message.createdAt.getTime();
+
+    if (messageAge > editTimeLimit) {
+      return res.status(400).json({
+        message: "Message can only be edited within 15 minutes of sending",
+      });
+    }
+
+    const editHistory = message.editHistory || [];
+    editHistory.push({
+      content: message.content,
+      editedAt: message.updatedAt || message.createdAt,
+    });
+
+    message.content = content.trim();
+    message.text = content.trim();
+    message.isEdited = true;
+    message.editHistory = editHistory;
+    message.updatedAt = new Date();
+
+    const updatedMessage = await message.save();
+    const populatedMessage = await Message.findById(updatedMessage._id)
+      .populate("sender", "_id firstName lastName email image")
+      .populate("readBy", "_id firstName lastName email image");
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(message.chatId.toString()).emit("messageUpdated", {
+        action: "edited",
+        message: populatedMessage,
+        chatId: message.chatId,
+      });
+      console.log(
+        `📢 Emitted messageUpdated event for edited message: ${messageId}`
+      );
+    }
+
+    res.status(200).json({
+      message: "Message updated successfully",
+      data: populatedMessage,
+    });
+  } catch (error) {
+    console.error("❌ Error editing message:", error);
+    res.status(500).json({
+      message: "Failed to edit message",
+      error: error.message,
+    });
+  }
+};
+
+export const deleteMessage = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.userId;
+    const { deleteForEveryone } = req.body;
+
+    console.log(`🗑️ Deleting message ${messageId} by user ${userId}`);
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    const chat = await Chat.findById(message.chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    const isSender = message.sender.toString() === userId;
+    const isAdmin =
+      chat.type === "channel" &&
+      chat.admins?.some((admin) => admin.toString() === userId);
+    const isChannelCreator =
+      chat.type === "channel" && chat.createdBy?.toString() === userId;
+
+    if (!isSender && !isAdmin && !isChannelCreator) {
+      return res
+        .status(403)
+        .json({ message: "You don't have permission to delete this message" });
+    }
+
+    let result;
+
+    if (deleteForEveryone && (isAdmin || isChannelCreator || isSender)) {
+      result = await Message.findByIdAndDelete(messageId);
+
+      const io = req.app.get("io");
+      if (io) {
+        io.to(message.chatId.toString()).emit("messageUpdated", {
+          action: "deleted",
+          messageId: messageId,
+          chatId: message.chatId,
+          deletedForEveryone: true,
+        });
+      }
+    } else if (isSender) {
+      message.deletedForSender = true;
+      message.content = "This message was deleted";
+      message.text = "This message was deleted";
+      message.isDeleted = true;
+      message.fileUrl = null;
+      message.fileName = null;
+      message.fileSize = null;
+
+      result = await message.save();
+      const populatedMessage = await Message.findById(result._id)
+        .populate("sender", "_id firstName lastName email image")
+        .populate("readBy", "_id firstName lastName email image");
+
+      const io = req.app.get("io");
+      if (io) {
+        io.to(message.chatId.toString()).emit("messageUpdated", {
+          action: "deleted",
+          message: populatedMessage,
+          chatId: message.chatId,
+          deletedForEveryone: false,
+        });
+      }
+    } else {
+      return res
+        .status(403)
+        .json({ message: "You don't have permission to delete this message" });
+    }
+
+    res.status(200).json({
+      message: "Message deleted successfully",
+      data: result,
+    });
+  } catch (error) {
+    console.error("❌ Error deleting message:", error);
+    res.status(500).json({
+      message: "Failed to delete message",
+      error: error.message,
+    });
+  }
+};
