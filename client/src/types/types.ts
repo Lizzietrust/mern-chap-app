@@ -37,6 +37,16 @@ export interface BaseMessage {
   status: "sent" | "delivered" | "read";
   readBy?: string[] | User[];
   timestamp: string;
+
+  isEdited?: boolean;
+  editHistory?: Array<{
+    content: string;
+    editedAt: Date;
+  }>;
+
+  isDeleted?: boolean;
+  deletedForSender?: boolean;
+  deletedForEveryone?: boolean;
 }
 
 export interface TextMessage extends BaseMessage {
@@ -125,6 +135,34 @@ export interface UpdateChannelData {
   isPrivate?: boolean;
 }
 
+export interface EditMessageData {
+  messageId: string;
+  content: string;
+}
+
+export interface DeleteMessageData {
+  messageId: string;
+  deleteForEveryone?: boolean;
+}
+
+export interface MessageUpdateEvent {
+  action: "edited" | "deleted";
+  message?: Message;
+  messageId?: string;
+  chatId: string;
+  deletedForEveryone?: boolean;
+}
+
+export interface EditMessageResponse {
+  message: string;
+  data: Message;
+}
+
+export interface DeleteMessageResponse {
+  message: string;
+  data?: Message;
+}
+
 export const isDirectChat = (chat: Chat): chat is UserChat => {
   return chat.type === "direct";
 };
@@ -155,6 +193,62 @@ export const isFailedMessage = (message: Message): boolean => {
 
 export const isSendingMessage = (message: Message): boolean => {
   return !!message.isSending;
+};
+
+export const isEditedMessage = (message: Message): boolean => {
+  return !!message.isEdited;
+};
+
+export const isDeletedMessage = (message: Message): boolean => {
+  return !!message.isDeleted;
+};
+
+export const canEditMessage = (message: Message, userId?: string): boolean => {
+  if (!userId || isDeletedMessage(message)) return false;
+
+  const isSender =
+    typeof message.sender === "string"
+      ? message.sender === userId
+      : message.sender._id === userId;
+
+  if (!isSender) return false;
+
+  const editTimeLimit = 15 * 60 * 1000;
+  const messageAge = Date.now() - new Date(message.createdAt).getTime();
+  return messageAge <= editTimeLimit;
+};
+
+export const canDeleteMessage = (
+  message: Message,
+  userId?: string,
+  chat?: ChannelChat
+): boolean => {
+  if (!userId || isDeletedMessage(message)) return false;
+
+  const isSender =
+    typeof message.sender === "string"
+      ? message.sender === userId
+      : message.sender._id === userId;
+
+  if (chat && isChannelChat(chat)) {
+    const isAdmin = chat.admins.includes(userId);
+    const isCreator = chat.createdBy === userId;
+    return isSender || isAdmin || isCreator;
+  }
+
+  return isSender;
+};
+
+export const getLastEditTime = (message: Message): Date | null => {
+  if (!message.editHistory || message.editHistory.length === 0) return null;
+  return message.editHistory[message.editHistory.length - 1].editedAt;
+};
+
+export const getOriginalContent = (message: Message): string => {
+  if (!message.editHistory || message.editHistory.length === 0) {
+    return getMessageContent(message);
+  }
+  return message.editHistory[0].content;
 };
 
 export const isValidMessage = (message: unknown): message is Message => {
@@ -234,6 +328,10 @@ export const getMemberObjects = (chat: ChannelChat): User[] => {
 };
 
 export const getMessageContent = (message: Message): string => {
+  if (message.isDeleted) {
+    return "This message was deleted";
+  }
+
   if (isTextMessage(message)) {
     return message.content || message.text || "";
   }
@@ -251,21 +349,21 @@ export const getMessageContent = (message: Message): string => {
 };
 
 export const getMessageFileUrl = (message: Message): string => {
-  if (isFileMessage(message)) {
+  if (isFileMessage(message) && !message.isDeleted) {
     return message.fileUrl;
   }
   return "";
 };
 
 export const getMessageFileName = (message: Message): string => {
-  if (isFileMessage(message)) {
+  if (isFileMessage(message) && !message.isDeleted) {
     return message.fileName || "file";
   }
   return "file";
 };
 
 export const getMessageFileSize = (message: Message): number | undefined => {
-  if (isFileMessage(message)) {
+  if (isFileMessage(message) && !message.isDeleted) {
     return message.fileSize;
   }
   return undefined;
@@ -295,7 +393,6 @@ export const getChatDisplayName = (
   }
 };
 
-// Helper function to format time (moved from inline)
 const formatTimeHelper = (date: Date | string): string => {
   const dateObj = typeof date === "string" ? new Date(date) : date;
   const now = new Date();
@@ -385,7 +482,6 @@ export interface ApiAuthResponse {
   message?: string;
 }
 
-// Message status helper functions
 export const getMessageStatus = (
   message: Message
 ): "sent" | "delivered" | "read" => {
