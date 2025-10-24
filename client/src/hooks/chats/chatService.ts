@@ -31,7 +31,7 @@ export class ChatService {
   }
 
   static async markAsRead(chatId: string): Promise<void> {
-    await chatApi.markAsRead(chatId);
+    await chatApi.markChatAsRead(chatId);
   }
 
   static async getMessages(chatId: string): Promise<Message[]> {
@@ -63,5 +63,26 @@ export class ChatService {
       data
     );
     return result;
+  }
+
+  static async editMessage(
+    messageId: string,
+    content: string
+  ): Promise<Message> {
+    console.log("✏️ Editing message:", messageId);
+    const result = await api.patch<Message>(`/api/messages/${messageId}/edit`, {
+      content,
+    });
+    return result;
+  }
+
+  static async deleteMessage(
+    messageId: string,
+    deleteForEveryone: boolean = false
+  ): Promise<void> {
+    console.log("🗑️ Deleting message:", messageId);
+    await api.delete(`/api/messages/${messageId}`, {
+      data: { deleteForEveryone },
+    });
   }
 }
