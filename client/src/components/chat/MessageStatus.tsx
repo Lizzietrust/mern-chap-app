@@ -7,23 +7,7 @@ interface MessageStatusProps {
   isDark: boolean;
 }
 
-export const MessageStatus: React.FC<MessageStatusProps> = ({
-  status,
-  //   readBy,
-  //   isDark,
-}) => {
-  //   const getReadCount = (): number => {
-  //     if (!readBy) return 0;
-
-  //     if (readBy.length === 0) return 0;
-
-  //     if (typeof readBy[0] === "string") {
-  //       return (readBy as string[]).length;
-  //     } else {
-  //       return (readBy as User[]).length;
-  //     }
-  //   };
-
+export const MessageStatus: React.FC<MessageStatusProps> = ({ status }) => {
   const getStatusConfig = () => {
     switch (status) {
       case "read":
@@ -58,7 +42,7 @@ export const MessageStatus: React.FC<MessageStatusProps> = ({
             </svg>
           ),
           text: "Delivered",
-          color: "text-gray-400",
+          color: "text-green-500",
         };
       case "sent":
       default:
@@ -86,13 +70,11 @@ export const MessageStatus: React.FC<MessageStatusProps> = ({
   };
 
   const config = getStatusConfig();
-  //   const readCount = getReadCount();
 
   return (
     <div className="flex items-center space-x-1">
       <div className={`flex items-center ${config.color}`} title={config.text}>
         {config.icon}
-        {/* {config.text} */}
       </div>
     </div>
   );
