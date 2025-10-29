@@ -11,7 +11,9 @@ import EmojiPicker, { Theme } from "emoji-picker-react";
 import type { EmojiClickData } from "emoji-picker-react";
 import { DeleteConfirmationModal } from "./DeleteConfirmationmodal";
 
-const MessageComponent: React.FC<MessageDisplayProps> = ({
+const MessageComponent: React.FC<
+  MessageDisplayProps & { socket?: any; currentUser?: any }
+> = ({
   message,
   isCurrentUser,
   showSenderName,
@@ -19,12 +21,13 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
   isDark,
   formatTime,
   onDownloadFile,
+  socket,
+  currentUser,
 }) => {
   const markAsReadMutation = useMarkMessageAsRead();
   const messageRef = useRef<HTMLDivElement>(null);
   const hasBeenReadRef = useRef(false);
   const { state } = useApp();
-
 
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
@@ -36,54 +39,18 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
   const editInputRef = useRef<HTMLTextAreaElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
 
-  
   const editMessageMutation = useEditMessage();
   const deleteMessageMutation = useDeleteMessage();
 
-  
+  // Mark message as read when it becomes visible
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false);
-      }
-      if (
-        emojiPickerRef.current &&
-        !emojiPickerRef.current.contains(event.target as Node) &&
-        !(event.target as Element)?.closest(".emoji-button")
-      ) {
-        setShowEmojiPicker(false);
-      }
-    };
+    if (!socket || !currentUser) return;
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
- 
-  useEffect(() => {
-    if (isEditing && editInputRef.current) {
-      editInputRef.current.focus();
-      editInputRef.current.setSelectionRange(
-        editInputRef.current.value.length,
-        editInputRef.current.value.length
-      );
-    }
-  }, [isEditing]);
-
-  
-  useEffect(() => {
-    if (!isEditing) {
-      setEditContent(message.content);
-    }
-  }, [message.content, isEditing]);
-
- 
-  useEffect(() => {
     const isUserInReadBy = message.readBy?.some((readByItem) => {
       if (typeof readByItem === "string") {
-        return readByItem === state.user?._id;
+        return readByItem === currentUser._id;
       } else {
-        return readByItem._id === state.user?._id;
+        return readByItem._id === currentUser._id;
       }
     });
 
@@ -98,7 +65,14 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !hasBeenReadRef.current) {
+        if (entry.isIntersecting && !hasBeenReadRef.current && socket) {
+          // Use socket to mark as read in real-time
+          socket.emit("messageRead", {
+            messageId: message._id,
+            userId: currentUser._id,
+          });
+
+          // Also call the mutation for backup
           markAsReadMutation.mutate(message._id);
           hasBeenReadRef.current = true;
           observer.disconnect();
@@ -118,15 +92,72 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
     message.status,
     isCurrentUser,
     markAsReadMutation,
-    state.user,
+    currentUser,
+    socket,
   ]);
 
+  // Mark message as delivered when component mounts (if needed)
+  useEffect(() => {
+    if (!socket || !currentUser || isCurrentUser || message.status !== "sent")
+      return;
+
+    // If this message is sent to me and is still 'sent', mark it as delivered
+    const isUserInReadBy = message.readBy?.some((readByItem) => {
+      if (typeof readByItem === "string") {
+        return readByItem === currentUser._id;
+      } else {
+        return readByItem._id === currentUser._id;
+      }
+    });
+
+    if (!isUserInReadBy) {
+      socket.emit("messageDelivered", {
+        messageId: message._id,
+        userId: currentUser._id,
+      });
+    }
+  }, [message, isCurrentUser, currentUser, socket]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(event.target as Node) &&
+        !(event.target as Element)?.closest(".emoji-button")
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isEditing && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.setSelectionRange(
+        editInputRef.current.value.length,
+        editInputRef.current.value.length
+      );
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setEditContent(message.content);
+    }
+  }, [message.content, isEditing]);
+
+  // console.log({ message });
 
   const canEditMessage = () => {
     if (!isCurrentUser) return false;
     if (message.isDeleted) return false;
 
-    
     const editTimeLimit = 15 * 60 * 1000;
     const messageAge = Date.now() - new Date(message.createdAt).getTime();
     return messageAge <= editTimeLimit;
@@ -135,13 +166,12 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
   const canDeleteMessage = () => {
     if (message.isDeleted) return false;
 
-    
-    const deleteTimeLimit = 15 * 60 * 1000; 
+    const deleteTimeLimit = 15 * 60 * 1000;
     const messageAge = Date.now() - new Date(message.createdAt).getTime();
     const canDeleteForEveryone = messageAge <= deleteTimeLimit;
 
     return {
-      deleteForMe: isCurrentUser, 
+      deleteForMe: isCurrentUser,
       deleteForEveryone: isCurrentUser && canDeleteForEveryone,
     };
   };
@@ -202,19 +232,14 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
     }
   };
 
-  
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setEditContent(e.target.value);
   };
 
-  
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-   
     const pastedText = e.clipboardData.getData("text");
     if (pastedText) {
-      
       setTimeout(() => {
-        
         if (editInputRef.current) {
           setEditContent(editInputRef.current.value);
         }
@@ -222,7 +247,6 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
     }
   };
 
-  
   const handleEmojiClick = (emojiData: EmojiClickData) => {
     const cursorPosition = editInputRef.current?.selectionStart || 0;
     const textBeforeCursor = editContent?.substring(0, cursorPosition);
@@ -231,7 +255,6 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
     const newContent = textBeforeCursor + emojiData.emoji + textAfterCursor;
     setEditContent(newContent);
 
-   
     setTimeout(() => {
       if (editInputRef.current) {
         editInputRef.current.focus();
@@ -244,10 +267,8 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
     }, 0);
   };
 
-  
   const deletePermissions = canDeleteMessage();
 
-  
   const renderFileMessage = () => {
     if (
       message.messageType !== "file" ||
@@ -329,7 +350,6 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
 
   const senderInfo = getSenderInfo();
 
-
   if (message.isDeleted) {
     return (
       <div
@@ -354,7 +374,7 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
         className={`flex ${
           isCurrentUser ? "justify-end" : "justify-start"
         } mb-4 group relative`}
-        ref={menuRef}
+        ref={messageRef}
       >
         <div
           className={`flex ${
@@ -579,7 +599,10 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
 
         {/* Message Actions Menu */}
         {isCurrentUser && !isEditing && (
-          <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-all duration-200">
+          <div
+            className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-all duration-200"
+            ref={menuRef}
+          >
             <button
               onClick={() => setShowMenu(!showMenu)}
               className={`p-2 rounded-full transition-all duration-200 ${
@@ -638,7 +661,6 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
                     </button>
                   )}
 
-                  {/* Fix: Check if deletePermissions is truthy before accessing its properties */}
                   {deletePermissions && deletePermissions.deleteForMe && (
                     <button
                       onClick={() => handleDeleteClick(false)}
@@ -691,7 +713,6 @@ const MessageComponent: React.FC<MessageDisplayProps> = ({
                     </button>
                   )}
 
-                  {/* Show message if no actions available */}
                   {!canEditMessage() &&
                     (!deletePermissions ||
                       (!deletePermissions.deleteForMe &&
