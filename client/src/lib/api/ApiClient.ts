@@ -12,11 +12,18 @@ export class ApiClient {
     endpoint: string,
     config: AxiosRequestConfig = {}
   ): Promise<T> {
-    const response = await this.axiosInstance.request<T>({
-      url: endpoint,
-      ...config,
-    });
-    return response.data;
+    try {
+      console.log(`🔄 API Call: ${config.method} ${endpoint}`);
+      const response = await this.axiosInstance.request<T>({
+        url: endpoint,
+        ...config,
+      });
+      console.log(`✅ API Success: ${config.method} ${endpoint}`);
+      return response.data;
+    } catch (error) {
+      console.error(`❌ API Failed: ${config.method} ${endpoint}`, error);
+      throw error;
+    }
   }
 
   async get<T>(endpoint: string, config?: AxiosRequestConfig): Promise<T> {
