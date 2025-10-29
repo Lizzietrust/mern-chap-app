@@ -41,6 +41,10 @@ export const useSidebar = ({
     localStorage.setItem("sidebar-active-tab", activeTab);
   }, [activeTab]);
 
+  const safeOnlineUsers = useMemo(() => {
+    return Array.isArray(onlineUsers) ? onlineUsers : [];
+  }, [onlineUsers]);
+
   const handleUserSelect = useCallback(
     async (userId: string) => {
       try {
@@ -105,7 +109,7 @@ export const useSidebar = ({
         return {
           ...chat,
           participants: chat.participants.map((participant) => {
-            const onlineUser = onlineUsers.find(
+            const onlineUser = safeOnlineUsers.find(
               (u) => u._id === participant._id
             );
             return {
@@ -118,7 +122,7 @@ export const useSidebar = ({
       }
       return chat;
     });
-  }, [directChats, onlineUsers]);
+  }, [directChats, safeOnlineUsers]);
 
   const sortedDirectChats = useMemo(() => {
     if (!enhancedChats) return [];
