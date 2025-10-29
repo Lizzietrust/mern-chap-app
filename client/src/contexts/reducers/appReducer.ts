@@ -7,6 +7,8 @@ export const initialState: AppState = {
   sidebarOpen: false,
   notifications: [],
   loading: true,
+  socket: null,
+  onlineUsers: [],
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -57,7 +59,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "LOGOUT":
       return {
         ...initialState,
-        theme: state.theme, 
+        theme: state.theme,
+      };
+    case "SET_SOCKET":
+      return {
+        ...state,
+        socket: action.payload,
+      };
+    case "SET_ONLINE_USERS":
+      return {
+        ...state,
+        onlineUsers: action.payload,
       };
     default:
       return state;
