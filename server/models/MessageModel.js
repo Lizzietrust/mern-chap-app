@@ -36,12 +36,17 @@ const messageSchema = new mongoose.Schema(
         return this.messageType === "file";
       },
     },
-    chatId: {
+    chat: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Chat",
       required: true,
     },
-
+    deliveredTo: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Users",
+      },
+    ],
     readBy: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -61,11 +66,28 @@ const messageSchema = new mongoose.Schema(
         },
       },
     ],
-
     status: {
       type: String,
       enum: ["sent", "delivered", "read"],
       default: "sent",
+    },
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editHistory: [
+      {
+        content: String,
+        editedAt: Date,
+      },
+    ],
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedForSender: {
+      type: Boolean,
+      default: false,
     },
   },
   {
@@ -73,10 +95,9 @@ const messageSchema = new mongoose.Schema(
   }
 );
 
-// Indexes for better performance
-messageSchema.index({ chatId: 1, createdAt: -1 });
+messageSchema.index({ chat: 1, createdAt: -1 });
 messageSchema.index({ sender: 1 });
-messageSchema.index({ readBy: 1 }); 
+messageSchema.index({ readBy: 1 });
 messageSchema.index({ status: 1 });
 
 const Message = mongoose.model("Message", messageSchema);
