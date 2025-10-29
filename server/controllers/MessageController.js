@@ -6,6 +6,21 @@ import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
 import mongoose from "mongoose";
 
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(
+      null,
+      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname)
+    );
+  },
+});
+
+export const upload = multer({ storage: storage });
+
 export const uploadFile = async (req, res, next) => {
   try {
     if (!req.file) {
@@ -114,23 +129,20 @@ export const sendMessage = async (req, res, next) => {
       messageType,
     });
 
-    if (!chatId || (!content?.trim() && !fileUrl)) {
-      return res
-        .status(400)
-        .json({ message: "ChatId and content or file are required" });
+    if (!chatId) {
+      return res.status(400).json({ message: "ChatId is required" });
+    }
+
+    if (!content?.trim() && !fileUrl) {
+      return res.status(400).json({
+        message: "Content or file is required",
+      });
     }
 
     const chat = await Chat.findById(chatId);
     if (!chat) {
       return res.status(404).json({ message: "Chat not found" });
     }
-
-    console.log("🔍 Found chat:", {
-      id: chat._id,
-      type: chat.type,
-      unreadCount: chat.unreadCount,
-      participants: chat.participants,
-    });
 
     if (chat.type === "direct") {
       if (!chat.participants.includes(sender)) {
@@ -150,10 +162,10 @@ export const sendMessage = async (req, res, next) => {
       sender,
       messageType,
       content: content?.trim() || "",
-      fileUrl,
-      fileName,
-      fileSize,
-      chatId,
+      fileUrl: fileUrl || undefined,
+      fileName: fileName || undefined,
+      fileSize: fileSize || undefined,
+      chat: chatId,
       status: "sent",
       readBy: [sender],
       readReceipts: [
@@ -168,12 +180,10 @@ export const sendMessage = async (req, res, next) => {
     const savedMessage = await newMessage.save();
     console.log("✅ Message saved to database:", savedMessage._id);
 
-    console.log("🔄 Updating unread counts...");
-
     try {
       const db = mongoose.connection.db;
-
       const chatDoc = await db.collection("chats").findOne({ _id: chat._id });
+
       if (Array.isArray(chatDoc.unreadCount)) {
         console.log("🔄 Fixing array unreadCount before update...");
         await db
@@ -228,7 +238,6 @@ export const sendMessage = async (req, res, next) => {
       }
     } catch (unreadError) {
       console.error("❌ Error updating unread counts:", unreadError);
-      console.log("⚠️ Continuing without unread count update");
     }
 
     await Chat.findByIdAndUpdate(chatId, {
@@ -254,7 +263,7 @@ export const sendMessage = async (req, res, next) => {
         fileUrl: populatedMessage.fileUrl,
         fileName: populatedMessage.fileName,
         fileSize: populatedMessage.fileSize,
-        chatId: populatedMessage.chatId.toString(),
+        chatId: populatedMessage.chat.toString(),
         createdAt: populatedMessage.createdAt.toISOString(),
         timestamp: populatedMessage.createdAt.toISOString(),
         status: populatedMessage.status,
@@ -286,6 +295,14 @@ export const sendMessage = async (req, res, next) => {
   } catch (error) {
     console.error("❌ Error in sendMessage:", error);
     console.error("❌ Error stack:", error.stack);
+
+    if (error.name === "ValidationError") {
+      console.error("📋 Validation errors:", error.errors);
+      return res.status(400).json({
+        message: "Message validation failed",
+        errors: error.errors,
+      });
+    }
 
     if (!res.headersSent) {
       res.status(500).json({
@@ -324,25 +341,47 @@ export const getMessages = async (req, res, next) => {
       }
     }
 
-    const messages = await Message.find({ chatId })
-      .populate("sender", "_id firstName lastName email image")
-      .populate("readBy", "_id firstName lastName email image")
-      .populate("readReceipts.user", "_id firstName lastName email image")
-      .sort({ createdAt: 1 });
+    const userClearedAt = chat.clearedBy?.get(userId.toString());
+    let messages = [];
+
+    if (!userClearedAt) {
+      messages = await Message.find({ chat: chatId })
+        .populate("sender", "_id firstName lastName email image")
+        .populate("readBy", "_id firstName lastName email image")
+        .populate("readReceipts.user", "_id firstName lastName email image")
+        .sort({ createdAt: 1 });
+    } else {
+      messages = await Message.find({
+        chat: chatId,
+        createdAt: { $gt: userClearedAt },
+      })
+        .populate("sender", "_id firstName lastName email image")
+        .populate("readBy", "_id firstName lastName email image")
+        .populate("readReceipts.user", "_id firstName lastName email image")
+        .sort({ createdAt: 1 });
+
+      console.log(
+        `🧹 Showing only messages after clear time: ${userClearedAt}`
+      );
+    }
 
     console.log(`📨 Retrieved ${messages.length} messages for chat ${chatId}`);
 
-    const statusCount = {
-      sent: 0,
-      delivered: 0,
-      read: 0,
-    };
+    if (messages.length > 0) {
+      const statusCount = {
+        sent: 0,
+        delivered: 0,
+        read: 0,
+      };
 
-    messages.forEach((msg) => {
-      statusCount[msg.status] = (statusCount[msg.status] || 0) + 1;
-    });
+      messages.forEach((msg) => {
+        statusCount[msg.status] = (statusCount[msg.status] || 0) + 1;
+      });
 
-    console.log("📊 Message status summary:", statusCount);
+      console.log("📊 Message status summary:", statusCount);
+    } else if (userClearedAt) {
+      console.log(`🧹 Chat ${chatId} is cleared for user ${userId}`);
+    }
 
     res.status(200).json(messages);
   } catch (error) {
@@ -445,7 +484,12 @@ export const getUserChats = async (req, res, next) => {
           pipeline: [
             {
               $match: {
-                $expr: { $eq: ["$chatId", "$$chatId"] },
+                $expr: {
+                  $or: [
+                    { $eq: ["$chat", "$$chatId"] },
+                    { $eq: ["$chatId", "$$chatId"] },
+                  ],
+                },
               },
             },
             { $sort: { createdAt: -1 } },
@@ -462,6 +506,7 @@ export const getUserChats = async (req, res, next) => {
               $project: {
                 content: 1,
                 createdAt: 1,
+                messageType: 1,
                 sender: { $arrayElemAt: ["$sender", 0] },
               },
             },
@@ -483,13 +528,32 @@ export const getUserChats = async (req, res, next) => {
           createdAt: 1,
           updatedAt: 1,
           unreadCount: "$calculatedUnreadCount",
-          lastMessage: { $arrayElemAt: ["$lastMessageInfo.content", 0] },
-          lastMessageAt: { $arrayElemAt: ["$lastMessageInfo.createdAt", 0] },
-          lastMessageSender: { $arrayElemAt: ["$lastMessageInfo.sender", 0] },
+
+          lastMessage: {
+            $ifNull: [{ $arrayElemAt: ["$lastMessageInfo.content", 0] }, ""],
+          },
+          lastMessageAt: {
+            $ifNull: [
+              { $arrayElemAt: ["$lastMessageInfo.createdAt", 0] },
+              "$updatedAt",
+            ],
+          },
+          lastMessageSender: {
+            $ifNull: [{ $arrayElemAt: ["$lastMessageInfo.sender", 0] }, null],
+          },
+          lastMessageType: {
+            $ifNull: [
+              { $arrayElemAt: ["$lastMessageInfo.messageType", 0] },
+              "text",
+            ],
+          },
         },
       },
       {
-        $sort: { lastMessageAt: -1, updatedAt: -1 },
+        $sort: {
+          lastMessageAt: -1,
+          updatedAt: -1,
+        },
       },
     ]);
 
@@ -502,9 +566,27 @@ export const getUserChats = async (req, res, next) => {
         participantsCount: chat.participants?.length,
         membersCount: chat.members?.length,
         lastMessage: chat.lastMessage,
+        lastMessageAt: chat.lastMessageAt,
+        lastMessageType: chat.lastMessageType,
+        hasLastMessage: !!chat.lastMessage,
         unreadCount: chat.unreadCount,
       })),
     });
+
+    if (chats.length > 0) {
+      console.log("🔍 Sample chat details:");
+      chats.slice(0, 3).forEach((chat, index) => {
+        console.log(`  Chat ${index + 1}:`, {
+          id: chat._id,
+          type: chat.type,
+          lastMessage: chat.lastMessage || "(empty)",
+          lastMessageLength: chat.lastMessage ? chat.lastMessage.length : 0,
+          lastMessageAt: chat.lastMessageAt,
+          lastMessageType: chat.lastMessageType,
+          participants: chat.participants?.map((p) => p._id),
+        });
+      });
+    }
 
     res.status(200).json(chats);
   } catch (error) {
@@ -534,7 +616,7 @@ export const markChatAsRead = async (req, res, next) => {
 
     await Message.updateMany(
       {
-        chatId,
+        chat: chatId,
         sender: { $ne: userId },
         readBy: { $ne: userId },
       },
@@ -696,11 +778,11 @@ export const markMessageAsRead = async (req, res, next) => {
 
         const io = req.app.get("io");
         if (io) {
-          io.to(updatedMessage.chatId.toString()).emit("messageStatusUpdate", {
+          io.to(updatedMessage.chat.toString()).emit("messageStatusUpdate", {
             messageId: updatedMessage._id,
             status: updatedMessage.status,
             readBy: updatedMessage.readBy,
-            chatId: updatedMessage.chatId,
+            chatId: updatedMessage.chat.toString(),
           });
         }
 
@@ -738,11 +820,11 @@ export const markMessageAsRead = async (req, res, next) => {
 
     const io = req.app.get("io");
     if (io) {
-      io.to(message.chatId.toString()).emit("messageStatusUpdate", {
+      io.to(message.chat.toString()).emit("messageStatusUpdate", {
         messageId: message._id,
         status: message.status,
         readBy: message.readBy,
-        chatId: message.chatId,
+        chatId: message.chat.toString(),
       });
       console.log(`📢 Emitted messageStatusUpdate for message: ${messageId}`);
     }
@@ -792,11 +874,11 @@ export const markMessageAsDelivered = async (req, res, next) => {
 
     const io = req.app.get("io");
     if (io) {
-      io.to(message.chatId.toString()).emit("messageStatusUpdate", {
+      io.to(message.chat.toString()).emit("messageStatusUpdate", {
         messageId: message._id,
         status: message.status,
         readBy: message.readBy,
-        chatId: message.chatId,
+        chatId: message.chat.toString(),
       });
       console.log(`📢 Emitted messageStatusUpdate for message: ${messageId}`);
     }
@@ -893,10 +975,10 @@ export const editMessage = async (req, res, next) => {
 
     const io = req.app.get("io");
     if (io) {
-      io.to(message.chatId.toString()).emit("messageUpdated", {
+      io.to(message.chat.toString()).emit("messageUpdated", {
         action: "edited",
         message: populatedMessage,
-        chatId: message.chatId,
+        chatId: message.chat.toString(),
       });
       console.log(
         `📢 Emitted messageUpdated event for edited message: ${messageId}`
@@ -929,7 +1011,7 @@ export const deleteMessage = async (req, res, next) => {
       return res.status(404).json({ message: "Message not found" });
     }
 
-    const chat = await Chat.findById(message.chatId);
+    const chat = await Chat.findById(message.chat);
     if (!chat) {
       return res.status(404).json({ message: "Chat not found" });
     }
@@ -954,10 +1036,10 @@ export const deleteMessage = async (req, res, next) => {
 
       const io = req.app.get("io");
       if (io) {
-        io.to(message.chatId.toString()).emit("messageUpdated", {
+        io.to(message.chat.toString()).emit("messageUpdated", {
           action: "deleted",
           messageId: messageId,
-          chatId: message.chatId,
+          chatId: message.chat.toString(),
           deletedForEveryone: true,
         });
       }
@@ -977,10 +1059,10 @@ export const deleteMessage = async (req, res, next) => {
 
       const io = req.app.get("io");
       if (io) {
-        io.to(message.chatId.toString()).emit("messageUpdated", {
+        io.to(message.chat.toString()).emit("messageUpdated", {
           action: "deleted",
           message: populatedMessage,
-          chatId: message.chatId,
+          chatId: message.chat.toString(),
           deletedForEveryone: false,
         });
       }
@@ -998,6 +1080,173 @@ export const deleteMessage = async (req, res, next) => {
     console.error("❌ Error deleting message:", error);
     res.status(500).json({
       message: "Failed to delete message",
+      error: error.message,
+    });
+  }
+};
+
+export const clearChat = async (req, res, next) => {
+  try {
+    const { chatId } = req.params;
+    const userId = req.userId;
+
+    console.log(`🧹 Clearing chat ${chatId} for user ${userId}`);
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    if (chat.type === "direct") {
+      if (!chat.participants.includes(userId)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+    } else if (chat.type === "channel") {
+      if (!chat.members.includes(userId)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+    }
+
+    if (!chat.clearedBy) {
+      chat.clearedBy = new Map();
+    }
+    chat.clearedBy.set(userId.toString(), new Date());
+
+    if (chat.unreadCount) {
+      chat.unreadCount.set(userId.toString(), 0);
+    }
+
+    chat.lastMessage = "";
+    chat.lastMessageTime = new Date();
+
+    await chat.save();
+
+    console.log(`✅ Chat ${chatId} cleared for user ${userId}`);
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(userId).emit("chatCleared", {
+        chatId,
+        clearedForEveryone: false,
+      });
+
+      io.emit("chatUpdated", { chatId });
+    }
+
+    res.status(200).json({
+      message: "Chat cleared successfully",
+      chatId,
+    });
+  } catch (error) {
+    console.error("❌ Error clearing chat:", error);
+    res.status(500).json({
+      message: "Failed to clear chat",
+      error: error.message,
+    });
+  }
+};
+
+export const clearChatMessages = async (req, res, next) => {
+  try {
+    const { chatId } = req.params;
+    const userId = req.userId;
+    const { deleteForEveryone = false } = req.body;
+
+    console.log(`🗑️ Clearing messages from chat ${chatId} for user ${userId}`);
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    if (chat.type === "direct") {
+      if (!chat.participants.includes(userId)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+    } else if (chat.type === "channel") {
+      if (!chat.members.includes(userId)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const isAdmin = chat.admins?.some((admin) => admin.toString() === userId);
+      const isCreator = chat.createdBy?.toString() === userId;
+
+      if (deleteForEveryone && !isAdmin && !isCreator) {
+        return res.status(403).json({
+          message: "Only admins can clear messages for everyone in channels",
+        });
+      }
+    }
+
+    if (deleteForEveryone) {
+      await Message.deleteMany({ chat: chatId });
+
+      chat.lastMessage = "";
+      chat.lastMessageTime = new Date();
+
+      if (chat.unreadCount) {
+        if (chat.type === "direct") {
+          chat.participants.forEach((participantId) => {
+            chat.unreadCount.set(participantId.toString(), 0);
+          });
+        } else if (chat.type === "channel") {
+          chat.members.forEach((memberId) => {
+            chat.unreadCount.set(memberId.toString(), 0);
+          });
+        }
+      }
+
+      chat.clearedBy = new Map();
+
+      await chat.save();
+
+      const io = req.app.get("io");
+      if (io) {
+        io.to(chatId).emit("messagesCleared", {
+          chatId,
+          clearedForEveryone: true,
+        });
+        io.emit("chatUpdated", { chatId });
+      }
+    } else {
+      if (chat.unreadCount) {
+        chat.unreadCount.set(userId.toString(), 0);
+      }
+
+      if (!chat.clearedBy) {
+        chat.clearedBy = new Map();
+      }
+      chat.clearedBy.set(userId.toString(), new Date());
+
+      chat.lastMessage = "";
+      chat.lastMessageTime = new Date();
+
+      await chat.save();
+
+      const io = req.app.get("io");
+      if (io) {
+        io.to(userId).emit("messagesCleared", {
+          chatId,
+          clearedForEveryone: false,
+        });
+
+        io.emit("chatUpdated", { chatId });
+      }
+    }
+
+    console.log(`✅ Messages cleared for chat ${chatId}`);
+
+    res.status(200).json({
+      message: deleteForEveryone
+        ? "All messages cleared for everyone"
+        : "Chat cleared for you",
+      chatId,
+      deletedForEveryone: deleteForEveryone,
+    });
+  } catch (error) {
+    console.error("❌ Error clearing chat messages:", error);
+    res.status(500).json({
+      message: "Failed to clear messages",
       error: error.message,
     });
   }
