@@ -61,11 +61,7 @@ messageRoutes.patch(
   verifyToken,
   markMessageAsDelivered
 );
-messageRoutes.patch(
-  "/:messageId/read",
-  verifyToken,
-  markMessageAsRead
-);
+messageRoutes.patch("/:messageId/read", verifyToken, markMessageAsRead);
 messageRoutes.get("/:messageId/status", verifyToken, getMessageStatus);
 messageRoutes.patch("/:messageId/edit", verifyToken, editMessage);
 messageRoutes.delete("/:messageId", verifyToken, deleteMessage);
