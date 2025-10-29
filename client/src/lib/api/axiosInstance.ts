@@ -10,7 +10,9 @@ export const createAxiosInstance = (): AxiosInstance => {
       "Content-Type": "application/json",
     },
     withCredentials: true,
-    timeout: 10000,
+    timeout: 30000,
+    timeoutErrorMessage:
+      "Request timeout - server is taking too long to respond",
   });
 
   instance.interceptors.request.use(
@@ -19,29 +21,68 @@ export const createAxiosInstance = (): AxiosInstance => {
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
+
+      console.log(
+        `🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`,
+        {
+          baseURL: config.baseURL,
+          timeout: config.timeout,
+          withCredentials: config.withCredentials,
+        }
+      );
+
       return config;
     },
-    (error) => Promise.reject(error)
+    (error) => {
+      console.error("❌ Request interceptor error:", error);
+      return Promise.reject(error);
+    }
   );
 
   instance.interceptors.response.use(
-    (response: AxiosResponse) => response,
+    (response: AxiosResponse) => {
+      console.log(
+        `✅ API Response: ${response.status} ${response.config.url}`,
+        {
+          data: response.data,
+        }
+      );
+      return response;
+    },
     (error) => {
+      console.error("❌ API Error:", {
+        url: error.config?.url,
+        method: error.config?.method,
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+
       if (error.response) {
         const { status, data } = error.response;
         const message = data?.message || `API Error: ${status}`;
 
         if (status === 401) {
-          console.error("Unauthorized access - please login again");
-
+          console.error("🔐 Unauthorized access - clearing auth token");
           localStorage.removeItem("auth_token");
+        } else if (status >= 500) {
+          console.error("🚨 Server error - please try again later");
         }
 
         throw new Error(message);
       } else if (error.request) {
-        throw new Error("Network error: No response received");
+        if (error.code === "ECONNABORTED") {
+          throw new Error(
+            `Request timeout after ${error.config.timeout}ms - server may be overloaded`
+          );
+        } else {
+          throw new Error(
+            "Network error: Unable to connect to server. Please check your internet connection."
+          );
+        }
       } else {
-        throw new Error(`Request error: ${error.message}`);
+        throw new Error(`Request configuration error: ${error.message}`);
       }
     }
   );
