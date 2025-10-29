@@ -6,14 +6,18 @@ import {
   useEditMessage,
   useDeleteMessage,
 } from "../../hooks/chats/useMessageOperations";
-import { useApp } from "../../contexts/appcontext/index";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import type { EmojiClickData } from "emoji-picker-react";
 import { DeleteConfirmationModal } from "./DeleteConfirmationmodal";
+import type { Socket } from "socket.io-client";
+import type { User } from "../../types/types";
 
-const MessageComponent: React.FC<
-  MessageDisplayProps & { socket?: any; currentUser?: any }
-> = ({
+interface ExtendedMessageDisplayProps extends MessageDisplayProps {
+  socket?: Socket;
+  currentUser?: User | null;
+}
+
+const MessageComponent: React.FC<ExtendedMessageDisplayProps> = ({
   message,
   isCurrentUser,
   showSenderName,
@@ -27,7 +31,6 @@ const MessageComponent: React.FC<
   const markAsReadMutation = useMarkMessageAsRead();
   const messageRef = useRef<HTMLDivElement>(null);
   const hasBeenReadRef = useRef(false);
-  const { state } = useApp();
 
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
@@ -42,7 +45,6 @@ const MessageComponent: React.FC<
   const editMessageMutation = useEditMessage();
   const deleteMessageMutation = useDeleteMessage();
 
-  // Mark message as read when it becomes visible
   useEffect(() => {
     if (!socket || !currentUser) return;
 
@@ -66,13 +68,11 @@ const MessageComponent: React.FC<
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && !hasBeenReadRef.current && socket) {
-          // Use socket to mark as read in real-time
           socket.emit("messageRead", {
             messageId: message._id,
             userId: currentUser._id,
           });
 
-          // Also call the mutation for backup
           markAsReadMutation.mutate(message._id);
           hasBeenReadRef.current = true;
           observer.disconnect();
@@ -96,12 +96,10 @@ const MessageComponent: React.FC<
     socket,
   ]);
 
-  // Mark message as delivered when component mounts (if needed)
   useEffect(() => {
     if (!socket || !currentUser || isCurrentUser || message.status !== "sent")
       return;
 
-    // If this message is sent to me and is still 'sent', mark it as delivered
     const isUserInReadBy = message.readBy?.some((readByItem) => {
       if (typeof readByItem === "string") {
         return readByItem === currentUser._id;
@@ -152,9 +150,7 @@ const MessageComponent: React.FC<
     }
   }, [message.content, isEditing]);
 
-  // console.log({ message });
-
-  const canEditMessage = () => {
+  const canEditMessage = (): boolean => {
     if (!isCurrentUser) return false;
     if (message.isDeleted) return false;
 
@@ -163,26 +159,31 @@ const MessageComponent: React.FC<
     return messageAge <= editTimeLimit;
   };
 
-  const canDeleteMessage = () => {
-    if (message.isDeleted) return false;
+  const canDeleteMessage = (): {
+    deleteForMe: boolean;
+    deleteForEveryone: boolean;
+  } => {
+    if (message.isDeleted) {
+      return { deleteForMe: false, deleteForEveryone: false };
+    }
 
     const deleteTimeLimit = 15 * 60 * 1000;
     const messageAge = Date.now() - new Date(message.createdAt).getTime();
     const canDeleteForEveryone = messageAge <= deleteTimeLimit;
 
     return {
-      deleteForMe: isCurrentUser,
-      deleteForEveryone: isCurrentUser && canDeleteForEveryone,
+      deleteForMe: isCurrentUser ?? false,
+      deleteForEveryone: (isCurrentUser && canDeleteForEveryone) ?? false,
     };
   };
 
-  const handleEdit = () => {
+  const handleEdit = (): void => {
     setIsEditing(true);
     setEditContent(message.content);
     setShowMenu(false);
   };
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = async (): Promise<void> => {
     if (!editContent?.trim() || editContent === message.content) {
       setIsEditing(false);
       return;
@@ -199,19 +200,19 @@ const MessageComponent: React.FC<
     }
   };
 
-  const handleCancelEdit = () => {
+  const handleCancelEdit = (): void => {
     setIsEditing(false);
     setEditContent(message.content);
     setShowEmojiPicker(false);
   };
 
-  const handleDeleteClick = (forEveryone: boolean) => {
+  const handleDeleteClick = (forEveryone: boolean): void => {
     setDeleteForEveryone(forEveryone);
     setShowDeleteModal(true);
     setShowMenu(false);
   };
 
-  const handleDeleteConfirm = async () => {
+  const handleDeleteConfirm = async (): Promise<void> => {
     try {
       await deleteMessageMutation.mutateAsync({
         messageId: message._id,
@@ -223,7 +224,7 @@ const MessageComponent: React.FC<
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = (e: React.KeyboardEvent): void => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSaveEdit();
@@ -232,11 +233,13 @@ const MessageComponent: React.FC<
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement>
+  ): void => {
     setEditContent(e.target.value);
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
     const pastedText = e.clipboardData.getData("text");
     if (pastedText) {
       setTimeout(() => {
@@ -247,10 +250,10 @@ const MessageComponent: React.FC<
     }
   };
 
-  const handleEmojiClick = (emojiData: EmojiClickData) => {
+  const handleEmojiClick = (emojiData: EmojiClickData): void => {
     const cursorPosition = editInputRef.current?.selectionStart || 0;
-    const textBeforeCursor = editContent?.substring(0, cursorPosition);
-    const textAfterCursor = editContent?.substring(cursorPosition);
+    const textBeforeCursor = editContent?.substring(0, cursorPosition) || "";
+    const textAfterCursor = editContent?.substring(cursorPosition) || "";
 
     const newContent = textBeforeCursor + emojiData.emoji + textAfterCursor;
     setEditContent(newContent);
@@ -269,7 +272,7 @@ const MessageComponent: React.FC<
 
   const deletePermissions = canDeleteMessage();
 
-  const renderFileMessage = () => {
+  const renderFileMessage = (): React.ReactNode => {
     if (
       message.messageType !== "file" ||
       !message.fileUrl ||
@@ -328,7 +331,12 @@ const MessageComponent: React.FC<
     );
   };
 
-  const getSenderInfo = () => {
+  const getSenderInfo = (): {
+    image: string | null;
+    initials: string;
+    firstName: string;
+    lastName: string;
+  } => {
     if (typeof message.sender === "string") {
       return {
         image: null,
@@ -338,12 +346,12 @@ const MessageComponent: React.FC<
       };
     } else {
       return {
-        image: message.sender.image,
+        image: message.sender.image || null,
         initials: `${message.sender.firstName?.[0] || ""} ${
           message.sender.lastName?.[0] || ""
         }`.trim(),
-        firstName: message.sender.firstName,
-        lastName: message.sender.lastName,
+        firstName: message.sender.firstName || "",
+        lastName: message.sender.lastName || "",
       };
     }
   };
@@ -661,7 +669,7 @@ const MessageComponent: React.FC<
                     </button>
                   )}
 
-                  {deletePermissions && deletePermissions.deleteForMe && (
+                  {deletePermissions.deleteForMe && (
                     <button
                       onClick={() => handleDeleteClick(false)}
                       className={`flex items-center w-full px-3 py-2.5 text-sm rounded-lg transition-colors ${
@@ -687,7 +695,7 @@ const MessageComponent: React.FC<
                     </button>
                   )}
 
-                  {deletePermissions && deletePermissions.deleteForEveryone && (
+                  {deletePermissions.deleteForEveryone && (
                     <button
                       onClick={() => handleDeleteClick(true)}
                       className={`flex items-center w-full px-3 py-2.5 text-sm rounded-lg transition-colors ${
@@ -714,9 +722,8 @@ const MessageComponent: React.FC<
                   )}
 
                   {!canEditMessage() &&
-                    (!deletePermissions ||
-                      (!deletePermissions.deleteForMe &&
-                        !deletePermissions.deleteForEveryone)) && (
+                    !deletePermissions.deleteForMe &&
+                    !deletePermissions.deleteForEveryone && (
                       <div
                         className={`px-3 py-2.5 text-sm text-center ${
                           isDark ? "text-gray-500" : "text-gray-400"
