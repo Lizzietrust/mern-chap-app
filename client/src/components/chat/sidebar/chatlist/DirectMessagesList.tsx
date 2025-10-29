@@ -17,6 +17,20 @@ interface DirectMessagesListProps {
   getDisplayUnreadCount: (chat: UserChat) => number;
 }
 
+const getLastMessage = (chat: UserChat): string => {
+  if (chat.lastMessage && chat.lastMessage.trim()) {
+    return chat.lastMessage.length > 50
+      ? chat.lastMessage.substring(0, 50) + "..."
+      : chat.lastMessage;
+  }
+
+  if (chat.participants && chat.participants.length > 0) {
+    return "Start a conversation";
+  }
+
+  return "No messages yet";
+};
+
 export const DirectMessagesList: React.FC<DirectMessagesListProps> = React.memo(
   ({
     isDark,
@@ -49,7 +63,9 @@ export const DirectMessagesList: React.FC<DirectMessagesListProps> = React.memo(
           const displayName = otherParticipant
             ? getDisplayName(otherParticipant)
             : "Unknown User";
-          const lastMessage = chat.lastMessage || "No messages yet";
+
+          const lastMessage = getLastMessage(chat);
+
           const lastMessageTime = formatLastMessageTime(chat.lastMessageAt);
           const isOnline = otherParticipant?.isOnline || false;
           const userImage = otherParticipant?.image;
