@@ -13,6 +13,8 @@ import {
   getMessageStatus,
   editMessage,
   deleteMessage,
+  clearChat,
+  clearChatMessages,
 } from "../controllers/MessageController.js";
 import { verifyToken } from "../middlewares/AuthMiddleware.js";
 import multer from "multer";
@@ -67,5 +69,7 @@ messageRoutes.patch(
 messageRoutes.get("/:messageId/status", verifyToken, getMessageStatus);
 messageRoutes.patch("/:messageId/edit", verifyToken, editMessage);
 messageRoutes.delete("/:messageId", verifyToken, deleteMessage);
+messageRoutes.delete("/chats/:chatId/clear", verifyToken, clearChat);
+messageRoutes.delete("/chats/:chatId/messages", verifyToken, clearChatMessages);
 
 export default messageRoutes;
