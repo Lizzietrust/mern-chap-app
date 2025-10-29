@@ -80,6 +80,12 @@ const chatSchema = new mongoose.Schema(
       },
       default: () => new Map(),
     },
+
+    clearedBy: {
+      type: Map,
+      of: Date,
+      default: () => new Map(),
+    },
   },
   {
     timestamps: true,
@@ -104,6 +110,10 @@ chatSchema.set("toJSON", {
   transform: function (doc, ret) {
     if (ret.unreadCount && ret.unreadCount instanceof Map) {
       ret.unreadCount = Object.fromEntries(ret.unreadCount);
+    }
+
+    if (ret.clearedBy && ret.clearedBy instanceof Map) {
+      ret.clearedBy = Object.fromEntries(ret.clearedBy);
     }
     return ret;
   },
@@ -137,6 +147,41 @@ chatSchema.methods.resetUnreadCount = function (userId) {
     return this.save();
   }
   return Promise.resolve(this);
+};
+
+chatSchema.methods.hasUserCleared = function (userId) {
+  return this.clearedBy && this.clearedBy.has(userId.toString());
+};
+
+chatSchema.methods.clearForUser = function (userId) {
+  if (!this.clearedBy) {
+    this.clearedBy = new Map();
+  }
+  this.clearedBy.set(userId.toString(), new Date());
+
+  if (this.unreadCount) {
+    this.unreadCount.set(userId.toString(), 0);
+  }
+
+  return this.save();
+};
+
+chatSchema.methods.clearForEveryone = function () {
+  this.clearedBy = new Map();
+
+  if (this.unreadCount) {
+    if (this.type === "direct") {
+      this.participants.forEach((participantId) => {
+        this.unreadCount.set(participantId.toString(), 0);
+      });
+    } else if (this.type === "channel") {
+      this.members.forEach((memberId) => {
+        this.unreadCount.set(memberId.toString(), 0);
+      });
+    }
+  }
+
+  return this.save();
 };
 
 const Chat = mongoose.model("Chat", chatSchema);
