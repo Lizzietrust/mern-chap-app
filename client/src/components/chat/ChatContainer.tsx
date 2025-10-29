@@ -1,7 +1,12 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useApp } from "../../contexts/appcontext/index";
 import { useChatSubtitle } from "../../hooks/useChatSubtitle";
-import { isChannelChat } from "../../types/types";
+import {
+  isChannelChat,
+  getUserId,
+  type User,
+  // type Message,
+} from "../../types/types";
 import type { ChatContainerProps } from "../../types/chat-container.types";
 import {
   getSenderName,
@@ -13,6 +18,16 @@ import MessageInput from "./MessageInput";
 import MessageComponent from "./MessageComponent";
 import TypingIndicator from "./TypingIndicator";
 import { useSocket } from "../../hooks/useSocket";
+import { useClearChat } from "../../hooks/chats/useClearchat";
+import ChatSettingsModal from "../modals/ChatSettingsModal";
+import ClearChatModal from "../modals/ClearChatModal";
+
+interface MessageStatusUpdateData {
+  messageId: string;
+  status: "sent" | "delivered" | "read";
+  readBy?: string[] | User[];
+  chatId: string;
+}
 
 const ChatContainer: React.FC<ChatContainerProps> = ({
   selectedChat,
@@ -31,7 +46,15 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   onShowChannelSettings,
 }) => {
   const { state } = useApp();
-  const { onlineUsers } = useSocket();
+  const { socket, onlineUsers } = useSocket();
+  const clearChatMutation = useClearChat();
+
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showClearChatModal, setShowClearChatModal] = useState(false);
+
+  const safeOnlineUsers = useMemo(() => {
+    return Array.isArray(onlineUsers) ? onlineUsers : [];
+  }, [onlineUsers]);
 
   const displayChat = useMemo(() => {
     if (!selectedChat) return null;
@@ -40,18 +63,25 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
       return {
         ...selectedChat,
         participants: selectedChat.participants.map((p) => {
-          const onlineUser = onlineUsers.find((u) => u._id === p._id);
+          const onlineUser = safeOnlineUsers.find(
+            (u) => u._id === getUserId(p)
+          );
           return {
             ...p,
-            isOnline: onlineUser?.isOnline || p.isOnline || false,
-            lastSeen: onlineUser?.lastSeen || p.lastSeen,
+            isOnline:
+              onlineUser?.isOnline ||
+              (typeof p === "object" ? p.isOnline : false) ||
+              false,
+            lastSeen:
+              onlineUser?.lastSeen ||
+              (typeof p === "object" ? p.lastSeen : undefined),
           };
         }),
       };
     }
 
     return selectedChat;
-  }, [selectedChat, onlineUsers]);
+  }, [selectedChat, safeOnlineUsers]);
 
   const { chatSubtitle } = useChatSubtitle({
     showLastSeen: true,
@@ -59,17 +89,179 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   });
 
   const isChannel = selectedChat && isChannelChat(selectedChat);
+  const isAdmin = isChannel && selectedChat!.admins?.includes(state.user!._id);
+  const isCreator = isChannel && selectedChat!.createdBy === state.user!._id;
 
   const subtitle = chatSubtitle(displayChat, state.user);
+
+  useEffect(() => {
+    if (!socket || !selectedChat) return;
+
+    socket.emit("joinChat", selectedChat._id);
+
+    const handleMessageStatusUpdate = (data: MessageStatusUpdateData) => {
+      console.log("📢 Received message status update:", data);
+    };
+
+    socket.on("messageStatusUpdate", handleMessageStatusUpdate);
+
+    const markMessagesAsDelivered = async () => {
+      if (messages && messages.length > 0) {
+        const undeliveredMessages = messages.filter((msg) => {
+          const senderId =
+            typeof msg.sender === "object" ? msg.sender._id : msg.sender;
+          return senderId !== state.user?._id && msg.status === "sent";
+        });
+
+        for (const message of undeliveredMessages) {
+          try {
+            socket.emit("markAsDelivered", {
+              messageId: message._id,
+              userId: state.user?._id,
+            });
+          } catch (error) {
+            console.error("Error marking message as delivered:", error);
+          }
+        }
+      }
+    };
+
+    markMessagesAsDelivered();
+
+    return () => {
+      socket.off("messageStatusUpdate", handleMessageStatusUpdate);
+      socket.emit("leaveChat", selectedChat._id);
+    };
+  }, [socket, selectedChat, state.user, messages]);
+
+  useEffect(() => {
+    if (!socket || !selectedChat || !messages || messages.length === 0) return;
+
+    const messageContainer = document.querySelector(".overflow-y-auto");
+    const isAtBottom = messageContainer
+      ? messageContainer.scrollHeight - messageContainer.scrollTop <=
+        messageContainer.clientHeight + 100
+      : false;
+
+    if (isAtBottom) {
+      const unreadMessages = messages.filter((msg) => {
+        const senderId =
+          typeof msg.sender === "object" ? msg.sender._id : msg.sender;
+        return senderId !== state.user?._id && msg.status !== "read";
+      });
+
+      if (unreadMessages.length > 0) {
+        console.log(`👁️ Marking ${unreadMessages.length} messages as read`);
+
+        socket.emit("markAllMessagesAsRead", {
+          chatId: selectedChat._id,
+          userId: state.user?._id,
+        });
+      }
+    }
+  }, [messages, selectedChat, state.user, socket]);
+
+  useEffect(() => {
+    if (!socket || !messages || messages.length === 0) return;
+
+    const lastMessage = messages[messages.length - 1];
+
+    if (lastMessage) {
+      const senderId =
+        typeof lastMessage.sender === "object"
+          ? lastMessage.sender._id
+          : lastMessage.sender;
+
+      if (senderId !== state.user?._id && lastMessage.status === "sent") {
+        console.log(
+          "📨 Marking received message as delivered:",
+          lastMessage._id
+        );
+
+        socket.emit("markAsDelivered", {
+          messageId: lastMessage._id,
+          userId: state.user?._id,
+        });
+      }
+    }
+  }, [messages, state.user, socket]);
+
+  useEffect(() => {
+    if (!socket || !selectedChat || !messages || messages.length === 0) return;
+
+    const handleFocus = () => {
+      const undeliveredMessages = messages.filter((msg) => {
+        const senderId =
+          typeof msg.sender === "object" ? msg.sender._id : msg.sender;
+        return senderId !== state.user?._id && msg.status === "sent";
+      });
+
+      if (undeliveredMessages.length > 0) {
+        console.log(
+          `📨 Marking ${undeliveredMessages.length} messages as delivered on focus`
+        );
+
+        undeliveredMessages.forEach((message) => {
+          socket.emit("markAsDelivered", {
+            messageId: message._id,
+            userId: state.user?._id,
+          });
+        });
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    handleFocus();
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [socket, selectedChat, messages, state.user]);
 
   const handleDownloadFile = async (fileUrl: string, fileName: string) => {
     await downloadFile(fileUrl, fileName);
   };
 
   const handleMenuClick = () => {
-    alert(
-      "More options:\n• View Participants\n• Notification Settings\n• Chat Settings"
-    );
+    setShowSettingsModal(true);
+  };
+
+  const handleSettingsOptionSelect = (option: string) => {
+    setShowSettingsModal(false);
+
+    switch (option) {
+      case "clear":
+        setShowClearChatModal(true);
+        break;
+      case "theme":
+        alert("Change chat theme functionality would go here");
+        break;
+      case "export":
+        alert("Export chat functionality would go here");
+        break;
+      case "block":
+        alert("Block user functionality would go here");
+        break;
+      case "delete":
+        alert("Delete chat functionality would go here");
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleClearChatConfirm = (deleteForEveryone: boolean) => {
+    setShowClearChatModal(false);
+
+    if (selectedChat) {
+      clearChatMutation.mutate({
+        chatId: selectedChat._id,
+        deleteForEveryone,
+      });
+    }
   };
 
   const handleParticipantsClick = () => {
@@ -83,14 +275,24 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
       );
     } else if (displayChat.type === "direct" && displayChat.participants) {
       const otherUser = displayChat.participants.find(
-        (p) => p._id !== state.user?._id
+        (p) => getUserId(p) !== state.user?._id
       );
 
-      alert(
-        `Chat with: ${otherUser?.firstName} ${otherUser?.lastName}\n\nStatus: ${
-          otherUser?.isOnline ? "Online" : "Offline"
-        }\n\n• View profile\n• Shared media\n• Common groups`
-      );
+      if (otherUser) {
+        const otherUserName =
+          typeof otherUser === "string"
+            ? "Unknown User"
+            : `${otherUser.firstName} ${otherUser.lastName}`;
+
+        const isOnline =
+          typeof otherUser === "object" ? otherUser.isOnline : false;
+
+        alert(
+          `Chat with: ${otherUserName}\n\nStatus: ${
+            isOnline ? "Online" : "Offline"
+          }\n\n• View profile\n• Shared media\n• Common groups`
+        );
+      }
     }
   };
 
@@ -111,9 +313,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
     if (isChannelChat(selectedChat)) {
       onShowChannelSettings();
     } else {
-      alert(
-        "Chat Settings:\n• Change chat theme\n• Clear chat history\n• Export chat\n• Block user\n• Delete chat"
-      );
+      setShowSettingsModal(true);
     }
   };
 
@@ -143,10 +343,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
     }
 
     return messages.map((message, index) => {
-      const isCurrentUser =
-        (typeof message.sender === "object" &&
-          message.sender._id === state?.user?._id) ||
-        message.sender === state?.user?._id;
+      const isCurrentUser = getUserId(message.sender) === state?.user?._id;
 
       const showSenderName = shouldShowSenderName(
         message,
@@ -168,6 +365,8 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
           isDark={isDark}
           formatTime={formatTime}
           onDownloadFile={handleDownloadFile}
+          socket={socket}
+          currentUser={state.user}
         />
       );
     });
@@ -190,37 +389,57 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      <ChatHeader
-        selectedChat={selectedChat}
-        isDark={isDark}
-        onBack={() => setSelectedChat(null)}
-        title={getChatTitle()}
-        subtitle={subtitle}
-        onSearch={handleSearchClick}
-        onMenu={handleMenuClick}
-        onParticipants={handleParticipantsClick}
-        onSettings={handleSettingsClick}
-      />
+    <>
+      <div className="flex flex-1 flex-col">
+        <ChatHeader
+          selectedChat={selectedChat}
+          isDark={isDark}
+          onBack={() => setSelectedChat(null)}
+          title={getChatTitle()}
+          subtitle={subtitle}
+          onSearch={handleSearchClick}
+          onMenu={handleMenuClick}
+          onParticipants={handleParticipantsClick}
+          onSettings={handleSettingsClick}
+        />
 
-      <div className="overflow-y-auto h-[calc(100vh-120px)] p-4 space-y-2">
-        {renderMessages()}
+        <div className="overflow-y-auto h-[calc(100vh-120px)] p-4 space-y-2">
+          {renderMessages()}
 
-        {isTyping && <TypingIndicator isDark={isDark} />}
+          {isTyping && <TypingIndicator isDark={isDark} />}
 
-        <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
+        </div>
+
+        <MessageInput
+          newMessage={newMessage}
+          isSending={isSending}
+          isDark={isDark}
+          placeholder={`Message ${getChatTitle()}`}
+          onMessageChange={setNewMessage}
+          onSendMessage={handleSendMessage}
+          onFileSelect={handleFileSelect}
+        />
       </div>
 
-      <MessageInput
-        newMessage={newMessage}
-        isSending={isSending}
+      <ChatSettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        isChannel={isChannel}
+        onOptionSelect={handleSettingsOptionSelect}
         isDark={isDark}
-        placeholder={`Message ${getChatTitle()}`}
-        onMessageChange={setNewMessage}
-        onSendMessage={handleSendMessage}
-        onFileSelect={handleFileSelect}
       />
-    </div>
+
+      <ClearChatModal
+        isOpen={showClearChatModal}
+        onClose={() => setShowClearChatModal(false)}
+        onConfirm={handleClearChatConfirm}
+        isDark={isDark}
+        isChannel={isChannel}
+        isAdmin={isAdmin}
+        isCreator={isCreator}
+      />
+    </>
   );
 };
 
