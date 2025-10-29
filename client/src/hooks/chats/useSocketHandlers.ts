@@ -1,7 +1,7 @@
 import { useEffect, useContext, useCallback, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSocket } from "../useSocket";
-import { MESSAGE_KEYS, useMessages } from "../chats";
+import { MESSAGE_KEYS, CHAT_KEYS, useMessages } from "../chats";
 import { SelectedChatContext } from "../../contexts/selectedChatContext/SelectedChatContext";
 import type {
   SelectedChatContextType,
@@ -13,6 +13,7 @@ import type {
 } from "../../types/types";
 import { useApp } from "../../contexts/appcontext/index";
 import { messageApi, chatApi } from "../../lib/api";
+import { useNotifications } from "../../contexts";
 
 export const useSocketHandlers = () => {
   const { socket, onlineUsers } = useSocket();
@@ -21,6 +22,7 @@ export const useSocketHandlers = () => {
   ) as SelectedChatContextType;
   const { state } = useApp();
   const queryClient = useQueryClient();
+  const { success } = useNotifications();
 
   const { data: messages } = useMessages(selectedChat?._id);
 
@@ -184,6 +186,31 @@ export const useSocketHandlers = () => {
     [selectedChat?._id, queryClient]
   );
 
+  const handleMessagesCleared = useCallback(
+    (data: { chatId: string; clearedForEveryone: boolean }) => {
+      const { chatId, clearedForEveryone } = data;
+
+      if (chatId === selectedChat?._id) {
+        queryClient.invalidateQueries({
+          queryKey: MESSAGE_KEYS.list(chatId),
+        });
+
+        if (clearedForEveryone) {
+          success("Chat has been cleared for everyone");
+        } else {
+          success("Chat cleared for you");
+        }
+      }
+    },
+    [selectedChat?._id, queryClient, success]
+  );
+
+  const handleChatCleared = useCallback(() => {
+    queryClient.invalidateQueries({
+      queryKey: CHAT_KEYS.userChats(state.user?._id),
+    });
+  }, [queryClient, state.user?._id]);
+
   useEffect(() => {
     const chatId = selectedChat?._id;
     const userId = state.user?._id;
@@ -304,11 +331,15 @@ export const useSocketHandlers = () => {
     socket.on("newMessage", handleNewMessage);
     socket.on("messageStatusUpdate", handleSocketMessageStatusUpdate);
     socket.on("messageUpdated", handleMessageUpdate);
+    socket.on("messagesCleared", handleMessagesCleared);
+    socket.on("chatCleared", handleChatCleared);
 
     return () => {
       socket.off("newMessage", handleNewMessage);
       socket.off("messageStatusUpdate", handleSocketMessageStatusUpdate);
       socket.off("messageUpdated", handleMessageUpdate);
+      socket.off("messagesCleared", handleMessagesCleared);
+      socket.off("chatCleared", handleChatCleared);
     };
   }, [
     socket,
@@ -317,6 +348,8 @@ export const useSocketHandlers = () => {
     queryClient,
     handleMessageStatusUpdate,
     handleMessageUpdate,
+    handleMessagesCleared,
+    handleChatCleared,
   ]);
 
   return {
