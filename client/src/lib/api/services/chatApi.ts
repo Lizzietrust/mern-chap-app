@@ -5,6 +5,12 @@ export interface CreateChatRequest {
   userId: string;
 }
 
+export interface ClearChatResponse {
+  message: string;
+  chatId: string;
+  deletedForEveryone?: boolean;
+}
+
 export const chatApi = {
   createChat: (userId: string): Promise<Chat> =>
     apiClient.post<Chat>("/api/messages/create-chat", {
@@ -19,4 +25,18 @@ export const chatApi = {
 
   getUnreadCounts: () =>
     apiClient.get<Record<string, number>>("/api/messages/chats/unread-counts"),
+
+  clearChat: (chatId: string): Promise<ClearChatResponse> =>
+    apiClient.delete<ClearChatResponse>(`/api/messages/chats/${chatId}/clear`),
+
+  clearChatMessages: (
+    chatId: string,
+    deleteForEveryone: boolean = false
+  ): Promise<ClearChatResponse> =>
+    apiClient.delete<ClearChatResponse>(
+      `/api/messages/chats/${chatId}/messages`,
+      {
+        data: { deleteForEveryone },
+      }
+    ),
 };
