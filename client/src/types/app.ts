@@ -1,3 +1,5 @@
+import type { Socket } from "socket.io-client";
+
 export interface ApiUser {
   _id: string;
   email: string;
@@ -51,6 +53,8 @@ export interface AppState {
   sidebarOpen: boolean;
   notifications: AppNotification[];
   loading: boolean;
+  socket: Socket | null;
+  onlineUsers: User[];
 }
 
 export type AppAction =
@@ -62,7 +66,9 @@ export type AppAction =
   | { type: "ADD_NOTIFICATION"; payload: AppNotification }
   | { type: "REMOVE_NOTIFICATION"; payload: string }
   | { type: "SET_LOADING"; payload: boolean }
-  | { type: "LOGOUT" };
+  | { type: "LOGOUT" }
+  | { type: "SET_SOCKET"; payload: Socket | null }
+  | { type: "SET_ONLINE_USERS"; payload: User[] };
 
 export interface AppContextType {
   state: AppState;
