@@ -1,39 +1,37 @@
 import type { User, UserChat } from "../types/types";
 
-export const formatLastMessageTime = (
-  timestamp: Date | string | undefined
-): string => {
+export const formatLastMessageTime = (timestamp?: string | Date): string => {
   if (!timestamp) return "";
 
-  const date = typeof timestamp === "string" ? new Date(timestamp) : timestamp;
+  const date = new Date(timestamp);
   const now = new Date();
-  const diffInMs = now.getTime() - date.getTime();
-  const diffInHours = diffInMs / (1000 * 60 * 60);
-  const diffInDays = diffInHours / 24;
+  const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
 
-  if (diffInHours < 1) {
-    const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
-    return diffInMinutes < 1 ? "now" : `${diffInMinutes}m`;
-  } else if (diffInHours < 24) {
-    return `${Math.floor(diffInHours)}h`;
-  } else if (diffInDays < 7) {
-    return `${Math.floor(diffInDays)}d`;
+  if (diffInHours < 24) {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } else if (diffInHours < 48) {
+    return "Yesterday";
   } else {
     return date.toLocaleDateString([], { month: "short", day: "numeric" });
   }
 };
 
-export const getDisplayName = (user: User): string => {
+export const getDisplayName = (user: User | null | undefined): string => {
+  if (!user) return "Unknown User";
+
   if (user.firstName && user.lastName) {
     return `${user.firstName} ${user.lastName}`;
   }
+
   if (user.firstName) {
     return user.firstName;
   }
+
   if (user.name) {
     return user.name;
   }
-  return user.email || "Unknown User";
+
+  return "Unknown User";
 };
 
 export const getSenderDisplayName = (
