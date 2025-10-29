@@ -1,5 +1,5 @@
 import type { Socket } from "socket.io-client";
-import type { User } from "./types";
+import type { OnlineUser, User } from "./types";
 
 export interface SocketContextType {
   socket: Socket | null;
@@ -14,6 +14,10 @@ export interface SocketContextType {
   leaveChat: (chatId: string) => void;
   isConnected: boolean;
   updateUserStatus: (isOnline: boolean) => void;
+  connect: () => void;
+  disconnect: () => void;
+  joinRoom: (roomId: string) => void;
+  leaveRoom: (roomId: string) => void;
 }
 
 export interface SocketMessage {
@@ -21,4 +25,9 @@ export interface SocketMessage {
   senderId: string;
   content: string;
   messageType?: string;
+}
+
+export interface AppState {
+  socket: Socket | null;
+  onlineUsers: OnlineUser[]
 }
