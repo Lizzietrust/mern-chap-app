@@ -44,10 +44,8 @@ interface MessageStatusUpdateData {
 }
 
 export function useSocketLogic(): SocketContextType {
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const { user, isAuthenticated } = state;
   const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
@@ -55,6 +53,31 @@ export function useSocketLogic(): SocketContextType {
   const chatUpdateTimerRef = useRef<number | null>(null);
   const lastChatUpdateRef = useRef<number>(0);
   const chatUpdateCountRef = useRef<number>(0);
+
+  const setSocketInAppState = useCallback(
+    (newSocket: Socket | null) => {
+      dispatch({ type: "SET_SOCKET", payload: newSocket });
+    },
+    [dispatch]
+  );
+
+  const setOnlineUsersInAppState = useCallback(
+    (users: User[]) => {
+      dispatch({ type: "SET_ONLINE_USERS", payload: users });
+    },
+    [dispatch]
+  );
+
+  const updateOnlineUsers = useCallback(
+    (updater: (prev: User[]) => User[]) => {
+      const currentOnlineUsers = Array.isArray(state.onlineUsers)
+        ? state.onlineUsers
+        : [];
+      const updatedUsers = updater(currentOnlineUsers);
+      setOnlineUsersInAppState(updatedUsers);
+    },
+    [state.onlineUsers, setOnlineUsersInAppState]
+  );
 
   const transformServerMessage = useCallback(
     (serverMessage: ServerMessage): ClientMessage => {
@@ -128,13 +151,6 @@ export function useSocketLogic(): SocketContextType {
     chatUpdateCountRef.current += 1;
 
     if (timeSinceLastUpdate < 3000) {
-      console.log(
-        `⏳ Chat update #${
-          chatUpdateCountRef.current
-        } ignored (debounced, last update was ${Math.round(
-          timeSinceLastUpdate / 1000
-        )}s ago)`
-      );
       return;
     }
 
@@ -143,9 +159,6 @@ export function useSocketLogic(): SocketContextType {
     }
 
     chatUpdateTimerRef.current = window.setTimeout(() => {
-      console.log(
-        `🔄 Chat update #${chatUpdateCountRef.current} applied (after debounce)`
-      );
       lastChatUpdateRef.current = Date.now();
       queryClient.invalidateQueries({ queryKey: ["chats"] });
       queryClient.invalidateQueries({ queryKey: ["userChats"] });
@@ -155,10 +168,6 @@ export function useSocketLogic(): SocketContextType {
 
   const handleMessageStatusUpdate = useCallback(
     (data: MessageStatusUpdateData) => {
-      console.log(
-        `📨 Message status update: ${data.messageId} -> ${data.status}`
-      );
-
       const { messageId, status, readBy, chatId } = data;
 
       const messagesQueryKey = messageKeys.list(chatId);
@@ -183,56 +192,50 @@ export function useSocketLogic(): SocketContextType {
     [queryClient]
   );
 
-  const eventHandlersRef = useRef({
-    handleNewMessage: (serverMessage: ServerMessage) => {
-      const clientMessage = transformServerMessage(serverMessage);
-      const messagesQueryKey = messageKeys.list(serverMessage.chatId);
-
-      queryClient.setQueryData<ClientMessage[]>(
-        messagesQueryKey,
-        (oldMessages = []) => {
-          const messageExists = oldMessages.some(
-            (msg) => msg._id === serverMessage._id
-          );
-
-          if (messageExists) {
-            console.log("Message already exists, skipping");
-            return oldMessages;
-          }
-
-          console.log("Adding new message from socket");
-          return filterAndAddMessage(oldMessages, clientMessage, serverMessage);
+  const markMessageAsDelivered = useCallback(
+    async (messageId: string, userId: string) => {
+      try {
+        if (socketRef.current?.connected) {
+          socketRef.current.emit("markAsDelivered", {
+            messageId,
+            userId,
+          });
         }
-      );
-
-      queryClient.invalidateQueries({ queryKey: ["channels"] });
+      } catch (error) {
+        console.error("Error marking message as delivered:", error);
+      }
     },
+    []
+  );
 
-    handleChatUpdated: () => {
-      debouncedHandleChatUpdated();
-    },
-
-    handleOnlineUsers: (users: User[]) => {
+  const handleOnlineUsers = useCallback(
+    (users: User[]) => {
       console.log("📋 Received online users:", users.length);
-      setOnlineUsers(users);
+      setOnlineUsersInAppState(users);
     },
+    [setOnlineUsersInAppState]
+  );
 
-    handleUserOnline: (data: UserOnlineData) => {
+  const handleUserOnline = useCallback(
+    (data: UserOnlineData) => {
       console.log("🟢 User came online:", data.userId);
-      setOnlineUsers((prev) => {
+      updateOnlineUsers((prev) => {
         const exists = prev.some((u) => u._id === data.userId);
         if (exists) {
           return prev.map((u) =>
             u._id === data.userId ? { ...u, isOnline: true } : u
           );
         }
-        return [...prev, data.user];
+        return [...prev, { ...data.user, isOnline: true }];
       });
     },
+    [updateOnlineUsers]
+  );
 
-    handleUserOffline: (data: UserOfflineData) => {
+  const handleUserOffline = useCallback(
+    (data: UserOfflineData) => {
       console.log("🔴 User went offline:", data.userId);
-      setOnlineUsers((prev) =>
+      updateOnlineUsers((prev) =>
         prev.map((u) =>
           u._id === data.userId
             ? { ...u, isOnline: false, lastSeen: data.lastSeen }
@@ -240,16 +243,11 @@ export function useSocketLogic(): SocketContextType {
         )
       );
     },
+    [updateOnlineUsers]
+  );
 
-    handleMessageStatusUpdate: (data: MessageStatusUpdateData) => {
-      handleMessageStatusUpdate(data);
-    },
-  });
-
-  useEffect(() => {
-    eventHandlersRef.current.handleNewMessage = (
-      serverMessage: ServerMessage
-    ) => {
+  const handleNewMessage = useCallback(
+    (serverMessage: ServerMessage) => {
       const clientMessage = transformServerMessage(serverMessage);
       const messagesQueryKey = messageKeys.list(serverMessage.chatId);
 
@@ -269,24 +267,31 @@ export function useSocketLogic(): SocketContextType {
       );
 
       queryClient.invalidateQueries({ queryKey: ["channels"] });
-    };
 
-    eventHandlersRef.current.handleChatUpdated = () => {
-      debouncedHandleChatUpdated();
-    };
+      const currentUserId = state.user?._id;
+      if (currentUserId && serverMessage.sender !== currentUserId) {
+        markMessageAsDelivered(serverMessage._id, currentUserId);
+      }
+    },
+    [
+      transformServerMessage,
+      filterAndAddMessage,
+      queryClient,
+      markMessageAsDelivered,
+      state.user?._id,
+    ]
+  );
 
-    eventHandlersRef.current.handleMessageStatusUpdate = (
-      data: MessageStatusUpdateData
-    ) => {
+  const handleChatUpdated = useCallback(() => {
+    debouncedHandleChatUpdated();
+  }, [debouncedHandleChatUpdated]);
+
+  const handleMessageStatusUpdateEvent = useCallback(
+    (data: MessageStatusUpdateData) => {
       handleMessageStatusUpdate(data);
-    };
-  }, [
-    transformServerMessage,
-    filterAndAddMessage,
-    queryClient,
-    debouncedHandleChatUpdated,
-    handleMessageStatusUpdate,
-  ]);
+    },
+    [handleMessageStatusUpdate]
+  );
 
   const initializeSocket = useCallback(() => {
     if (!user?._id || socketRef.current) return;
@@ -295,14 +300,13 @@ export function useSocketLogic(): SocketContextType {
 
     const newSocket = io(API_BASE_URL, SOCKET_CONFIG);
     socketRef.current = newSocket;
-    setSocket(newSocket);
+    setSocketInAppState(newSocket);
 
     newSocket.on(SOCKET_EVENTS.CONNECT, () => {
       console.log("✅ Socket connected:", newSocket.id);
       setIsConnected(true);
 
-      newSocket.emit("userOnline", user._id);
-      console.log(`🟢 Emitted userOnline for user: ${user._id}`);
+      newSocket.emit("getOnlineUsers");
     });
 
     newSocket.on(SOCKET_EVENTS.CONNECT_ERROR, (error: Error) => {
@@ -310,29 +314,14 @@ export function useSocketLogic(): SocketContextType {
       setIsConnected(false);
     });
 
-    newSocket.on(
-      SOCKET_EVENTS.ONLINE_USERS,
-      eventHandlersRef.current.handleOnlineUsers
-    );
-    newSocket.on(
-      SOCKET_EVENTS.USER_ONLINE,
-      eventHandlersRef.current.handleUserOnline
-    );
-    newSocket.on(
-      SOCKET_EVENTS.USER_OFFLINE,
-      eventHandlersRef.current.handleUserOffline
-    );
-    newSocket.on(SOCKET_EVENTS.NEW_MESSAGE, (msg: ServerMessage) =>
-      eventHandlersRef.current.handleNewMessage(msg)
-    );
-    newSocket.on(SOCKET_EVENTS.CHAT_UPDATED, () =>
-      eventHandlersRef.current.handleChatUpdated()
-    );
-
+    newSocket.on(SOCKET_EVENTS.ONLINE_USERS, handleOnlineUsers);
+    newSocket.on(SOCKET_EVENTS.USER_ONLINE, handleUserOnline);
+    newSocket.on(SOCKET_EVENTS.USER_OFFLINE, handleUserOffline);
+    newSocket.on(SOCKET_EVENTS.NEW_MESSAGE, handleNewMessage);
+    newSocket.on(SOCKET_EVENTS.CHAT_UPDATED, handleChatUpdated);
     newSocket.on(
       SOCKET_EVENTS.MESSAGE_STATUS_UPDATE,
-      (data: MessageStatusUpdateData) =>
-        eventHandlersRef.current.handleMessageStatusUpdate(data)
+      handleMessageStatusUpdateEvent
     );
 
     newSocket.on(SOCKET_EVENTS.DISCONNECT, (reason: string) => {
@@ -344,7 +333,16 @@ export function useSocketLogic(): SocketContextType {
       console.error("Socket error:", error);
       setIsConnected(false);
     });
-  }, [user?._id]);
+  }, [
+    user?._id,
+    setSocketInAppState,
+    handleOnlineUsers,
+    handleUserOnline,
+    handleUserOffline,
+    handleNewMessage,
+    handleChatUpdated,
+    handleMessageStatusUpdateEvent,
+  ]);
 
   const cleanupSocket = useCallback(() => {
     if (chatUpdateTimerRef.current !== null) {
@@ -353,18 +351,17 @@ export function useSocketLogic(): SocketContextType {
     }
 
     if (socketRef.current) {
-      console.log("🧹 Cleaning up socket");
       socketRef.current.removeAllListeners();
       socketRef.current.disconnect();
       socketRef.current = null;
-      setSocket(null);
+      setSocketInAppState(null);
+      setOnlineUsersInAppState([]);
       setIsConnected(false);
-      setOnlineUsers([]);
     }
 
     lastChatUpdateRef.current = 0;
     chatUpdateCountRef.current = 0;
-  }, []);
+  }, [setSocketInAppState, setOnlineUsersInAppState]);
 
   useEffect(() => {
     if (!isAuthenticated || !user?._id) {
@@ -381,23 +378,47 @@ export function useSocketLogic(): SocketContextType {
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      cleanupSocket();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
+  const connect = useCallback(() => {
+    if (!socketRef.current && user?._id) {
+      initializeSocket();
+    }
+  }, [initializeSocket, user?._id]);
+
+  const disconnect = useCallback(() => {
+    cleanupSocket();
   }, [cleanupSocket]);
+
+  const joinRoom = useCallback((roomId: string) => {
+    if (socketRef.current?.connected && roomId) {
+      socketRef.current.emit(SOCKET_EVENTS.JOIN_CHAT, roomId);
+      console.log("Joined room:", roomId);
+    }
+  }, []);
+
+  const leaveRoom = useCallback((roomId: string) => {
+    if (socketRef.current?.connected && roomId) {
+      socketRef.current.emit(SOCKET_EVENTS.LEAVE_CHAT, roomId);
+      console.log("Left room:", roomId);
+    }
+  }, []);
 
   const joinChat = useCallback((chatId: string) => {
     if (socketRef.current?.connected && chatId) {
-      console.log(`👥 Joining chat room: ${chatId}`);
       socketRef.current.emit(SOCKET_EVENTS.JOIN_CHAT, chatId);
     }
   }, []);
 
   const leaveChat = useCallback((chatId: string) => {
     if (socketRef.current?.connected && chatId) {
-      console.log(`👋 Leaving chat room: ${chatId}`);
       socketRef.current.emit(SOCKET_EVENTS.LEAVE_CHAT, chatId);
     }
   }, []);
@@ -414,7 +435,6 @@ export function useSocketLogic(): SocketContextType {
         messageData.chatId &&
         messageData.content.trim()
       ) {
-        console.log("📤 Sending message via socket:", messageData);
         socketRef.current.emit(SOCKET_EVENTS.SEND_MESSAGE, {
           chatId: messageData.chatId,
           senderId: messageData.sender._id,
@@ -433,12 +453,16 @@ export function useSocketLogic(): SocketContextType {
   }, []);
 
   return {
-    socket,
-    onlineUsers,
+    socket: state.socket,
+    onlineUsers: Array.isArray(state.onlineUsers) ? state.onlineUsers : [],
     sendMessage,
     joinChat,
     leaveChat,
     isConnected,
     updateUserStatus,
+    connect,
+    disconnect,
+    joinRoom,
+    leaveRoom,
   };
 }
