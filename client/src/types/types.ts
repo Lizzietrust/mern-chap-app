@@ -536,3 +536,12 @@ export interface MessageStatusResponse {
   deliveredTo: string[];
   updatedAt: string;
 }
+
+export interface OnlineUser {
+  _id: string;
+  userId: string;
+  socketId: string;
+  isOnline: boolean;
+  lastSeen?: Date;
+  user?: User; 
+}
