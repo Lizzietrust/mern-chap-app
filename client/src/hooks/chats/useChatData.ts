@@ -21,14 +21,6 @@ export const useChatData = ({
     searchTerm
   );
 
-  console.log(
-    "useChatData - currentPage:",
-    currentPage,
-    "searchTerm:",
-    searchTerm
-  );
-  console.log({ usersData });
-
   const {
     data: chats = [],
     isLoading: chatsLoading,
