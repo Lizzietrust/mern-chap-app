@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import User from "./models/UserModel.js";
 import Message from "./models/MessageModel.js";
 import Chat from "./models/ChatModel.js";
+import { setupMessageStatusHandlers } from "./controllers/MessageStatusController.js";
 
 const setupSocket = (server) => {
   const io = new Server(server, {
@@ -108,83 +109,180 @@ const setupSocket = (server) => {
     }
   });
 
-  io.on("connection", (socket) => {
-    console.log(`✅ User ${socket.userId} connected with socket ${socket.id}`);
+  const markAllUndeliveredAsDelivered = async (userId) => {
+    try {
+      const userChats = await Chat.find({
+        $or: [{ participants: userId }, { members: userId }],
+      });
 
-    socket.join(socket.userId);
+      const chatIds = userChats.map((chat) => chat._id);
 
-    const getOnlineUsers = async () => {
+      const undeliveredMessages = await Message.find({
+        status: "sent",
+        chat: { $in: chatIds },
+        sender: { $ne: userId },
+        deliveredTo: { $ne: userId },
+      });
+
+      console.log(
+        `📨 Found ${undeliveredMessages.length} undelivered messages for user ${userId}`
+      );
+
+      for (const message of undeliveredMessages) {
+        try {
+          const updatedMessage = await Message.findByIdAndUpdate(
+            message._id,
+            {
+              status: "delivered",
+              $addToSet: { deliveredTo: userId },
+            },
+            { new: true }
+          ).populate("deliveredTo", "_id firstName lastName email image");
+
+          io.to(message.chat.toString()).emit("messageStatusUpdate", {
+            messageId: message._id,
+            status: "delivered",
+            deliveredTo: updatedMessage.deliveredTo,
+            chatId: message.chat.toString(),
+          });
+
+          console.log(
+            `✅ Marked message ${message._id} as delivered to user ${userId}`
+          );
+        } catch (messageError) {
+          console.error(`Error updating message ${message._id}:`, messageError);
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error marking messages as delivered:", error);
+    }
+  };
+
+  const setupChatHandlers = (socket) => {
+    socket.on("sendMessage", async (data) => {
+      try {
+        const { chatId, senderId, content, messageType } = data;
+
+        console.log(`📤 New message in chat ${chatId} from user ${senderId}`);
+
+        const newMessage = new Message({
+          sender: senderId,
+          content: content,
+          messageType: messageType || "text",
+          chat: chatId,
+          status: "sent",
+        });
+
+        await newMessage.save();
+
+        await newMessage.populate("sender", "firstName lastName email image");
+
+        await Chat.findByIdAndUpdate(chatId, {
+          lastMessage: newMessage._id,
+          lastMessageStatus: "sent",
+          updatedAt: new Date(),
+        });
+
+        io.to(chatId).emit("newMessage", {
+          _id: newMessage._id,
+          sender: newMessage.sender,
+          content: newMessage.content,
+          messageType: newMessage.messageType,
+          chatId: chatId,
+          createdAt: newMessage.createdAt,
+          status: newMessage.status,
+        });
+
+        io.to(chatId).emit("chatUpdated");
+      } catch (error) {
+        console.error("Error sending message:", error);
+        socket.emit("error", { message: "Failed to send message" });
+      }
+    });
+
+    socket.on("typing", (data) => {
+      const { chatId, isTyping } = data;
+      socket.to(chatId).emit("typing", {
+        userId: socket.userId,
+        user: socket.user,
+        isTyping,
+        chatId,
+      });
+      console.log(
+        `⌨️ User ${socket.userId} ${
+          isTyping ? "started" : "stopped"
+        } typing in chat ${chatId}`
+      );
+    });
+
+    socket.on("clearChat", async (data) => {
+      try {
+        const { chatId, clearedForEveryone } = data;
+
+        if (clearedForEveryone) {
+          await Message.deleteMany({ chat: chatId });
+
+          await Chat.findByIdAndUpdate(chatId, {
+            lastMessage: null,
+            lastMessageStatus: null,
+            updatedAt: new Date(),
+          });
+
+          io.to(chatId).emit("messagesCleared", {
+            chatId,
+            clearedForEveryone: true,
+          });
+        } else {
+          socket.emit("messagesCleared", {
+            chatId,
+            clearedForEveryone: false,
+          });
+        }
+
+        io.to(chatId).emit("chatUpdated");
+      } catch (error) {
+        console.error("Error clearing chat:", error);
+      }
+    });
+  };
+
+  const setupUserHandlers = (socket) => {
+    socket.on("getOnlineUsers", () => {
+      try {
+        const onlineUsers = Array.from(connectedUsers.values()).map(
+          (u) => u.user
+        );
+
+        console.log(
+          `📤 Sending ${onlineUsers.length} real-time online users to ${socket.userId}`
+        );
+
+        const filteredOnlineUsers = onlineUsers.filter(
+          (user) => user._id.toString() !== socket.userId
+        );
+
+        console.log(
+          `📋 Sending ${filteredOnlineUsers.length} online users to ${socket.userId} (excluding self)`
+        );
+
+        socket.emit("onlineUsers", filteredOnlineUsers);
+      } catch (error) {
+        console.error("Error handling getOnlineUsers:", error);
+        socket.emit("onlineUsers", []);
+      }
+    });
+
+    socket.on("getOnlineUsersFromDB", async () => {
       try {
         const onlineUsers = await User.find({
           isOnline: true,
           _id: { $ne: socket.userId },
         }).select("_id firstName lastName email image isOnline lastSeen");
         console.log(`📋 Found ${onlineUsers.length} online users in database`);
-        return onlineUsers;
+        socket.emit("onlineUsers", onlineUsers);
       } catch (error) {
         console.error("Error fetching online users:", error);
-        return [];
-      }
-    };
-
-    getOnlineUsers().then((onlineUsers) => {
-      socket.emit("onlineUsers", onlineUsers);
-      console.log(
-        `📤 Sent ${onlineUsers.length} online users to ${socket.userId}`
-      );
-    });
-
-    socket.broadcast.emit("userOnline", {
-      userId: socket.userId,
-      user: socket.user,
-    });
-    console.log(
-      `📢 Broadcasted userOnline for ${socket.userId} to all other users`
-    );
-
-    socket.on("userOnline", async (userId) => {
-      try {
-        console.log(
-          `🟢 User ${userId} came online, marking messages as delivered`
-        );
-
-        const undeliveredMessages = await Message.find({
-          status: "sent",
-          chatId: {
-            $in: await Chat.find({
-              $or: [{ participants: userId }, { members: userId }],
-            }).distinct("_id"),
-          },
-          sender: { $ne: userId },
-        });
-
-        console.log(
-          `📨 Found ${undeliveredMessages.length} undelivered messages for user ${userId}`
-        );
-
-        for (const message of undeliveredMessages) {
-          const updatedMessage = await Message.findByIdAndUpdate(
-            message._id,
-            {
-              status: "delivered",
-              $addToSet: { readBy: userId },
-            },
-            { new: true }
-          ).populate("readBy", "_id firstName lastName email image");
-
-          io.to(message.chatId.toString()).emit("messageStatusUpdate", {
-            messageId: message._id,
-            status: "delivered",
-            readBy: updatedMessage.readBy,
-            chatId: message.chatId,
-          });
-
-          console.log(
-            `✅ Marked message ${message._id} as delivered to user ${userId}`
-          );
-        }
-      } catch (error) {
-        console.error("❌ Error marking messages as delivered:", error);
+        socket.emit("onlineUsers", []);
       }
     });
 
@@ -235,29 +333,160 @@ const setupSocket = (server) => {
       }
     });
 
+    socket.on("markAsDelivered", async (data) => {
+      try {
+        const { messageId, userId } = data;
+
+        console.log(`📨 Mark as delivered request:`, { messageId, userId });
+
+        const message = await Message.findById(messageId);
+        if (!message) {
+          console.error(`❌ Message ${messageId} not found`);
+          return;
+        }
+
+        const chat = await Chat.findById(message.chat);
+        if (!chat) {
+          console.error(`❌ Chat ${message.chat} not found`);
+          return;
+        }
+
+        const isParticipant =
+          chat.participants.includes(userId) || chat.members?.includes(userId);
+
+        if (!isParticipant) {
+          console.error(
+            `❌ User ${userId} is not a participant in chat ${message.chat}`
+          );
+          return;
+        }
+
+        const updatedMessage = await Message.findByIdAndUpdate(
+          messageId,
+          {
+            status: "delivered",
+            $addToSet: { deliveredTo: userId },
+          },
+          { new: true }
+        ).populate("deliveredTo", "_id firstName lastName email image");
+
+        io.to(message.chat.toString()).emit("messageStatusUpdate", {
+          messageId: messageId,
+          status: "delivered",
+          deliveredTo: updatedMessage.deliveredTo,
+          chatId: message.chat.toString(),
+        });
+
+        console.log(
+          `✅ Successfully marked message ${messageId} as delivered for user ${userId}`
+        );
+      } catch (error) {
+        console.error("❌ Error in markAsDelivered:", error);
+      }
+    });
+  };
+
+  io.on("connection", (socket) => {
+    console.log(`✅ User ${socket.userId} connected with socket ${socket.id}`);
+
+    socket.join(socket.userId);
+
+    setupMessageStatusHandlers(socket, io);
+    setupChatHandlers(socket);
+    setupUserHandlers(socket);
+
+    markAllUndeliveredAsDelivered(socket.userId);
+
+    const sendInitialOnlineUsers = () => {
+      try {
+        const onlineUsers = Array.from(connectedUsers.values()).map(
+          (u) => u.user
+        );
+        const filteredOnlineUsers = onlineUsers.filter(
+          (user) => user._id.toString() !== socket.userId
+        );
+
+        console.log(
+          `📤 Sending initial ${filteredOnlineUsers.length} online users to ${socket.userId}`
+        );
+        socket.emit("onlineUsers", filteredOnlineUsers);
+      } catch (error) {
+        console.error("Error sending initial online users:", error);
+        socket.emit("onlineUsers", []);
+      }
+    };
+
+    setTimeout(sendInitialOnlineUsers, 100);
+
+    socket.broadcast.emit("userOnline", {
+      userId: socket.userId,
+      user: socket.user,
+    });
+    console.log(
+      `📢 Broadcasted userOnline for ${socket.userId} to all other users`
+    );
+
+    socket.on("userOnline", async (userId) => {
+      try {
+        console.log(
+          `🟢 User ${userId} came online, marking messages as delivered`
+        );
+        await markAllUndeliveredAsDelivered(userId);
+      } catch (error) {
+        console.error("❌ Error marking messages as delivered:", error);
+      }
+    });
+
     socket.on("joinChat", (chatId) => {
       socket.join(chatId);
       console.log(`👥 User ${socket.userId} joined chat ${chatId}`);
+
+      setTimeout(async () => {
+        try {
+          const undeliveredMessages = await Message.find({
+            chat: chatId,
+            status: "sent",
+            sender: { $ne: socket.userId },
+            deliveredTo: { $ne: socket.userId },
+          });
+
+          console.log(
+            `📨 Found ${undeliveredMessages.length} undelivered messages in chat ${chatId} for user ${socket.userId}`
+          );
+
+          for (const message of undeliveredMessages) {
+            const updatedMessage = await Message.findByIdAndUpdate(
+              message._id,
+              {
+                status: "delivered",
+                $addToSet: { deliveredTo: socket.userId },
+              },
+              { new: true }
+            ).populate("deliveredTo", "_id firstName lastName email image");
+
+            io.to(message.chat.toString()).emit("messageStatusUpdate", {
+              messageId: message._id,
+              status: "delivered",
+              deliveredTo: updatedMessage.deliveredTo,
+              chatId: message.chat.toString(),
+            });
+
+            console.log(
+              `✅ Marked message ${message._id} as delivered in chat ${chatId}`
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Error marking messages as delivered when joining chat:",
+            error
+          );
+        }
+      }, 500);
     });
 
     socket.on("leaveChat", (chatId) => {
       socket.leave(chatId);
       console.log(`👋 User ${socket.userId} left chat ${chatId}`);
-    });
-
-    socket.on("typing", (data) => {
-      const { chatId, isTyping } = data;
-      socket.to(chatId).emit("typing", {
-        userId: socket.userId,
-        user: socket.user,
-        isTyping,
-        chatId,
-      });
-      console.log(
-        `⌨️ User ${socket.userId} ${
-          isTyping ? "started" : "stopped"
-        } typing in chat ${chatId}`
-      );
     });
 
     socket.on("disconnect", async (reason) => {
