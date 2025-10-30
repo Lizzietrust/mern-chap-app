@@ -1,12 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useApp } from "../../contexts/appcontext/index";
 import { useChatSubtitle } from "../../hooks/useChatSubtitle";
-import {
-  isChannelChat,
-  getUserId,
-  type User,
-  // type Message,
-} from "../../types/types";
+import { isChannelChat, getUserId, type User } from "../../types/types";
 import type { ChatContainerProps } from "../../types/chat-container.types";
 import {
   getSenderName,
@@ -365,7 +360,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
           isDark={isDark}
           formatTime={formatTime}
           onDownloadFile={handleDownloadFile}
-          socket={socket}
+          socket={socket || undefined}
           currentUser={state.user}
         />
       );
