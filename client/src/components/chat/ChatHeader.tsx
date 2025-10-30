@@ -1,7 +1,18 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import type { ChatHeaderProps } from "../../types/chat-container.types";
 import { useSocket } from "../../hooks/useSocket";
-import { getUserId, type User } from "../../types/types";
+import {
+  getUserId,
+  type User,
+  type UserChat,
+  isDirectChat,
+} from "../../types/types";
 import { useApp } from "../../contexts/appcontext/index";
 
 const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
@@ -16,61 +27,114 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
     onParticipants,
     onSettings,
   }) => {
-    const { onlineUsers } = useSocket();
+    const { onlineUsers, isConnected } = useSocket();
     const { state } = useApp();
 
+    const onlineUsersRef = useRef(onlineUsers);
+    const isConnectedRef = useRef(isConnected);
+
+    useEffect(() => {
+      onlineUsersRef.current = onlineUsers;
+    }, [onlineUsers]);
+
+    useEffect(() => {
+      isConnectedRef.current = isConnected;
+    }, [isConnected]);
+
     const safeOnlineUsers = useMemo(() => {
+      console.log("📊 Online users in ChatHeader:", onlineUsers);
       return Array.isArray(onlineUsers) ? onlineUsers : [];
     }, [onlineUsers]);
 
     const isChannel = selectedChat?.type === "channel";
     const currentUserId = state.user?._id;
 
+    const otherParticipant = useMemo(() => {
+      if (isChannel || !selectedChat || !isDirectChat(selectedChat))
+        return null;
+
+      const directChat = selectedChat as UserChat;
+      if (!directChat.participants) return null;
+
+      try {
+        const participant = directChat.participants.find((participant) => {
+          const participantId = getUserId(participant);
+          return participantId !== currentUserId;
+        });
+
+        if (!participant) return null;
+
+        const userParticipant =
+          typeof participant === "string"
+            ? ({ _id: participant } as Partial<User>)
+            : participant;
+
+        console.log("👤 Other participant:", userParticipant);
+        return userParticipant as User | null;
+      } catch (error) {
+        console.error("Error finding other participant:", error);
+        return null;
+      }
+    }, [isChannel, selectedChat, currentUserId]);
+
+    console.log({ selectedChat });
+
     const getUserStatus = useCallback(
       (
-        user: User | string
-      ): { isOnline: boolean; lastSeen?: Date; debug?: string } => {
+        user: User | string | null
+      ): { isOnline: boolean; lastSeen?: Date; userObject?: User } => {
         try {
+          if (!user) {
+            return { isOnline: false };
+          }
+
           const userId = typeof user === "string" ? user : user?._id;
 
           if (!userId) {
-            return { isOnline: false, debug: "No user ID" };
+            return { isOnline: false };
           }
 
-          const onlineUser = safeOnlineUsers.find((u) => u._id === userId);
+          console.log(`🔍 Checking status for user: ${userId}`);
+          console.log(`📡 Connected: ${isConnectedRef.current}`);
+          console.log(
+            `👥 Total online users: ${onlineUsersRef.current.length}`
+          );
+
+          const currentOnlineUsers = onlineUsersRef.current;
+
+          const onlineUser = currentOnlineUsers.find((u) => u._id === userId);
           if (onlineUser) {
+            console.log(
+              `✅ User ${userId} found in onlineUsers:`,
+              onlineUser.isOnline
+            );
             return {
               isOnline: onlineUser.isOnline || false,
               lastSeen: onlineUser.lastSeen,
-              debug: `Found in onlineUsers: ${
-                onlineUser.isOnline ? "online" : "offline"
-              }`,
+              userObject: onlineUser,
             };
           }
 
-          if (typeof user !== "string" && user) {
-            const status = {
+          if (typeof user !== "string") {
+            console.log(
+              `ℹ️ Using user object data for ${userId}:`,
+              user.isOnline
+            );
+            return {
               isOnline: user.isOnline || false,
               lastSeen: user.lastSeen,
-              debug: `Using chat user data: ${
-                user.isOnline ? "online" : "offline"
-              }`,
+              userObject: user,
             };
-            return status;
           }
 
-          return { isOnline: false, debug: "No data available" };
+          console.log(`❌ No status data found for user: ${userId}`);
+          return { isOnline: false };
         } catch (error) {
           console.error("Error getting user status:", error);
-          return {
-            isOnline: false,
-            debug: `Error: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          };
+          return { isOnline: false };
         }
       },
-      [safeOnlineUsers]
+      []
     );
 
     const formatLastSeen = useCallback((lastSeen?: Date): string => {
@@ -78,7 +142,8 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
 
       try {
         const now = new Date();
-        const diffMs = now.getTime() - new Date(lastSeen).getTime();
+        const lastSeenDate = new Date(lastSeen);
+        const diffMs = now.getTime() - lastSeenDate.getTime();
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMins / 60);
         const diffDays = Math.floor(diffHours / 24);
@@ -90,10 +155,9 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
         if (diffDays < 7)
           return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
 
-        return new Date(lastSeen).toLocaleDateString();
+        return lastSeenDate.toLocaleDateString();
       } catch (error) {
-        console.log(error);
-
+        console.error("Error formatting last seen:", error);
         return "a long time ago";
       }
     }, []);
@@ -103,115 +167,135 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
 
       try {
         const totalMembers = selectedChat.members.length;
-
         const onlineMembers = selectedChat.members.filter((member) => {
-          try {
-            const status = getUserStatus(member);
-            return status.isOnline;
-          } catch (error) {
-            console.log(error);
-
-            return false;
-          }
+          const status = getUserStatus(member);
+          return status.isOnline;
         }).length;
 
         return `${totalMembers} member${
           totalMembers !== 1 ? "s" : ""
         } • ${onlineMembers} online`;
       } catch (error) {
-        console.log(error);
-
+        console.error("Error getting channel member info:", error);
         return subtitle || "";
       }
     }, [isChannel, selectedChat, subtitle, getUserStatus]);
 
-    const getDirectChatStatus = useCallback((): {
-      status: string;
-      debug: string;
-    } => {
-      if (isChannel || !selectedChat?.participants) {
-        return {
-          status: subtitle || "",
-          debug: "Not a direct chat or no participants",
-        };
+    const getDirectChatStatus = useCallback((): string => {
+      if (isChannel || !otherParticipant) {
+        return subtitle || "";
       }
 
       try {
-        const otherParticipant = selectedChat.participants.find(
-          (participant) => {
-            try {
-              const participantId = getUserId(participant);
-              return participantId !== currentUserId;
-            } catch (error) {
-              console.log(error);
+        const status = getUserStatus(otherParticipant);
 
-              return false;
-            }
-          }
+        console.log(
+          `📱 Direct chat status for ${otherParticipant._id}:`,
+          status
         );
 
-        if (!otherParticipant) {
-          return {
-            status: "User not found",
-            debug: "No other participant found",
-          };
-        }
-
-        const status = getUserStatus(otherParticipant);
-        let statusText = "";
-
         if (status.isOnline) {
-          statusText = "Online";
+          return "Online";
         } else if (status.lastSeen) {
-          statusText = `Last seen ${formatLastSeen(status.lastSeen)}`;
+          return `Last seen ${formatLastSeen(status.lastSeen)}`;
         } else {
-          statusText = "Offline";
+          return "Offline";
         }
-
-        return {
-          status: statusText,
-          debug: `User: ${getUserId(otherParticipant)}, ${status.debug}`,
-        };
       } catch (error) {
         console.error("Error getting direct chat status:", error);
-        return {
-          status: subtitle || "",
-          debug: `Error: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        };
+        return subtitle || "";
       }
-    }, [
-      isChannel,
-      selectedChat,
-      subtitle,
-      currentUserId,
-      getUserStatus,
-      formatLastSeen,
-    ]);
+    }, [isChannel, otherParticipant, subtitle, getUserStatus, formatLastSeen]);
 
     const [displaySubtitle, setDisplaySubtitle] = useState<string>(
       subtitle || ""
     );
+    const [isOnline, setIsOnline] = useState<boolean>(false);
+
+    const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const updateStatus = useCallback(() => {
+      try {
+        if (isChannel) {
+          const channelInfo = getChannelMemberInfo();
+          setDisplaySubtitle(channelInfo);
+          setIsOnline(false);
+        } else {
+          const statusText = getDirectChatStatus();
+          setDisplaySubtitle(statusText);
+
+          if (otherParticipant) {
+            const status = getUserStatus(otherParticipant);
+            setIsOnline(status.isOnline);
+            console.log(
+              `🔄 Updated online status for ${otherParticipant._id}: ${status.isOnline}`
+            );
+          } else {
+            setIsOnline(false);
+          }
+        }
+      } catch (error) {
+        console.error("Error updating status:", error);
+        setDisplaySubtitle(subtitle || "");
+        setIsOnline(false);
+      }
+    }, [
+      isChannel,
+      getChannelMemberInfo,
+      getDirectChatStatus,
+      subtitle,
+      otherParticipant,
+      getUserStatus,
+    ]);
 
     useEffect(() => {
-      const calculateDisplaySubtitle = () => {
-        try {
-          if (isChannel) {
-            const channelInfo = getChannelMemberInfo();
-            setDisplaySubtitle(channelInfo);
-          } else {
-            const result = getDirectChatStatus();
-            setDisplaySubtitle(result.status);
-          }
-        } catch (error) {
-          setDisplaySubtitle(subtitle || "");
-          console.log(error);
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+
+      updateTimeoutRef.current = setTimeout(() => {
+        updateStatus();
+      }, 100);
+
+      return () => {
+        if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
         }
       };
+    }, [updateStatus, safeOnlineUsers, isConnected]);
 
-      calculateDisplaySubtitle();
-    }, [isChannel, getChannelMemberInfo, getDirectChatStatus, subtitle]);
+    useEffect(() => {
+      if (isConnected && state.socket) {
+        console.log("📡 Requesting online users...");
+        state.socket.emit("getOnlineUsers");
+      }
+    }, [isConnected, state.socket]);
+
+    useEffect(() => {
+      console.log("🔄 Online users updated, total:", safeOnlineUsers.length);
+      console.log(
+        "📋 Online user IDs:",
+        safeOnlineUsers.map((u) => u._id)
+      );
+
+      if (otherParticipant && !isChannel) {
+        const status = getUserStatus(otherParticipant);
+        console.log(`🔍 Current status for ${otherParticipant._id}:`, {
+          isOnline: status.isOnline,
+          lastSeen: status.lastSeen,
+          foundInOnlineUsers: safeOnlineUsers.some(
+            (u) => u._id === otherParticipant._id
+          ),
+        });
+      }
+    }, [safeOnlineUsers, otherParticipant, isChannel, getUserStatus]);
+
+    useEffect(() => {
+      if (otherParticipant) {
+        console.log(`👤 Participant changed to:`, otherParticipant._id);
+        updateStatus();
+      }
+    }, [otherParticipant, updateStatus]);
 
     return (
       <div
@@ -263,14 +347,15 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
                 </h1>
                 <div className="flex items-center space-x-2">
                   {/* Online status indicator for direct chats */}
-                  {!isChannel && selectedChat?.participants && (
+                  {!isChannel && otherParticipant && (
                     <>
                       <div
-                        className={`w-2 h-2 rounded-full ${
-                          displaySubtitle.includes("Online")
-                            ? "bg-green-500"
+                        className={`w-2 h-2 rounded-full transition-colors duration-300 ${
+                          isOnline
+                            ? "bg-green-500 animate-pulse"
                             : "bg-gray-400"
                         }`}
+                        title={isOnline ? "Online" : "Offline"}
                       />
                       <p
                         className={`text-sm ${
