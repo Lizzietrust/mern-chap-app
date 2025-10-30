@@ -67,6 +67,8 @@ export const DirectMessagesList: React.FC<DirectMessagesListProps> = React.memo(
           const lastMessage = getLastMessage(chat);
 
           const lastMessageTime = formatLastMessageTime(chat.lastMessageAt);
+          console.log({ otherParticipant });
+
           const isOnline = otherParticipant?.isOnline || false;
           const userImage = otherParticipant?.image;
           const initials =
