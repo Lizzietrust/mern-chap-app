@@ -70,13 +70,12 @@ export function useSocketLogic(): SocketContextType {
 
   const updateOnlineUsers = useCallback(
     (updater: (prev: User[]) => User[]) => {
-      const currentOnlineUsers = Array.isArray(state.onlineUsers)
-        ? state.onlineUsers
-        : [];
-      const updatedUsers = updater(currentOnlineUsers);
-      setOnlineUsersInAppState(updatedUsers);
+      dispatch({
+        type: "SET_ONLINE_USERS",
+        payload: updater(state.onlineUsers || []),
+      });
     },
-    [state.onlineUsers, setOnlineUsersInAppState]
+    [dispatch, state.onlineUsers]
   );
 
   const transformServerMessage = useCallback(
@@ -293,6 +292,42 @@ export function useSocketLogic(): SocketContextType {
     [handleMessageStatusUpdate]
   );
 
+  const socketEventHandlers = useCallback(
+    () => ({
+      [SOCKET_EVENTS.CONNECT]: () => {
+        console.log("✅ Socket connected:", socketRef.current?.id);
+        setIsConnected(true);
+        socketRef.current?.emit("getOnlineUsers");
+      },
+      [SOCKET_EVENTS.CONNECT_ERROR]: (error: Error) => {
+        console.error("🔌 Socket connection error:", error);
+        setIsConnected(false);
+      },
+      [SOCKET_EVENTS.ONLINE_USERS]: handleOnlineUsers,
+      [SOCKET_EVENTS.USER_ONLINE]: handleUserOnline,
+      [SOCKET_EVENTS.USER_OFFLINE]: handleUserOffline,
+      [SOCKET_EVENTS.NEW_MESSAGE]: handleNewMessage,
+      [SOCKET_EVENTS.CHAT_UPDATED]: handleChatUpdated,
+      [SOCKET_EVENTS.MESSAGE_STATUS_UPDATE]: handleMessageStatusUpdateEvent,
+      [SOCKET_EVENTS.DISCONNECT]: (reason: string) => {
+        console.log("❌ Socket disconnected. Reason:", reason);
+        setIsConnected(false);
+      },
+      [SOCKET_EVENTS.ERROR]: (error: Error) => {
+        console.error("Socket error:", error);
+        setIsConnected(false);
+      },
+    }),
+    [
+      handleOnlineUsers,
+      handleUserOnline,
+      handleUserOffline,
+      handleNewMessage,
+      handleChatUpdated,
+      handleMessageStatusUpdateEvent,
+    ]
+  );
+
   const initializeSocket = useCallback(() => {
     if (!user?._id || socketRef.current) return;
 
@@ -302,47 +337,11 @@ export function useSocketLogic(): SocketContextType {
     socketRef.current = newSocket;
     setSocketInAppState(newSocket);
 
-    newSocket.on(SOCKET_EVENTS.CONNECT, () => {
-      console.log("✅ Socket connected:", newSocket.id);
-      setIsConnected(true);
-
-      newSocket.emit("getOnlineUsers");
+    const handlers = socketEventHandlers();
+    Object.entries(handlers).forEach(([event, handler]) => {
+      newSocket.on(event, handler);
     });
-
-    newSocket.on(SOCKET_EVENTS.CONNECT_ERROR, (error: Error) => {
-      console.error("🔌 Socket connection error:", error);
-      setIsConnected(false);
-    });
-
-    newSocket.on(SOCKET_EVENTS.ONLINE_USERS, handleOnlineUsers);
-    newSocket.on(SOCKET_EVENTS.USER_ONLINE, handleUserOnline);
-    newSocket.on(SOCKET_EVENTS.USER_OFFLINE, handleUserOffline);
-    newSocket.on(SOCKET_EVENTS.NEW_MESSAGE, handleNewMessage);
-    newSocket.on(SOCKET_EVENTS.CHAT_UPDATED, handleChatUpdated);
-    newSocket.on(
-      SOCKET_EVENTS.MESSAGE_STATUS_UPDATE,
-      handleMessageStatusUpdateEvent
-    );
-
-    newSocket.on(SOCKET_EVENTS.DISCONNECT, (reason: string) => {
-      console.log("❌ Socket disconnected. Reason:", reason);
-      setIsConnected(false);
-    });
-
-    newSocket.on(SOCKET_EVENTS.ERROR, (error: Error) => {
-      console.error("Socket error:", error);
-      setIsConnected(false);
-    });
-  }, [
-    user?._id,
-    setSocketInAppState,
-    handleOnlineUsers,
-    handleUserOnline,
-    handleUserOffline,
-    handleNewMessage,
-    handleChatUpdated,
-    handleMessageStatusUpdateEvent,
-  ]);
+  }, [user?._id, setSocketInAppState, socketEventHandlers]);
 
   const cleanupSocket = useCallback(() => {
     if (chatUpdateTimerRef.current !== null) {
