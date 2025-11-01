@@ -8,9 +8,15 @@ import type {
 import { isUserChat } from "../../types/chat";
 
 const RETRY_CONFIG = {
-  maxRetries: 3,
+  maxRetries: 2,
   baseDelay: 1000,
-  maxDelay: 10000,
+  maxDelay: 5000,
+};
+
+const CHAT_CACHE = {
+  userChats: null as Chat[] | null,
+  lastFetch: 0,
+  CACHE_DURATION: 30000,
 };
 
 async function retryRequest<T>(
@@ -40,11 +46,20 @@ async function retryRequest<T>(
 }
 
 function isRetryableError(error: unknown): boolean {
+  if (
+    error instanceof Error &&
+    error.message.includes("get-user-chats") &&
+    error.message.includes("timeout")
+  ) {
+    return false;
+  }
+
   if (error instanceof Error) {
     return (
       error.message.includes("Network error") ||
-      error.message.includes("timeout") ||
-      error.message.includes("ECONNABORTED")
+      error.message.includes("ECONNABORTED") ||
+      error.message.includes("socket") ||
+      error.message.includes("connection")
     );
   }
 
@@ -110,12 +125,23 @@ export class ChatService {
     });
   }
 
-  static async getUserChats(): Promise<Chat[]> {
+  static async getUserChats(forceRefresh = false): Promise<Chat[]> {
+    const now = Date.now();
+    if (
+      !forceRefresh &&
+      CHAT_CACHE.userChats &&
+      now - CHAT_CACHE.lastFetch < CHAT_CACHE.CACHE_DURATION
+    ) {
+      console.log("📂 Returning cached user chats");
+      return CHAT_CACHE.userChats;
+    }
+
     console.log("🔄 Fetching user chats...");
     try {
       const result = await retryRequest(async () => {
         return await chatApi.getUserChats();
       });
+
       console.log("✅ User chats fetched successfully:", {
         count: result.length,
         chats: result.map((chat) => ({
@@ -124,14 +150,30 @@ export class ChatService {
           title: getChatDisplayName(chat),
         })),
       });
+
+      CHAT_CACHE.userChats = result;
+      CHAT_CACHE.lastFetch = now;
+
       return result;
     } catch (error) {
       console.error("❌ Critical error fetching user chats:", {
         error: getErrorMessage(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
+
+      if (CHAT_CACHE.userChats) {
+        console.warn("⚠️ Returning stale cached data due to fetch failure");
+        return CHAT_CACHE.userChats;
+      }
+
       throw error;
     }
+  }
+
+  static clearChatCache(): void {
+    CHAT_CACHE.userChats = null;
+    CHAT_CACHE.lastFetch = 0;
+    console.log("🗑️ Chat cache cleared");
   }
 
   static async markAsRead(chatId: string): Promise<void> {
@@ -148,11 +190,6 @@ export class ChatService {
     console.log("✅ Fetched messages:", {
       chatId,
       count: messages.length,
-      messages: messages.map((msg) => ({
-        id: msg._id,
-        type: msg.messageType,
-        sender: typeof msg.sender === "object" ? msg.sender._id : msg.sender,
-      })),
     });
     return messages;
   }
