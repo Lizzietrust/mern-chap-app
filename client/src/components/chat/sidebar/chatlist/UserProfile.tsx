@@ -1,6 +1,7 @@
 import React from "react";
 import { getInitials } from "../../../../functions";
 import type { UserProfileProps } from "../../../../types/Sidebar.types";
+import { Link } from "react-router-dom";
 
 export const UserProfile: React.FC<UserProfileProps> = React.memo(
   ({ user, sidebarCollapsed, isDark }) => {
@@ -23,7 +24,8 @@ export const UserProfile: React.FC<UserProfileProps> = React.memo(
     }
 
     return (
-      <div
+      <Link
+        to="/profile"
         className={`flex items-center ${
           sidebarCollapsed ? "justify-center" : "space-x-3"
         }`}
@@ -68,7 +70,7 @@ export const UserProfile: React.FC<UserProfileProps> = React.memo(
             </p>
           </div>
         )}
-      </div>
+      </Link>
     );
   }
 );
