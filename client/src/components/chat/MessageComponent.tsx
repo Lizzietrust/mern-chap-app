@@ -32,6 +32,8 @@ const MessageComponent: React.FC<ExtendedMessageDisplayProps> = ({
   const messageRef = useRef<HTMLDivElement>(null);
   const hasBeenReadRef = useRef(false);
 
+  console.log({ message });
+
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [showMenu, setShowMenu] = useState(false);
@@ -272,6 +274,116 @@ const MessageComponent: React.FC<ExtendedMessageDisplayProps> = ({
 
   const deletePermissions = canDeleteMessage();
 
+  const renderImageMessage = (): React.ReactNode => {
+    if (
+      message.messageType !== "image" ||
+      !message.fileUrl ||
+      message.isDeleted
+    ) {
+      return <div>{message.content}</div>;
+    }
+
+    return (
+      <div className="flex flex-col space-y-3">
+        {/* {message.content && (
+          <div className="text-sm leading-relaxed">{message.content}</div>
+        )} */}
+        <div className="relative group rounded-xl overflow-hidden border transition-all duration-300 hover:shadow-lg">
+          <img
+            src={message.fileUrl}
+            alt={message.fileName || "Shared image"}
+            className="max-w-full max-h-96 w-auto h-auto object-cover cursor-pointer transition-all duration-500 group-hover:scale-105"
+            onClick={() =>
+              onDownloadFile(message.fileUrl!, message.fileName || "image")
+            }
+          />
+
+          {/* Enhanced Hover Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-end justify-between p-4">
+            <div className="flex-1 min-w-0">
+              {message.fileName && (
+                <p
+                  className={`text-sm font-medium truncate ${
+                    isDark ? "text-white" : "text-white"
+                  }`}
+                >
+                  {message.fileName}
+                </p>
+              )}
+              {message.fileSize && (
+                <p
+                  className={`text-xs ${
+                    isDark ? "text-gray-300" : "text-gray-200"
+                  } mt-1`}
+                >
+                  {(message.fileSize / 1024 / 1024).toFixed(2)} MB
+                </p>
+              )}
+            </div>
+
+            {/* Download Button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDownloadFile(message.fileUrl!, message.fileName || "image");
+              }}
+              className={`flex items-center justify-center w-10 h-10 rounded-full backdrop-blur-md transition-all duration-300 hover:scale-110 hover:shadow-lg ${
+                isDark
+                  ? "bg-white/20 text-white hover:bg-white/30"
+                  : "bg-white/20 text-white hover:bg-white/30"
+              }`}
+              title="Download image"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                />
+              </svg>
+            </button>
+          </div>
+
+          {/* Quick Action Bar (Always visible on hover) */}
+          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDownloadFile(message.fileUrl!, message.fileName || "image");
+              }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-105 ${
+                isDark
+                  ? "bg-black/60 text-white hover:bg-black/80"
+                  : "bg-white/90 text-gray-800 hover:bg-white"
+              } shadow-lg`}
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                />
+              </svg>
+              Download
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderFileMessage = (): React.ReactNode => {
     if (
       message.messageType !== "file" ||
@@ -281,54 +393,161 @@ const MessageComponent: React.FC<ExtendedMessageDisplayProps> = ({
       return <div>{message.content}</div>;
     }
 
+    const getFileIcon = (fileName: string): string => {
+      const extension = fileName.split(".").pop()?.toLowerCase();
+      switch (extension) {
+        case "pdf":
+          return "📕";
+        case "doc":
+        case "docx":
+          return "📄";
+        case "xls":
+        case "xlsx":
+          return "📊";
+        case "zip":
+        case "rar":
+          return "📦";
+        case "mp3":
+        case "wav":
+          return "🎵";
+        case "mp4":
+        case "mov":
+          return "🎬";
+        default:
+          return "📎";
+      }
+    };
+
+    const fileIcon = getFileIcon(message.fileName || "file");
+
     return (
-      <div className="flex flex-col space-y-2">
-        {message.content && <div>{message.content}</div>}
+      <div className="flex flex-col space-y-3">
+        {/* {message.content && (
+          <div className="text-sm leading-relaxed">{message.content}</div>
+        )} */}
         <div
-          className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${
-            isDark
-              ? "bg-gray-700 hover:bg-gray-600"
-              : "bg-gray-100 hover:bg-gray-200"
+          className={`group relative border-2 border-transparent rounded-xl transition-all duration-300 hover:shadow-lg ${
+            isDark ? "hover:border-gray-600" : "hover:border-gray-300"
           }`}
-          onClick={() =>
-            onDownloadFile(message.fileUrl!, message.fileName || "file")
-          }
         >
-          <div className="flex-shrink-0">
-            <div
-              className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                isDark ? "bg-gray-600" : "bg-gray-200"
-              }`}
-            >
-              <span className="text-lg">📎</span>
-            </div>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p
-              className={`text-sm font-medium truncate ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {message.fileName}
-            </p>
-            {message.fileSize && (
-              <p
-                className={`text-xs ${
-                  isDark ? "text-gray-400" : "text-gray-500"
+          <div
+            className={`flex items-center space-x-4 p-4 rounded-xl cursor-pointer transition-all duration-300 ${
+              isDark
+                ? "bg-gray-800 hover:bg-gray-750"
+                : "bg-gray-50 hover:bg-gray-100"
+            } group-hover:scale-[1.02]`}
+            onClick={() =>
+              onDownloadFile(message.fileUrl!, message.fileName || "file")
+            }
+          >
+            {/* File Icon */}
+            <div className="flex-shrink-0">
+              <div
+                className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl transition-all duration-300 group-hover:scale-110 ${
+                  isDark
+                    ? "bg-gray-700 group-hover:bg-gray-600"
+                    : "bg-white group-hover:bg-gray-200 shadow-sm"
                 }`}
               >
-                {(message.fileSize / 1024 / 1024).toFixed(2)} MB
+                <span>{fileIcon}</span>
+              </div>
+            </div>
+
+            {/* File Info */}
+            <div className="flex-1 min-w-0">
+              <p
+                className={`text-sm font-semibold truncate transition-colors ${
+                  isDark ? "text-white" : "text-gray-900"
+                }`}
+              >
+                {message.fileName}
               </p>
-            )}
+              {message.fileSize && (
+                <p
+                  className={`text-xs mt-1 ${
+                    isDark ? "text-gray-400" : "text-gray-500"
+                  }`}
+                >
+                  {(message.fileSize / 1024 / 1024).toFixed(2)} MB
+                </p>
+              )}
+            </div>
+
+            {/* Download Indicator */}
+            <div className="flex-shrink-0">
+              <div
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 group-hover:scale-105 ${
+                  isDark
+                    ? "bg-blue-600 text-white group-hover:bg-blue-700"
+                    : "bg-blue-500 text-white group-hover:bg-blue-600"
+                } shadow-md group-hover:shadow-lg`}
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+                <span>Download</span>
+              </div>
+            </div>
           </div>
-          <div className="flex-shrink-0">
-            <span className="text-blue-500 hover:text-blue-600 text-sm font-medium">
-              Download
-            </span>
-          </div>
+
+          {/* Hover Enhancement */}
+          <div
+            className={`absolute inset-0 rounded-xl pointer-events-none transition-all duration-300 ${
+              isDark
+                ? "group-hover:bg-gradient-to-r group-hover:from-blue-500/5 group-hover:to-purple-500/5"
+                : "group-hover:bg-gradient-to-r group-hover:from-blue-500/10 group-hover:to-purple-500/10"
+            }`}
+          />
         </div>
       </div>
     );
+  };
+
+  const renderMessageContent = (): React.ReactNode => {
+    if (message.isDeleted) {
+      return (
+        <div className="flex items-center gap-2 text-sm italic">
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
+          </svg>
+          This message was deleted
+        </div>
+      );
+    }
+
+    switch (message.messageType) {
+      case "image":
+        return renderImageMessage();
+      case "file":
+        return renderFileMessage();
+      case "text":
+      default:
+        return (
+          <div className="leading-relaxed whitespace-pre-wrap break-words">
+            {message.content}
+          </div>
+        );
+    }
   };
 
   const getSenderInfo = (): {
@@ -433,7 +652,12 @@ const MessageComponent: React.FC<ExtendedMessageDisplayProps> = ({
                   : isDark
                   ? "bg-gray-700 text-white"
                   : "bg-gray-200 text-gray-900"
-              } ${isCurrentUser ? "hover:bg-blue-700" : "hover:bg-gray-600"}`}
+              } ${isCurrentUser ? "hover:bg-blue-700" : "hover:bg-gray-600"} ${
+                message.messageType === "image" ||
+                message.messageType === "file"
+                  ? "bg-transparent !p-0"
+                  : ""
+              }`}
             >
               {isEditing ? (
                 <div className="flex flex-col space-y-3 min-w-[300px]">
@@ -566,9 +790,7 @@ const MessageComponent: React.FC<ExtendedMessageDisplayProps> = ({
                 </div>
               ) : (
                 <>
-                  {message.messageType === "file"
-                    ? renderFileMessage()
-                    : message.content}
+                  {renderMessageContent()}
 
                   {/* Edit indicator */}
                   {message.isEdited && (
