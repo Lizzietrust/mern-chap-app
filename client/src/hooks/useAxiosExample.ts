@@ -1,13 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import axios, { type AxiosProgressEvent } from "axios";
 import {
   createQueryFn,
   createMutationFn,
   handleQueryError,
-  retryConfig,
-} from "../lib/utils/axios-utils";
+} from "../lib/utils";
+import { retryConfig } from "../lib/utils/tanstack-query-utils";
 
-// Example interfaces
 interface Todo {
   id: number;
   title: string;
@@ -25,7 +24,6 @@ interface UpdateTodoRequest {
   completed?: boolean;
 }
 
-// Query keys
 export const todoKeys = {
   all: ["todos"] as const,
   lists: () => [...todoKeys.all, "list"] as const,
@@ -34,7 +32,6 @@ export const todoKeys = {
   detail: (id: number) => [...todoKeys.details(), id] as const,
 };
 
-// Example 1: Using Axios directly with TanStack Query
 export function useTodosDirect() {
   return useQuery({
     queryKey: todoKeys.lists(),
@@ -48,7 +45,6 @@ export function useTodosDirect() {
   });
 }
 
-// Example 2: Using the helper function
 export function useTodosWithHelper() {
   return useQuery({
     queryKey: todoKeys.lists(),
@@ -59,7 +55,6 @@ export function useTodosWithHelper() {
   });
 }
 
-// Example 3: Single todo with error handling
 export function useTodo(id: number) {
   return useQuery({
     queryKey: todoKeys.detail(id),
@@ -78,7 +73,6 @@ export function useTodo(id: number) {
   });
 }
 
-// Example 4: Mutation with Axios
 export function useCreateTodo() {
   const queryClient = useQueryClient();
 
@@ -91,10 +85,8 @@ export function useCreateTodo() {
       return response.data;
     },
     onSuccess: (newTodo) => {
-      // Invalidate and refetch todos list
       queryClient.invalidateQueries({ queryKey: todoKeys.lists() });
 
-      // Add the new todo to the cache
       queryClient.setQueryData(todoKeys.detail(newTodo.id), newTodo);
     },
     onError: (error) => {
@@ -104,7 +96,6 @@ export function useCreateTodo() {
   });
 }
 
-// Example 5: Using the helper function for mutations
 export function useUpdateTodo() {
   const queryClient = useQueryClient();
 
@@ -114,16 +105,13 @@ export function useUpdateTodo() {
       "put"
     ),
     onSuccess: (updatedTodo) => {
-      // Update the todo in the cache
       queryClient.setQueryData(todoKeys.detail(updatedTodo.id), updatedTodo);
 
-      // Invalidate todos list to reflect changes
       queryClient.invalidateQueries({ queryKey: todoKeys.lists() });
     },
   });
 }
 
-// Example 6: Optimistic updates with Axios
 export function useOptimisticUpdateTodo() {
   const queryClient = useQueryClient();
 
@@ -142,13 +130,10 @@ export function useOptimisticUpdateTodo() {
       return response.data;
     },
     onMutate: async ({ id, data }) => {
-      // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: todoKeys.detail(id) });
 
-      // Snapshot the previous value
       const previousTodo = queryClient.getQueryData<Todo>(todoKeys.detail(id));
 
-      // Optimistically update to the new value
       if (previousTodo) {
         queryClient.setQueryData(todoKeys.detail(id), {
           ...previousTodo,
@@ -156,11 +141,11 @@ export function useOptimisticUpdateTodo() {
         });
       }
 
-      // Return a context object with the snapshotted value
       return { previousTodo };
     },
     onError: (err, variables, context) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
+      console.log(err);
+
       if (context?.previousTodo) {
         queryClient.setQueryData(
           todoKeys.detail(variables.id),
@@ -169,7 +154,9 @@ export function useOptimisticUpdateTodo() {
       }
     },
     onSettled: (data, error, variables) => {
-      // Always refetch after error or success
+      console.log(data);
+      console.log(error);
+
       queryClient.invalidateQueries({
         queryKey: todoKeys.detail(variables.id),
       });
@@ -177,7 +164,6 @@ export function useOptimisticUpdateTodo() {
   });
 }
 
-// Example 7: File upload with Axios
 export function useFileUpload() {
   return useMutation({
     mutationFn: async (file: File) => {
@@ -191,11 +177,19 @@ export function useFileUpload() {
           headers: {
             "Content-Type": "multipart/form-data",
           },
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / progressEvent.total
-            );
-            console.log("Upload progress:", percentCompleted);
+          onUploadProgress: (progressEvent: AxiosProgressEvent) => {
+            if (progressEvent.total !== undefined && progressEvent.total > 0) {
+              const percentCompleted = Math.round(
+                (progressEvent.loaded * 100) / progressEvent.total
+              );
+              console.log("Upload progress:", percentCompleted);
+            } else {
+              console.log(
+                "Upload progress:",
+                progressEvent.loaded,
+                "bytes loaded"
+              );
+            }
           },
         }
       );
@@ -205,7 +199,77 @@ export function useFileUpload() {
   });
 }
 
-// Example 8: Custom Axios instance for specific API
+export function useFileUploadWithProgress() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await axios.post<{ url: string }>(
+        "/api/upload",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+          onUploadProgress: (progressEvent: AxiosProgressEvent) => {
+            const { loaded, total } = progressEvent;
+
+            if (total !== undefined && total > 0) {
+              const percentCompleted = Math.round((loaded * 100) / total);
+              console.log(`Upload progress: ${percentCompleted}%`);
+            } else if (loaded > 0) {
+              console.log(`Uploaded: ${loaded} bytes`);
+            }
+          },
+        }
+      );
+
+      return response.data;
+    },
+  });
+}
+
+interface UploadProgressCallback {
+  (progress: { loaded: number; total?: number; percentage?: number }): void;
+}
+
+export function useFileUploadWithCallback(onProgress?: UploadProgressCallback) {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await axios.post<{ url: string }>(
+        "/api/upload",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+          onUploadProgress: (progressEvent: AxiosProgressEvent) => {
+            const { loaded, total } = progressEvent;
+
+            if (onProgress) {
+              const progressData = {
+                loaded,
+                total,
+                percentage:
+                  total && total > 0
+                    ? Math.round((loaded * 100) / total)
+                    : undefined,
+              };
+              onProgress(progressData);
+            }
+          },
+        }
+      );
+
+      return response.data;
+    },
+  });
+}
+
 const todoApi = axios.create({
   baseURL: "https://jsonplaceholder.typicode.com",
   timeout: 10000,
