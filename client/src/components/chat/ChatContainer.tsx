@@ -47,6 +47,8 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showClearChatModal, setShowClearChatModal] = useState(false);
 
+  console.log({ messages });
+
   const safeOnlineUsers = useMemo(() => {
     return Array.isArray(onlineUsers) ? onlineUsers : [];
   }, [onlineUsers]);
