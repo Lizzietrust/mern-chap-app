@@ -1,5 +1,5 @@
 import React from "react";
-import type { DetailsStepProps } from "../../types/CreateChannelModal.types";
+import type { DetailsStepProps } from "../../../types/CreateChannelModal.types";
 
 export const DetailsStep: React.FC<DetailsStepProps> = React.memo(
   ({ formData, onFormDataChange, onNext, onClose, isDark }) => {
