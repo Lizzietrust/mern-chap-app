@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../contexts/appcontext/index";
 import { useNotifications } from "../contexts";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "../hooks/useTheme";
 
 export function ProfileSetupPage() {
   const [formData, setFormData] = useState({
@@ -19,8 +19,6 @@ export function ProfileSetupPage() {
     e.preventDefault();
 
     try {
-      // Here you would typically make an API call to update the user profile
-      // For now, we'll just update the local state
       const updatedUser = {
         ...state.user!,
         name: `${formData.firstName} ${formData.lastName}`,
@@ -134,4 +132,4 @@ export function ProfileSetupPage() {
       </div>
     </div>
   );
-} 
+}
