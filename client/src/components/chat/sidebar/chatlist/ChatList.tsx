@@ -16,13 +16,16 @@ export const ChatList: React.FC<ChatListProps> = ({
   getDisplayUnreadCount,
   getChannelDisplayUnreadCount,
 }) => {
+  const safeDirectChats = directChats || [];
+  const safeChannels = channels || [];
+
   if (sidebarCollapsed) {
     return (
       <div className="flex-1 overflow-y-auto">
         {activeTab === "direct" && (
           <DirectMessagesList
             isDark={isDark}
-            chats={directChats}
+            chats={safeDirectChats}
             selectedChat={selectedChat}
             onChatSelect={onChatSelect}
             collapsed={true}
@@ -32,11 +35,11 @@ export const ChatList: React.FC<ChatListProps> = ({
         {activeTab === "channels" && (
           <ChannelsList
             isDark={isDark}
-            channels={channels}
+            channels={safeChannels}
             selectedChat={selectedChat}
             onChatSelect={onChatSelect}
             onCreateChannel={onCreateChannel}
-            onShowChannelSettings={onShowChannelSettings} 
+            onShowChannelSettings={onShowChannelSettings}
             collapsed={true}
             getDisplayUnreadCount={getChannelDisplayUnreadCount}
           />
@@ -50,7 +53,7 @@ export const ChatList: React.FC<ChatListProps> = ({
       {activeTab === "direct" && (
         <DirectMessagesList
           isDark={isDark}
-          chats={directChats}
+          chats={safeDirectChats}
           selectedChat={selectedChat}
           onChatSelect={onChatSelect}
           collapsed={false}
@@ -60,7 +63,7 @@ export const ChatList: React.FC<ChatListProps> = ({
       {activeTab === "channels" && (
         <ChannelsList
           isDark={isDark}
-          channels={channels}
+          channels={safeChannels}
           selectedChat={selectedChat}
           onChatSelect={onChatSelect}
           onCreateChannel={onCreateChannel}
