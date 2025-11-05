@@ -12,7 +12,10 @@ export const CHAT_KEYS = {
 export const MESSAGE_KEYS = {
   all: ["messages"] as const,
   lists: () => [...MESSAGE_KEYS.all, "list"] as const,
-  list: (chatId: string) => [...MESSAGE_KEYS.lists(), chatId] as const,
+  list: (chatId: string, chatType?: string) =>
+    chatType
+      ? ([...MESSAGE_KEYS.lists(), { chatId, chatType }] as const)
+      : ([...MESSAGE_KEYS.lists(), { chatId }] as const),
   details: () => [...MESSAGE_KEYS.all, "detail"] as const,
   detail: (id: string) => [...MESSAGE_KEYS.details(), id] as const,
   status: (messageId: string) =>
