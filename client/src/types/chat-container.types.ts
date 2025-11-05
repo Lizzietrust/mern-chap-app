@@ -9,7 +9,7 @@ export interface ChatContainerProps {
   messages: Message[];
   formatTime: (date: Date | string) => string;
   isTyping: boolean;
-  messagesEndRef?: React.RefObject<HTMLDivElement>;
+  messagesEndRef?: React.RefObject<HTMLDivElement | null>;
   handleSendMessage: (e: React.FormEvent) => void;
   handleFileSelect: (file: File) => void;
   newMessage: string;
