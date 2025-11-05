@@ -17,7 +17,7 @@ export interface SidebarProps {
   searchTerm: string;
   handleSearch: (search: string) => void;
   onCreateChannel: () => void;
-  onShowChannelSettings: () => void;
+  onShowChannelSettings: (channel: ChannelChat) => void;
   getDisplayUnreadCount: (chat: UserChat) => number;
   getChannelDisplayUnreadCount: (channel: ChannelChat) => number;
   onNextPage: () => void;
@@ -50,7 +50,7 @@ export interface ChatListProps {
   selectedChat: ChatOrNull;
   onChatSelect: (chat: ChatOrNull) => void;
   onCreateChannel: () => void;
-  onShowChannelSettings: () => void;
+  onShowChannelSettings: (channel: ChannelChat) => void;
   directChats: UserChat[];
   channels: ChannelChat[];
   getDisplayUnreadCount: (chat: UserChat) => number;
@@ -90,11 +90,11 @@ export interface ChannelItemProps {
   hasUnread: boolean;
   unreadCount: number;
   lastMessageTime: string;
-  onSelect: () => void;
+  onSelect?: (channel: ChannelChat) => void;
   isDark: boolean;
   sidebarCollapsed: boolean;
   displayText: string;
-  onShowSettings?: () => void;
+  onShowSettings?: (channel: ChannelChat) => void;
 }
 
 export interface UserProfileProps {
