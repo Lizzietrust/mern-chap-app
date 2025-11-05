@@ -1,5 +1,6 @@
 import Chat from "../models/ChatModel.js";
 import User from "../models/UserModel.js";
+import Message from "../models/MessageModel.js";
 
 export const createChannel = async (req, res, next) => {
   try {
@@ -347,5 +348,64 @@ export const getUserChannels = async (req, res, next) => {
     console.error("Error in getUserChannels:", error);
 
     res.status(200).json([]);
+  }
+};
+
+export const getChannelMessages = async (req, res, next) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.userId;
+
+    console.log("🔍 Fetching channel messages for:", {
+      channelId,
+      userId,
+    });
+
+    if (!channelId) {
+      return res.status(400).json({ message: "ChannelId is required" });
+    }
+
+    const channel = await Chat.findOne({
+      _id: channelId,
+      type: "channel",
+    });
+
+    if (!channel) {
+      return res.status(404).json({ message: "Channel not found" });
+    }
+
+    if (!channel.members.includes(userId)) {
+      return res
+        .status(403)
+        .json({ message: "You are not authorized to view these messages" });
+    }
+
+    const userClearedAt = channel.clearedBy?.get(userId.toString());
+    let messages = [];
+
+    if (!userClearedAt) {
+      messages = await Message.find({ chat: channelId })
+        .populate("sender", "_id firstName lastName email image")
+        .populate("readBy", "_id firstName lastName email image")
+        .populate("readReceipts.user", "_id firstName lastName email image")
+        .sort({ createdAt: 1 });
+    } else {
+      messages = await Message.find({
+        chat: channelId,
+        createdAt: { $gt: userClearedAt },
+      })
+        .populate("sender", "_id firstName lastName email image")
+        .populate("readBy", "_id firstName lastName email image")
+        .populate("readReceipts.user", "_id firstName lastName email image")
+        .sort({ createdAt: 1 });
+    }
+
+    console.log(
+      `📨 Retrieved ${messages.length} messages for channel ${channelId}`
+    );
+    res.status(200).json(messages);
+  } catch (error) {
+    console.error("❌ Error in getChannelMessages:", error);
+    next(error);
   }
 };
