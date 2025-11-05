@@ -1,10 +1,10 @@
-import { chatApi, apiClient as api } from "../../lib/api";
-import type { Chat, Message, UserChat, ChannelChat } from "../../types/types";
+import { chatApi, messageApi, apiClient as api } from "../../lib/api";
 import type {
   SendMessageData,
   UploadFileResponse,
   SendMessageResponse,
 } from "../../types/chat";
+import type { UserChat, Chat, ChannelChat, Message } from "../../types/types";
 import { isUserChat } from "../../types/chat";
 
 const RETRY_CONFIG = {
@@ -183,12 +183,24 @@ export class ChatService {
   }
 
   static async getMessages(chatId: string): Promise<Message[]> {
-    console.log("🔍 Fetching messages for chat:", chatId);
+    console.log("🔍 Fetching messages for direct chat:", chatId);
     const messages = await retryRequest(async () => {
-      return await api.get<Message[]>(`/api/messages/get-messages/${chatId}`);
+      return await messageApi.getChatMessages(chatId);
     });
-    console.log("✅ Fetched messages:", {
+    console.log("✅ Fetched direct chat messages:", {
       chatId,
+      count: messages.length,
+    });
+    return messages;
+  }
+
+  static async getChannelMessages(channelId: string): Promise<Message[]> {
+    console.log("🔍 Fetching messages for channel:", channelId);
+    const messages = await retryRequest(async () => {
+      return await messageApi.getChannelMessages(channelId);
+    });
+    console.log("✅ Fetched channel messages:", {
+      channelId,
       count: messages.length,
     });
     return messages;
