@@ -26,7 +26,7 @@ export interface ChatQueryOptions {
   enabled?: boolean;
   staleTime?: number;
   gcTime?: number;
-  retry?: number | boolean;
+  retry?: boolean | number;
 }
 
 export const isUserChat = (chat: Chat): chat is UserChat => {
