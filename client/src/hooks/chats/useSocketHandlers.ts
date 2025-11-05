@@ -15,6 +15,24 @@ import { useApp } from "../../contexts/appcontext/index";
 import { messageApi, chatApi } from "../../lib/api";
 import { useNotifications } from "../../contexts";
 
+interface ChatUpdatedData {
+  chatId: string;
+  updatedFields: Partial<Chat>;
+  updatedAt: string;
+}
+
+interface MessageStatusUpdateData {
+  messageId: string;
+  status: "sent" | "delivered" | "read";
+  readBy?: string[] | User[];
+  chatId: string;
+}
+
+interface MessagesClearedData {
+  chatId: string;
+  clearedForEveryone: boolean;
+}
+
 export const useSocketHandlers = () => {
   const { socket, onlineUsers } = useSocket();
   const { selectedChat } = useContext(
@@ -110,12 +128,7 @@ export const useSocketHandlers = () => {
   );
 
   const handleMessageStatusUpdate = useCallback(
-    (data: {
-      messageId: string;
-      status: "sent" | "delivered" | "read";
-      readBy?: string[] | User[];
-      chatId: string;
-    }) => {
+    (data: MessageStatusUpdateData) => {
       console.log(
         `📨 Message status update in handler: ${data.messageId} -> ${data.status}`
       );
@@ -187,7 +200,7 @@ export const useSocketHandlers = () => {
   );
 
   const handleMessagesCleared = useCallback(
-    (data: { chatId: string; clearedForEveryone: boolean }) => {
+    (data: MessagesClearedData) => {
       const { chatId, clearedForEveryone } = data;
 
       if (chatId === selectedChat?._id) {
@@ -210,6 +223,72 @@ export const useSocketHandlers = () => {
       queryKey: CHAT_KEYS.userChats(state.user?._id),
     });
   }, [queryClient, state.user?._id]);
+
+  const handleNewMessage = useCallback(
+    (message: Message) => {
+      console.log("📨 Received new message via socket:", message);
+
+      const messageChatId = (
+        "chatId" in message ? message.chatId : message.chat
+      ) as string;
+
+      if (messageChatId === selectedChat?._id) {
+        const messagesQueryKey = MESSAGE_KEYS.list(messageChatId);
+
+        queryClient.setQueryData<Message[]>(
+          messagesQueryKey,
+          (oldData = []) => {
+            const existingMessage = oldData.find((m) => m._id === message._id);
+            if (existingMessage) {
+              console.log("⚠️ Message already exists, skipping duplicate");
+              return oldData;
+            }
+
+            const filteredMessages = oldData.filter(
+              (msg) =>
+                !msg.isOptimistic ||
+                msg.content !== message.content ||
+                (typeof message.sender === "object" &&
+                  typeof msg.sender === "object" &&
+                  msg.sender._id !== message.sender._id)
+            );
+
+            const newMessages = [...filteredMessages, message];
+            console.log(
+              "✅ Added new message to cache, total:",
+              newMessages.length
+            );
+            return newMessages;
+          }
+        );
+
+        queryClient.invalidateQueries({ queryKey: ["chats"] });
+        queryClient.invalidateQueries({ queryKey: ["userChats"] });
+
+        if (
+          state.user?._id &&
+          typeof message.sender === "object" &&
+          message.sender._id !== state.user._id &&
+          message.status === "sent"
+        ) {
+          console.log(
+            `📨 Auto-marking new message ${message._id} as delivered`
+          );
+          messageApi.markAsDelivered(message._id).catch(console.error);
+        }
+      }
+    },
+    [selectedChat?._id, queryClient, state.user?._id]
+  );
+
+  const handleChatUpdated = useCallback(
+    (data: ChatUpdatedData) => {
+      console.log("🔄 Chat updated:", data);
+      queryClient.invalidateQueries({ queryKey: ["chats"] });
+      queryClient.invalidateQueries({ queryKey: ["userChats"] });
+    },
+    [queryClient]
+  );
 
   useEffect(() => {
     const chatId = selectedChat?._id;
@@ -272,84 +351,36 @@ export const useSocketHandlers = () => {
   useEffect(() => {
     if (!socket || !selectedChat?._id || !state.user?._id) return;
 
-    const chatId = selectedChat._id;
-    const userId = state.user._id;
-
-    const handleNewMessage = (message: Message) => {
-      const messageChatId = "chatId" in message ? message.chatId : message.chat;
-
-      if (messageChatId === chatId) {
-        const messagesQueryKey = MESSAGE_KEYS.list(chatId);
-
-        queryClient.setQueryData<Message[]>(
-          messagesQueryKey,
-          (oldMessages = []) => {
-            const filteredMessages = oldMessages.filter(
-              (msg) =>
-                !msg.isOptimistic ||
-                msg.content !== message.content ||
-                (typeof message.sender === "object" &&
-                  typeof msg.sender === "object" &&
-                  msg.sender._id !== message.sender._id)
-            );
-
-            const exists = filteredMessages.some(
-              (msg) => msg._id === message._id
-            );
-            if (!exists) {
-              return [...filteredMessages, message];
-            }
-
-            return filteredMessages;
-          }
-        );
-
-        if (
-          typeof message.sender === "object" &&
-          message.sender._id !== userId &&
-          message.status === "sent"
-        ) {
-          console.log(
-            `📨 Auto-marking new message ${message._id} as delivered`
-          );
-          messageApi.markAsDelivered(message._id).catch(console.error);
-        }
-      }
-    };
-
-    const handleSocketMessageStatusUpdate = (data: {
-      messageId: string;
-      status: "sent" | "delivered" | "read";
-      readBy?: string[] | User[];
-      chatId: string;
-    }) => {
-      if (data.chatId === chatId) {
-        handleMessageStatusUpdate(data);
-      }
-    };
+    console.log("🔌 Setting up socket handlers for chat:", selectedChat._id);
 
     socket.on("newMessage", handleNewMessage);
-    socket.on("messageStatusUpdate", handleSocketMessageStatusUpdate);
+    socket.on("messageReceived", handleNewMessage);
+    socket.on("messageStatusUpdate", handleMessageStatusUpdate);
     socket.on("messageUpdated", handleMessageUpdate);
     socket.on("messagesCleared", handleMessagesCleared);
     socket.on("chatCleared", handleChatCleared);
+    socket.on("chatUpdated", handleChatUpdated);
 
     return () => {
+      console.log("🔌 Cleaning up socket handlers");
       socket.off("newMessage", handleNewMessage);
-      socket.off("messageStatusUpdate", handleSocketMessageStatusUpdate);
+      socket.off("messageReceived", handleNewMessage);
+      socket.off("messageStatusUpdate", handleMessageStatusUpdate);
       socket.off("messageUpdated", handleMessageUpdate);
       socket.off("messagesCleared", handleMessagesCleared);
       socket.off("chatCleared", handleChatCleared);
+      socket.off("chatUpdated", handleChatUpdated);
     };
   }, [
     socket,
     selectedChat?._id,
     state.user?._id,
-    queryClient,
+    handleNewMessage,
     handleMessageStatusUpdate,
     handleMessageUpdate,
     handleMessagesCleared,
     handleChatCleared,
+    handleChatUpdated,
   ]);
 
   return {
