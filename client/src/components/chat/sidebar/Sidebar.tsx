@@ -90,7 +90,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     <>
       <div
         className={`${
-          sidebarCollapsed ? "md:w-16" : "md:w-[25%]"
+          sidebarCollapsed ? "md:w-16" : "md:w-80 xl:w-[25%]"
         } w-full flex-col border-r transition-all duration-300 ${
           isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
         } ${selectedChat ? "hidden md:flex" : "flex"}`}
