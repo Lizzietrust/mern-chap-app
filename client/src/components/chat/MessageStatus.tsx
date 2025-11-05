@@ -75,6 +75,7 @@ export const MessageStatus: React.FC<MessageStatusProps> = ({ status }) => {
     <div className="flex items-center space-x-1">
       <div className={`flex items-center ${config.color}`} title={config.text}>
         {config.icon}
+        {/* {config.text} */}
       </div>
     </div>
   );
