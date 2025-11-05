@@ -165,7 +165,7 @@ export const sendMessage = async (req, res, next) => {
       fileUrl: fileUrl || undefined,
       fileName: fileName || undefined,
       fileSize: fileSize || undefined,
-      chat: chatId,
+      chat: chatId, 
       status: "sent",
       readBy: [sender],
       readReceipts: [
@@ -180,16 +180,16 @@ export const sendMessage = async (req, res, next) => {
     const savedMessage = await newMessage.save();
     console.log("✅ Message saved to database:", savedMessage._id);
 
+    
+    await Chat.findByIdAndUpdate(chatId, {
+      lastMessage: content?.trim() || fileName || "File shared",
+      lastMessageAt: new Date(),
+      $push: { messages: savedMessage._id },
+    });
+
+    
     try {
       const db = mongoose.connection.db;
-      const chatDoc = await db.collection("chats").findOne({ _id: chat._id });
-
-      if (Array.isArray(chatDoc.unreadCount)) {
-        console.log("🔄 Fixing array unreadCount before update...");
-        await db
-          .collection("chats")
-          .updateOne({ _id: chat._id }, { $set: { unreadCount: {} } });
-      }
 
       if (chat.type === "direct") {
         for (const participantId of chat.participants) {
@@ -240,19 +240,16 @@ export const sendMessage = async (req, res, next) => {
       console.error("❌ Error updating unread counts:", unreadError);
     }
 
-    await Chat.findByIdAndUpdate(chatId, {
-      lastMessage: content?.trim() || fileName || "File shared",
-      lastMessageTime: new Date(),
-    });
-
+    
     const populatedMessage = await Message.findById(savedMessage._id)
       .populate("sender", "_id firstName lastName email image")
       .populate("readBy", "_id firstName lastName email image");
 
+    
     const io = req.app.get("io");
 
     if (io) {
-      console.log(`📢 Emitting newMessage event for chat: ${chatId}`);
+      console.log(`📢 Emitting socket events for chat: ${chatId}`);
 
       const messagePayload = {
         _id: populatedMessage._id.toString(),
@@ -263,7 +260,8 @@ export const sendMessage = async (req, res, next) => {
         fileUrl: populatedMessage.fileUrl,
         fileName: populatedMessage.fileName,
         fileSize: populatedMessage.fileSize,
-        chatId: populatedMessage.chat.toString(),
+        chat: populatedMessage.chat.toString(),
+        chatId: populatedMessage.chat.toString(), 
         createdAt: populatedMessage.createdAt.toISOString(),
         timestamp: populatedMessage.createdAt.toISOString(),
         status: populatedMessage.status,
@@ -271,20 +269,35 @@ export const sendMessage = async (req, res, next) => {
         readReceipts: populatedMessage.readReceipts,
       };
 
+      
       if (chat.type === "direct") {
         chat.participants.forEach((participantId) => {
           io.to(participantId.toString()).emit("newMessage", messagePayload);
+          io.to(participantId.toString()).emit(
+            "messageReceived",
+            messagePayload
+          ); 
           console.log(`✅ Emitted to participant: ${participantId}`);
         });
       } else if (chat.type === "channel") {
         chat.members.forEach((memberId) => {
           io.to(memberId.toString()).emit("newMessage", messagePayload);
+          io.to(memberId.toString()).emit("messageReceived", messagePayload); 
           console.log(`✅ Emitted to member: ${memberId}`);
         });
+        
         io.to(chatId).emit("newMessage", messagePayload);
+        io.to(chatId).emit("messageReceived", messagePayload);
       }
 
-      io.emit("chatUpdated", { chatId });
+     
+      io.emit("chatUpdated", {
+        chatId,
+        lastMessage: messagePayload.content,
+        lastMessageAt: messagePayload.createdAt,
+        lastMessageSender: messagePayload.sender,
+      });
+
       console.log(`🔄 Emitted chatUpdated event for: ${chatId}`);
     } else {
       console.log("❌ Socket.io instance not available");
@@ -345,14 +358,14 @@ export const getMessages = async (req, res, next) => {
     let messages = [];
 
     if (!userClearedAt) {
-      messages = await Message.find({ chat: chatId })
+      messages = await Message.find({ chat: chatId }) 
         .populate("sender", "_id firstName lastName email image")
         .populate("readBy", "_id firstName lastName email image")
         .populate("readReceipts.user", "_id firstName lastName email image")
         .sort({ createdAt: 1 });
     } else {
       messages = await Message.find({
-        chat: chatId,
+        chat: chatId, 
         createdAt: { $gt: userClearedAt },
       })
         .populate("sender", "_id firstName lastName email image")
@@ -367,27 +380,10 @@ export const getMessages = async (req, res, next) => {
 
     console.log(`📨 Retrieved ${messages.length} messages for chat ${chatId}`);
 
-    if (messages.length > 0) {
-      const statusCount = {
-        sent: 0,
-        delivered: 0,
-        read: 0,
-      };
-
-      messages.forEach((msg) => {
-        statusCount[msg.status] = (statusCount[msg.status] || 0) + 1;
-      });
-
-      console.log("📊 Message status summary:", statusCount);
-    } else if (userClearedAt) {
-      console.log(`🧹 Chat ${chatId} is cleared for user ${userId}`);
-    }
-
     res.status(200).json(messages);
   } catch (error) {
     console.error("❌ Error in getMessages:", error);
     next(error);
-    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
@@ -1251,3 +1247,5 @@ export const clearChatMessages = async (req, res, next) => {
     });
   }
 };
+
+
