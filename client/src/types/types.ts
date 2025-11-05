@@ -44,6 +44,8 @@ export interface BaseMessage {
     editedAt: Date;
   }>;
 
+  deliveredTo: (string | User)[];
+
   isDeleted?: boolean;
   deletedForSender?: boolean;
   deletedForEveryone?: boolean;
@@ -135,6 +137,40 @@ export interface UpdateChannelData {
   isPrivate?: boolean;
 }
 
+export interface SendMessageData {
+  chatId: string;
+  content?: string;
+  messageType: "text" | "image" | "file" | "audio" | "video";
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  replyTo?: string;
+}
+
+export interface SendMessageResponse {
+  _id: string;
+  chatId: string;
+  content?: string;
+  messageType: "text" | "image" | "file" | "audio" | "video";
+  sender: string | User;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  status: "sent" | "delivered" | "read";
+  timestamp: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UploadFileResponse {
+  fileUrl: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}
+
 export interface EditMessageData {
   messageId: string;
   content: string;
@@ -161,6 +197,37 @@ export interface EditMessageResponse {
 export interface DeleteMessageResponse {
   message: string;
   data?: Message;
+}
+
+export interface UpdateMessageStatusData {
+  messageId: string;
+  status: "delivered" | "read";
+  userId?: string;
+}
+
+export interface MessageStatusUpdate {
+  messageId: string;
+  chatId: string;
+  status: "sent" | "delivered" | "read";
+  userId?: string;
+  timestamp: Date;
+}
+
+export interface MessageStatusResponse {
+  messageId: string;
+  status: "sent" | "delivered" | "read";
+  readBy: string[];
+  deliveredTo: string[];
+  updatedAt: string;
+}
+
+export interface OnlineUser {
+  _id: string;
+  userId: string;
+  socketId: string;
+  isOnline: boolean;
+  lastSeen?: Date;
+  user?: User;
 }
 
 export const isDirectChat = (chat: Chat): chat is UserChat => {
@@ -514,34 +581,3 @@ export const hasUserReadMessage = (
     typeof user === "string" ? user === userId : user._id === userId
   );
 };
-
-export interface UpdateMessageStatusData {
-  messageId: string;
-  status: "delivered" | "read";
-  userId?: string;
-}
-
-export interface MessageStatusUpdate {
-  messageId: string;
-  chatId: string;
-  status: "sent" | "delivered" | "read";
-  userId?: string;
-  timestamp: Date;
-}
-
-export interface MessageStatusResponse {
-  messageId: string;
-  status: "sent" | "delivered" | "read";
-  readBy: string[];
-  deliveredTo: string[];
-  updatedAt: string;
-}
-
-export interface OnlineUser {
-  _id: string;
-  userId: string;
-  socketId: string;
-  isOnline: boolean;
-  lastSeen?: Date;
-  user?: User; 
-}
