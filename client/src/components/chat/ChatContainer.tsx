@@ -47,7 +47,19 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showClearChatModal, setShowClearChatModal] = useState(false);
 
-  console.log({ messages });
+  console.log("🔍 ChatContainer Debug:", {
+    selectedChat: selectedChat
+      ? {
+          id: selectedChat._id,
+          type: selectedChat.type,
+          name:
+            selectedChat.type === "channel" ? selectedChat.name : "Direct Chat",
+        }
+      : null,
+    messagesCount: messages?.length || 0,
+    isChannel: selectedChat && isChannelChat(selectedChat),
+    user: state.user?._id,
+  });
 
   const safeOnlineUsers = useMemo(() => {
     return Array.isArray(onlineUsers) ? onlineUsers : [];
@@ -94,6 +106,12 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   useEffect(() => {
     if (!socket || !selectedChat) return;
 
+    console.log("🔌 Joining chat:", {
+      chatId: selectedChat._id,
+      type: selectedChat.type,
+      name: selectedChat.type === "channel" ? selectedChat.name : "Direct Chat",
+    });
+
     socket.emit("joinChat", selectedChat._id);
 
     const handleMessageStatusUpdate = (data: MessageStatusUpdateData) => {
@@ -109,6 +127,10 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
             typeof msg.sender === "object" ? msg.sender._id : msg.sender;
           return senderId !== state.user?._id && msg.status === "sent";
         });
+
+        console.log(
+          `📨 Marking ${undeliveredMessages.length} messages as delivered`
+        );
 
         for (const message of undeliveredMessages) {
           try {
@@ -126,6 +148,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
     markMessagesAsDelivered();
 
     return () => {
+      console.log("🔌 Leaving chat:", selectedChat._id);
       socket.off("messageStatusUpdate", handleMessageStatusUpdate);
       socket.emit("leaveChat", selectedChat._id);
     };
@@ -338,6 +361,10 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
         </div>
       );
     }
+
+    console.log("📝 Rendering messages:", messages.length);
+
+    console.log({ messages });
 
     return messages.map((message, index) => {
       const isCurrentUser = getUserId(message.sender) === state?.user?._id;
