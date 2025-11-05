@@ -5,7 +5,12 @@ import {
   formatLastMessageTime,
   getSenderDisplayName,
 } from "../../../../utils/sidebar.utils";
-import type { ChannelChat, ChatOrNull, User } from "../../../../types/types";
+import type {
+  ChannelChat,
+  ChatOrNull,
+  User,
+  Message,
+} from "../../../../types/types";
 import { useSocket } from "../../../../hooks/useSocket";
 
 export interface ChannelListProps {
@@ -14,7 +19,7 @@ export interface ChannelListProps {
   selectedChat: ChatOrNull;
   onChatSelect: (chat: ChatOrNull) => void;
   onCreateChannel: () => void;
-  onShowChannelSettings: () => void;
+  onShowChannelSettings: (channel: ChannelChat) => void;
   collapsed: boolean;
   getDisplayUnreadCount: (channel: ChannelChat) => number;
 }
@@ -25,6 +30,32 @@ const isUserObject = (member: string | User): member is User => {
 
 const getMemberId = (member: string | User): string => {
   return isUserObject(member) ? member._id : member;
+};
+
+const isMessageObject = (lastMessage: unknown): lastMessage is Message => {
+  return (
+    typeof lastMessage === "object" &&
+    lastMessage !== null &&
+    "_id" in lastMessage &&
+    "messageType" in lastMessage
+  );
+};
+
+const getMessagePreview = (message: Message): string => {
+  if (message.isDeleted) {
+    return "This message was deleted";
+  }
+
+  if (message.messageType === "image") {
+    return "📷 Photo";
+  }
+
+  if (message.messageType === "file") {
+    const fileMessage = message as Message & { fileName?: string };
+    return `📎 ${fileMessage.fileName || "File"}`;
+  }
+
+  return message.content || "Message";
 };
 
 export const ChannelsList: React.FC<ChannelListProps> = React.memo(
@@ -123,78 +154,152 @@ export const ChannelsList: React.FC<ChannelListProps> = React.memo(
       </button>
     );
 
+    const renderEmptyState = () => (
+      <div
+        className={`flex flex-col items-center justify-center p-8 text-center ${
+          isDark ? "text-gray-400" : "text-gray-500"
+        }`}
+      >
+        <div className="text-4xl mb-4">🏗️</div>
+        <p className="text-sm mb-4">
+          No channels yet. Create one to get started!
+        </p>
+        <button
+          onClick={onCreateChannel}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            isDark
+              ? "bg-blue-600 hover:bg-blue-700 text-white"
+              : "bg-blue-500 hover:bg-blue-600 text-white"
+          }`}
+        >
+          Create Channel
+        </button>
+      </div>
+    );
+
+    if (collapsed) {
+      if (channels.length === 0) {
+        return (
+          <div className="flex-1 flex flex-col items-center justify-center p-4">
+            <CreateChannelButton />
+            <div className="text-2xl mt-4">🏗️</div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex-1 overflow-y-auto py-2">
+          <CreateChannelButton />
+          {updatedChannels.slice(0, 8).map((channel) => {
+            const unreadCount = getDisplayUnreadCount(channel);
+            const isSelected = selectedChat?._id === channel._id;
+
+            return (
+              <ChannelItem
+                key={channel._id}
+                channel={channel}
+                isSelected={isSelected}
+                hasUnread={unreadCount > 0 && !isSelected}
+                unreadCount={unreadCount}
+                lastMessageTime=""
+                displayText=""
+                onSelect={() => onChatSelect(channel)}
+                isDark={isDark}
+                sidebarCollapsed={true}
+                onShowSettings={() => onShowChannelSettings(channel)}
+              />
+            );
+          })}
+        </div>
+      );
+    }
+
     if (channels.length === 0) {
       return (
-        <div className="p-2">
+        <div className="flex-1 overflow-y-auto">
           <CreateChannelButton />
-          <div
-            className={`text-center py-8 ${
-              isDark ? "text-gray-400" : "text-gray-500"
-            }`}
-          >
-            <div className="text-4xl mb-4">🏗️</div>
-            <p>No channels yet</p>
-            <p className="text-sm mt-1">
-              Create your first channel to get started
-            </p>
-          </div>
+          {renderEmptyState()}
         </div>
       );
     }
 
     return (
-      <div className="p-2">
-        <CreateChannelButton />
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-2">
+          <CreateChannelButton />
+          <div className="space-y-1">
+            {updatedChannels.map((channel) => {
+              const unreadCount = getDisplayUnreadCount(channel);
+              const isSelected = selectedChat?._id === channel._id;
+              const hasUnread = unreadCount > 0 && !isSelected;
 
-        {updatedChannels.map((channel) => {
-          const unreadCount = getDisplayUnreadCount(channel);
-          const isSelected = selectedChat?._id === channel._id;
-          const hasUnread = unreadCount > 0 && !isSelected;
-          const lastMessageTime = formatLastMessageTime(channel.lastMessageAt);
-          const totalMembers = channel.members ? channel.members.length : 0;
-          const onlineMembers = getOnlineMemberCount(channel);
+              const lastMessageTime = channel.lastMessageAt
+                ? formatLastMessageTime(channel.lastMessageAt)
+                : "";
 
-          const getDisplayText = (): string => {
-            if (channel.lastMessage) {
-              if (channel.lastMessageSender) {
-                const senderName = getSenderDisplayName(
-                  channel.lastMessageSender
-                );
-                return `${channel.lastMessage} • ${senderName}`;
-              }
+              const totalMembers = channel.members ? channel.members.length : 0;
+              const onlineMembers = getOnlineMemberCount(channel);
 
-              return channel.lastMessage;
-            }
+              const getDisplayText = (): string => {
+                if (channel.lastMessage) {
+                  if (isMessageObject(channel.lastMessage)) {
+                    const messagePreview = getMessagePreview(
+                      channel.lastMessage
+                    );
 
-            let displayText = `${totalMembers} members`;
-            if (onlineMembers > 0) {
-              displayText += ` • ${onlineMembers} online`;
-            }
+                    if (channel.lastMessageSender) {
+                      const senderName = getSenderDisplayName(
+                        channel.lastMessageSender
+                      );
+                      return `${messagePreview} • ${senderName}`;
+                    }
 
-            if (channel.description) {
-              displayText += ` • ${channel.description}`;
-            }
-            return displayText;
-          };
+                    return messagePreview;
+                  } else if (typeof channel.lastMessage === "string") {
+                    const messageText = channel.lastMessage;
 
-          const displayText = getDisplayText();
+                    if (channel.lastMessageSender) {
+                      const senderName = getSenderDisplayName(
+                        channel.lastMessageSender
+                      );
+                      return `${messageText} • ${senderName}`;
+                    }
 
-          return (
-            <ChannelItem
-              key={channel._id}
-              channel={channel}
-              isSelected={isSelected}
-              hasUnread={hasUnread}
-              unreadCount={unreadCount}
-              lastMessageTime={lastMessageTime}
-              displayText={displayText}
-              onSelect={() => onChatSelect(channel)}
-              isDark={isDark}
-              sidebarCollapsed={collapsed}
-              onShowSettings={onShowChannelSettings}
-            />
-          );
-        })}
+                    return messageText;
+                  }
+                }
+
+                let displayText = `${totalMembers} members`;
+                if (onlineMembers > 0) {
+                  displayText += ` • ${onlineMembers} online`;
+                }
+
+                if (channel.description) {
+                  displayText += ` • ${channel.description}`;
+                }
+                return displayText;
+              };
+
+              const displayText = getDisplayText();
+
+              return (
+                <ChannelItem
+                  key={channel._id}
+                  channel={channel}
+                  isSelected={isSelected}
+                  hasUnread={hasUnread}
+                  unreadCount={unreadCount}
+                  lastMessageTime={lastMessageTime}
+                  displayText={displayText}
+                  onSelect={() => onChatSelect(channel)}
+                  isDark={isDark}
+                  sidebarCollapsed={false}
+                  onShowSettings={() => onShowChannelSettings(channel)}
+                />
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
   }
