@@ -1,18 +1,17 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import type { ChannelChat } from "../../../types/types";
 import { useChannelSettings } from "./useChannelSettings";
 import { Modal } from "../../modals/Modal";
 import { Tabs } from "../Tabs";
 import { SettingsTab } from "./SettingsTab";
-import { MemberItem } from "./MemberItem";
-import { useApp } from "../../../contexts/appcontext/index";
+import { MembersTab } from "./MembersTab";
 import { useClearChat } from "../../../hooks/chats/useClearchat";
 
 interface Props {
   isDark: boolean;
   channel: ChannelChat;
   onClose: () => void;
-  onUpdate: () => void;
+  onUpdate: (updatedChannel?: ChannelChat) => void;
 }
 
 const ChannelSettingsModal: React.FC<Props> = ({
@@ -21,7 +20,8 @@ const ChannelSettingsModal: React.FC<Props> = ({
   onClose,
   onUpdate,
 }) => {
-  const { state } = useApp();
+  const [currentChannel, setCurrentChannel] = useState<ChannelChat>(channel);
+
   const {
     activeTab,
     setActiveTab,
@@ -37,12 +37,70 @@ const ChannelSettingsModal: React.FC<Props> = ({
     handleUpdateChannel,
     handleRemoveMember,
     handleToggleAdmin,
-  } = useChannelSettings(channel, onUpdate);
+    handleAddMember,
+    isUpdatingMembers,
+  } = useChannelSettings(currentChannel, () => onUpdate());
 
   const clearChatMutation = useClearChat();
 
+  useEffect(() => {
+    setCurrentChannel(channel);
+  }, [channel]);
+
+  const handleSaveChannel = async () => {
+    try {
+      const updatedChannel = await handleUpdateChannel();
+      if (updatedChannel) {
+        setCurrentChannel(updatedChannel);
+        onUpdate(updatedChannel);
+      }
+    } catch (error) {
+      console.error("Failed to update channel:", error);
+    }
+  };
+
+  const handleMemberRemove = async (memberId: string) => {
+    try {
+      const updatedChannel = await handleRemoveMember(memberId);
+      if (updatedChannel) {
+        setCurrentChannel(updatedChannel);
+        onUpdate(updatedChannel);
+      }
+    } catch (error) {
+      console.error("Failed to remove member:", error);
+    }
+  };
+
+  const handleMemberToggleAdmin = async (
+    memberId: string,
+    isAdmin: boolean
+  ) => {
+    try {
+      const updatedChannel = await handleToggleAdmin(memberId, isAdmin);
+      if (updatedChannel) {
+        setCurrentChannel(updatedChannel);
+        onUpdate(updatedChannel);
+      }
+    } catch (error) {
+      console.error("Failed to toggle admin:", error);
+    }
+  };
+
+  const handleMemberAdd = async (userId: string) => {
+    try {
+      const updatedChannel = await handleAddMember(userId);
+      if (updatedChannel) {
+        setCurrentChannel(updatedChannel);
+        onUpdate(updatedChannel);
+      }
+    } catch (error) {
+      console.error("Failed to add member:", error);
+      throw error;
+    }
+  };
+
   const handleClearChat = async (forEveryone: boolean) => {
-    if (!channel) return;
+    if (!currentChannel) return;
 
     const confirmed = window.confirm(
       forEveryone
@@ -53,7 +111,7 @@ const ChannelSettingsModal: React.FC<Props> = ({
     if (confirmed) {
       try {
         await clearChatMutation.mutateAsync({
-          chatId: channel._id,
+          chatId: currentChannel._id,
           deleteForEveryone: forEveryone,
         });
         onClose();
@@ -88,11 +146,11 @@ const ChannelSettingsModal: React.FC<Props> = ({
             onNameChange={setName}
             onDescriptionChange={setDescription}
             onPrivacyChange={setIsPrivate}
-            onSave={handleUpdateChannel}
+            onSave={handleSaveChannel}
             isDark={isDark}
           />
 
-          {/* Add Clear Chat section */}
+          {/* Clear Chat section */}
           {isCurrentUserAdmin && (
             <div
               className={`border-t pt-4 ${
@@ -198,37 +256,16 @@ const ChannelSettingsModal: React.FC<Props> = ({
       )}
 
       {activeTab === "members" && (
-        <div className="space-y-3 max-h-96 overflow-y-auto">
-          {members?.map((member) => {
-            const isAdmin = channel.admins.includes(member._id);
-            const isCurrentUser = member._id === state.user?._id;
-
-            return (
-              <MemberItem
-                key={member._id}
-                member={member}
-                isAdmin={isAdmin}
-                isCurrentUser={isCurrentUser}
-                isCurrentUserAdmin={isCurrentUserAdmin}
-                onToggleAdmin={handleToggleAdmin}
-                onRemoveMember={handleRemoveMember}
-                isDark={isDark}
-              />
-            );
-          })}
-
-          {(!members || members.length === 0) && (
-            <div
-              className={`text-center py-8 rounded-lg ${
-                isDark
-                  ? "bg-gray-700 text-gray-400"
-                  : "bg-gray-50 text-gray-500"
-              }`}
-            >
-              No members found
-            </div>
-          )}
-        </div>
+        <MembersTab
+          members={members || []}
+          channel={currentChannel}
+          isCurrentUserAdmin={isCurrentUserAdmin}
+          onRemoveMember={handleMemberRemove}
+          onToggleAdmin={handleMemberToggleAdmin}
+          onAddMember={handleMemberAdd}
+          isUpdating={isUpdatingMembers}
+          isDark={isDark}
+        />
       )}
     </Modal>
   );
