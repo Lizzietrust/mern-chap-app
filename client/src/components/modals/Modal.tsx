@@ -24,7 +24,7 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-white/30 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div
@@ -45,7 +45,9 @@ export const Modal: React.FC<ModalProps> = ({
             ✕
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-6 h-[calc(90vh-100px)] overflow-y-auto">
+          {children}
+        </div>
       </div>
     </div>
   );
