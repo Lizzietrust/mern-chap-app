@@ -40,7 +40,7 @@ export const channelApi = {
     userId: string,
     isAdmin: boolean
   ): Promise<ChannelChat> =>
-    apiClient.put<ChannelChat>(`/api/channels/${channelId}/admins`, {
+    apiClient.put<ChannelChat>(`/api/channels/${channelId}/admin`, {
       userId,
       isAdmin,
     }),
