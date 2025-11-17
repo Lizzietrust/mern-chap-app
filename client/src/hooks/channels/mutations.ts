@@ -24,6 +24,7 @@ export const useUpdateChannel = () => {
     }: Omit<ChannelMutationProps, "userId" | "isAdmin">) =>
       ChannelService.updateChannel(channelId, data!),
     onSuccess: (data) => {
+      queryClient.setQueryData(CHANNEL_KEYS.detail(data._id), data);
       queryClient.invalidateQueries({ queryKey: CHANNEL_KEYS.lists() });
       queryClient.invalidateQueries({
         queryKey: CHANNEL_KEYS.detail(data._id),
@@ -38,7 +39,8 @@ export const useAddChannelMember = () => {
   return useMutation({
     mutationFn: ({ channelId, userId }: ChannelMutationProps) =>
       ChannelService.addChannelMember(channelId, userId!),
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(CHANNEL_KEYS.detail(variables.channelId), data);
       queryClient.invalidateQueries({ queryKey: CHANNEL_KEYS.lists() });
       queryClient.invalidateQueries({
         queryKey: CHANNEL_KEYS.members(variables.channelId),
@@ -53,7 +55,8 @@ export const useRemoveChannelMember = () => {
   return useMutation({
     mutationFn: ({ channelId, userId }: ChannelMutationProps) =>
       ChannelService.removeChannelMember(channelId, userId!),
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(CHANNEL_KEYS.detail(variables.channelId), data);
       queryClient.invalidateQueries({ queryKey: CHANNEL_KEYS.lists() });
       queryClient.invalidateQueries({
         queryKey: CHANNEL_KEYS.members(variables.channelId),
@@ -68,7 +71,9 @@ export const useUpdateChannelAdmin = () => {
   return useMutation({
     mutationFn: ({ channelId, userId, isAdmin }: ChannelMutationProps) =>
       ChannelService.updateChannelAdmin(channelId, userId!, isAdmin!),
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(CHANNEL_KEYS.detail(variables.channelId), data);
+
       queryClient.invalidateQueries({ queryKey: CHANNEL_KEYS.lists() });
       queryClient.invalidateQueries({
         queryKey: CHANNEL_KEYS.members(variables.channelId),
