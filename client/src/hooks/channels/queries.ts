@@ -1,8 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "../../contexts/appcontext/index";
 import { ChannelService } from "./channelService";
 import { CHANNEL_KEYS, DEFAULT_QUERY_OPTIONS } from "../../constants/channels";
 import type { ChannelQueryOptions } from "../../types/channel";
+import { channelApi } from "../../lib/api";
 
 export const useChannels = (options?: Partial<ChannelQueryOptions>) => {
   const { state } = useApp();
@@ -28,3 +29,21 @@ export const useChannelMembers = (
     ...DEFAULT_QUERY_OPTIONS,
   });
 };
+
+export function useAddChannelMember() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      channelId,
+      userId,
+    }: {
+      channelId: string;
+      userId: string;
+    }) => channelApi.addChannelMember(channelId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+      queryClient.invalidateQueries({ queryKey: ["chats"] });
+    },
+  });
+}
