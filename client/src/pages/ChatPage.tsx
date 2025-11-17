@@ -93,6 +93,21 @@ export function ChatPage() {
   const usersPerPage = 10;
   const totalPages = Math.ceil((usersData?.totalUsers || 0) / usersPerPage);
 
+  const handleChannelUpdate = React.useCallback(
+    (updatedChannel?: ChannelChat) => {
+      if (
+        updatedChannel &&
+        selectedChat &&
+        selectedChat._id === updatedChannel._id
+      ) {
+        setSelectedChat(updatedChannel);
+      }
+      refetchChannels();
+      refetchChats();
+    },
+    [selectedChat, setSelectedChat, refetchChannels, refetchChats]
+  );
+
   React.useEffect(() => {
     const chatId = selectedChat?._id;
 
@@ -286,10 +301,7 @@ export function ChatPage() {
             isDark={isDark}
             channel={selectedChat}
             onClose={() => setShowChannelSettings(false)}
-            onUpdate={() => {
-              refetchChannels();
-              refetchChats();
-            }}
+            onUpdate={handleChannelUpdate}
           />
         )}
       </div>
