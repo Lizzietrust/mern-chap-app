@@ -16,14 +16,17 @@ const channelRoutes = express.Router();
 channelRoutes.post("/create", verifyToken, createChannel);
 channelRoutes.put("/:channelId", verifyToken, updateChannel);
 channelRoutes.get("/user-channels", verifyToken, getUserChannels);
+
 channelRoutes.get("/:channelId/members", verifyToken, getChannelMembers);
-channelRoutes.get("/:channelId/messages", verifyToken, getChannelMessages);
 channelRoutes.post("/:channelId/members", verifyToken, addChannelMember);
 channelRoutes.delete(
   "/:channelId/members/:userId",
   verifyToken,
   removeChannelMember
 );
-channelRoutes.put("/:channelId/admins", verifyToken, updateChannelAdmin);
+
+channelRoutes.put("/:channelId/admin", verifyToken, updateChannelAdmin);
+
+channelRoutes.get("/:channelId/messages", verifyToken, getChannelMessages);
 
 export default channelRoutes;
