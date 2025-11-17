@@ -1,6 +1,6 @@
 export const modalStyles = {
   overlay:
-    "fixed inset-0 bg-white/50 bg-opacity-50 flex items-center justify-center p-4 z-50",
+    "fixed inset-0 bg-white/30 bg-opacity-50 flex items-center justify-center p-4 z-50",
 
   container: (isDark: boolean) =>
     `${
