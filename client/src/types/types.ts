@@ -100,7 +100,7 @@ export interface ChannelChat extends BaseChat {
   description?: string;
   isPrivate: boolean;
   createdBy: string;
-  admins: string[];
+  admins: (string | User)[];
   members: string[] | User[];
   name?: string;
   lastMessage?: string;
