@@ -47,20 +47,6 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showClearChatModal, setShowClearChatModal] = useState(false);
 
-  console.log("🔍 ChatContainer Debug:", {
-    selectedChat: selectedChat
-      ? {
-          id: selectedChat._id,
-          type: selectedChat.type,
-          name:
-            selectedChat.type === "channel" ? selectedChat.name : "Direct Chat",
-        }
-      : null,
-    messagesCount: messages?.length || 0,
-    isChannel: selectedChat && isChannelChat(selectedChat),
-    user: state.user?._id,
-  });
-
   const safeOnlineUsers = useMemo(() => {
     return Array.isArray(onlineUsers) ? onlineUsers : [];
   }, [onlineUsers]);
@@ -361,10 +347,6 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
         </div>
       );
     }
-
-    console.log("📝 Rendering messages:", messages.length);
-
-    console.log({ messages });
 
     return messages.map((message, index) => {
       const isCurrentUser = getUserId(message.sender) === state?.user?._id;
