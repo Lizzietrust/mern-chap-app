@@ -24,6 +24,7 @@ interface ServerMessage {
     user: string | User;
     readAt: Date;
   }>;
+  deliveredTo?: string[] | User[];
 }
 
 interface UserOnlineData {
@@ -44,21 +45,6 @@ interface MessageStatusUpdateData {
 }
 
 type SocketEventHandler = (...args: unknown[]) => void;
-
-// interface SocketEventHandlers {
-//   [SOCKET_EVENTS.CONNECT]: () => void;
-//   [SOCKET_EVENTS.CONNECT_ERROR]: (error: Error) => void;
-//   [SOCKET_EVENTS.ONLINE_USERS]: (users: User[]) => void;
-//   [SOCKET_EVENTS.USER_ONLINE]: (data: UserOnlineData) => void;
-//   [SOCKET_EVENTS.USER_OFFLINE]: (data: UserOfflineData) => void;
-//   [SOCKET_EVENTS.NEW_MESSAGE]: (message: ServerMessage) => void;
-//   [SOCKET_EVENTS.CHAT_UPDATED]: () => void;
-//   [SOCKET_EVENTS.MESSAGE_STATUS_UPDATE]: (
-//     data: MessageStatusUpdateData
-//   ) => void;
-//   [SOCKET_EVENTS.DISCONNECT]: (reason: string) => void;
-//   [SOCKET_EVENTS.ERROR]: (error: Error) => void;
-// }
 
 export function useSocketLogic(): SocketContextType {
   const [isConnected, setIsConnected] = useState(false);
@@ -95,12 +81,24 @@ export function useSocketLogic(): SocketContextType {
     [dispatch, state.onlineUsers]
   );
 
+  const normalizeSender = useCallback(
+    (sender: string | { _id: string }): string | User => {
+      if (typeof sender === "string") {
+        return sender;
+      }
+
+      return sender._id;
+    },
+    []
+  );
+
   const transformServerMessage = useCallback(
     (serverMessage: ServerMessage): ClientMessage => {
-      const baseMessage = {
+      const normalizedSender = normalizeSender(serverMessage.sender);
+
+      const baseMessage: Omit<ClientMessage, "text"> & { text?: string } = {
         _id: serverMessage._id,
-        id: serverMessage._id,
-        sender: serverMessage.sender,
+        sender: normalizedSender,
         messageType: serverMessage.messageType as
           | "text"
           | "image"
@@ -109,18 +107,43 @@ export function useSocketLogic(): SocketContextType {
           | "video"
           | "system",
         content: serverMessage.content || "",
-        chatId: serverMessage.chatId,
         chat: serverMessage.chatId,
         timestamp: new Date(serverMessage.createdAt).toISOString(),
         createdAt: new Date(serverMessage.createdAt).toISOString(),
-        fileUrl: serverMessage.fileUrl,
-        fileName: serverMessage.fileName,
-        fileSize: serverMessage.fileSize,
         status:
           (serverMessage.status as "sent" | "delivered" | "read") || "sent",
         readBy: serverMessage.readBy || [],
-        readReceipts: serverMessage.readReceipts || [],
+        // readReceipts: serverMessage.readReceipts || [],
+        deliveredTo: serverMessage.deliveredTo || [],
       };
+
+      if (serverMessage.messageType !== "text") {
+        const fileProperties: Partial<ClientMessage> = {};
+
+        if (serverMessage.fileUrl !== undefined) {
+          (fileProperties as { fileUrl?: string }).fileUrl =
+            serverMessage.fileUrl;
+        }
+        if (serverMessage.fileName !== undefined) {
+          (fileProperties as { fileName?: string }).fileName =
+            serverMessage.fileName;
+        }
+        if (serverMessage.fileSize !== undefined) {
+          (fileProperties as { fileSize?: number }).fileSize =
+            serverMessage.fileSize;
+        }
+
+        const messageWithFiles = { ...baseMessage, ...fileProperties };
+
+        if (serverMessage.messageType === "text") {
+          return {
+            ...messageWithFiles,
+            text: serverMessage.content || "",
+          } as ClientMessage;
+        } else {
+          return messageWithFiles as ClientMessage;
+        }
+      }
 
       if (serverMessage.messageType === "text") {
         return {
@@ -131,7 +154,7 @@ export function useSocketLogic(): SocketContextType {
         return baseMessage as ClientMessage;
       }
     },
-    []
+    [normalizeSender]
   );
 
   const filterAndAddMessage = useCallback(
@@ -285,7 +308,12 @@ export function useSocketLogic(): SocketContextType {
       queryClient.invalidateQueries({ queryKey: ["channels"] });
 
       const currentUserId = state.user?._id;
-      if (currentUserId && serverMessage.sender !== currentUserId) {
+      const senderId =
+        typeof serverMessage.sender === "object"
+          ? serverMessage.sender._id
+          : serverMessage.sender;
+
+      if (currentUserId && senderId !== currentUserId) {
         markMessageAsDelivered(serverMessage._id, currentUserId);
       }
     },
