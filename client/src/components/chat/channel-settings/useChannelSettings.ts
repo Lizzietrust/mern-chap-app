@@ -10,6 +10,33 @@ import {
   useAddChannelMember,
 } from "../../../hooks/channels";
 
+interface ApiError extends Error {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+}
+
+const isErrorWithMessage = (error: unknown): error is { message: string } => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message: unknown }).message === "string"
+  );
+};
+
+const isApiError = (error: unknown): error is ApiError => {
+  return (
+    isErrorWithMessage(error) &&
+    "response" in error &&
+    typeof error.response === "object" &&
+    error.response !== null &&
+    "data" in error.response
+  );
+};
+
 export const useChannelSettings = (
   channel: ChannelChat,
   onUpdate: () => void
@@ -26,7 +53,7 @@ export const useChannelSettings = (
   const updateChannelMutation = useUpdateChannel();
   const removeMemberMutation = useRemoveChannelMember();
   const updateAdminMutation = useUpdateChannelAdmin();
-  const { success, error } = useNotifications();
+  const { success, error: showError } = useNotifications();
   const { state } = useApp();
 
   const isCurrentUserAdmin = channel.admins.some((admin: string | User) => {
@@ -39,9 +66,29 @@ export const useChannelSettings = (
 
   const addMemberMutation = useAddChannelMember();
 
-  const handleUpdateChannel = async () => {
+  const extractErrorMessage = (error: unknown): string => {
+    if (isApiError(error)) {
+      return (
+        error.response?.data?.message ||
+        error.message ||
+        "An unexpected error occurred"
+      );
+    }
+
+    if (isErrorWithMessage(error)) {
+      return error.message;
+    }
+
+    if (typeof error === "string") {
+      return error;
+    }
+
+    return "An unexpected error occurred";
+  };
+
+  const handleUpdateChannel = async (): Promise<ChannelChat | void> => {
     if (!name?.trim()) {
-      error("Channel name is required");
+      showError("Channel name is required");
       return;
     }
 
@@ -53,15 +100,17 @@ export const useChannelSettings = (
       success("Channel updated successfully!");
       onUpdate();
       return updatedChannel;
-    } catch {
-      error("Failed to update channel");
-      throw new Error("Failed to update channel");
+    } catch (err: unknown) {
+      const errorMessage = extractErrorMessage(err);
+      showError(errorMessage);
     }
   };
 
-  const handleRemoveMember = async (userId: string) => {
+  const handleRemoveMember = async (
+    userId: string
+  ): Promise<ChannelChat | void> => {
     if (userId === state.user?._id) {
-      error("You cannot remove yourself from the channel");
+      showError("You cannot remove yourself from the channel");
       return;
     }
 
@@ -76,14 +125,18 @@ export const useChannelSettings = (
       success("Member removed successfully!");
       onUpdate();
       return updatedChannel;
-    } catch {
-      error("Failed to remove member");
+    } catch (err: unknown) {
+      const errorMessage = extractErrorMessage(err);
+      showError(errorMessage);
     } finally {
       setIsUpdatingMembers(false);
     }
   };
 
-  const handleToggleAdmin = async (userId: string, isAdmin: boolean) => {
+  const handleToggleAdmin = async (
+    userId: string,
+    isAdmin: boolean
+  ): Promise<ChannelChat | void> => {
     if (!isCurrentUserAdmin) return;
 
     try {
@@ -96,15 +149,21 @@ export const useChannelSettings = (
       success(`User ${isAdmin ? "added as" : "removed from"} admin`);
       onUpdate();
       return updatedChannel;
-    } catch {
-      error("Failed to update admin status");
+    } catch (err: unknown) {
+      const errorMessage = extractErrorMessage(err);
+      showError(errorMessage);
     } finally {
       setIsUpdatingMembers(false);
     }
   };
 
-  const handleAddMember = async (userId: string) => {
-    if (!isCurrentUserAdmin) return;
+  const handleAddMember = async (
+    userId: string
+  ): Promise<ChannelChat | void> => {
+    if (!isCurrentUserAdmin) {
+      showError("You don't have permission to add members");
+      return;
+    }
 
     try {
       setIsUpdatingMembers(true);
@@ -115,9 +174,9 @@ export const useChannelSettings = (
       success("Member added successfully!");
       onUpdate();
       return updatedChannel;
-    } catch {
-      error("Failed to add member");
-      throw error;
+    } catch (err: unknown) {
+      const errorMessage = extractErrorMessage(err);
+      showError(errorMessage);
     } finally {
       setIsUpdatingMembers(false);
     }
