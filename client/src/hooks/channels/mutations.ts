@@ -30,6 +30,8 @@ export const useUpdateChannel = () => {
         queryKey: CHANNEL_KEYS.detail(data._id),
       });
     },
+
+    throwOnError: false,
   });
 };
 
@@ -46,6 +48,8 @@ export const useAddChannelMember = () => {
         queryKey: CHANNEL_KEYS.members(variables.channelId),
       });
     },
+
+    throwOnError: false,
   });
 };
 
@@ -62,6 +66,8 @@ export const useRemoveChannelMember = () => {
         queryKey: CHANNEL_KEYS.members(variables.channelId),
       });
     },
+
+    throwOnError: false,
   });
 };
 
@@ -79,5 +85,6 @@ export const useUpdateChannelAdmin = () => {
         queryKey: CHANNEL_KEYS.members(variables.channelId),
       });
     },
+    throwOnError: false,
   });
 };
