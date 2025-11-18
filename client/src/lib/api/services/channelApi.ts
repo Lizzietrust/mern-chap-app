@@ -6,15 +6,75 @@ import type {
   UpdateChannelData,
 } from "../../../types/types";
 
-export const channelApi = {
-  createChannel: (channelData: CreateChannelData): Promise<ChannelChat> =>
-    apiClient.post<ChannelChat>("/api/channels/create", channelData),
+interface ApiClientError {
+  response?: {
+    data?: {
+      message?: string;
+    };
+    status?: number;
+  };
+  message?: string;
+}
 
-  updateChannel: (
+const isApiClientError = (error: unknown): error is ApiClientError => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    ("response" in error || "message" in error)
+  );
+};
+
+const extractErrorMessage = (error: unknown): string => {
+  if (isApiClientError(error)) {
+    return (
+      error.response?.data?.message ||
+      error.message ||
+      "An unexpected error occurred"
+    );
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return "An unexpected error occurred";
+};
+
+export const channelApi = {
+  createChannel: async (
+    channelData: CreateChannelData
+  ): Promise<ChannelChat> => {
+    try {
+      const response = await apiClient.post<ChannelChat>(
+        "/api/channels/create",
+        channelData
+      );
+      return response;
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error);
+      throw new Error(errorMessage);
+    }
+  },
+
+  updateChannel: async (
     channelId: string,
     data: UpdateChannelData
-  ): Promise<ChannelChat> =>
-    apiClient.put<ChannelChat>(`/api/channels/${channelId}`, data),
+  ): Promise<ChannelChat> => {
+    try {
+      const response = await apiClient.put<ChannelChat>(
+        `/api/channels/${channelId}`,
+        data
+      );
+      return response;
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error);
+      throw new Error(errorMessage);
+    }
+  },
 
   getUserChannels: (): Promise<ChannelChat[]> =>
     apiClient.get<ChannelChat[]>("/api/channels/user-channels"),
@@ -22,26 +82,56 @@ export const channelApi = {
   getChannelMembers: (channelId: string): Promise<ApiUser[]> =>
     apiClient.get<ApiUser[]>(`/api/channels/${channelId}/members`),
 
-  addChannelMember: (channelId: string, userId: string): Promise<ChannelChat> =>
-    apiClient.post<ChannelChat>(`/api/channels/${channelId}/members`, {
-      userId,
-    }),
-
-  removeChannelMember: (
+  addChannelMember: async (
     channelId: string,
     userId: string
-  ): Promise<ChannelChat> =>
-    apiClient.delete<ChannelChat>(
-      `/api/channels/${channelId}/members/${userId}`
-    ),
+  ): Promise<ChannelChat> => {
+    try {
+      const response = await apiClient.post<ChannelChat>(
+        `/api/channels/${channelId}/members`,
+        {
+          userId,
+        }
+      );
+      return response;
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error);
+      throw new Error(errorMessage);
+    }
+  },
 
-  updateChannelAdmin: (
+  removeChannelMember: async (
+    channelId: string,
+    userId: string
+  ): Promise<ChannelChat> => {
+    try {
+      const response = await apiClient.delete<ChannelChat>(
+        `/api/channels/${channelId}/members/${userId}`
+      );
+      return response;
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error);
+      throw new Error(errorMessage);
+    }
+  },
+
+  updateChannelAdmin: async (
     channelId: string,
     userId: string,
     isAdmin: boolean
-  ): Promise<ChannelChat> =>
-    apiClient.put<ChannelChat>(`/api/channels/${channelId}/admin`, {
-      userId,
-      isAdmin,
-    }),
+  ): Promise<ChannelChat> => {
+    try {
+      const response = await apiClient.put<ChannelChat>(
+        `/api/channels/${channelId}/admin`,
+        {
+          userId,
+          isAdmin,
+        }
+      );
+      return response;
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error);
+      throw new Error(errorMessage);
+    }
+  },
 };
