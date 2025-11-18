@@ -69,15 +69,12 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
             ? ({ _id: participant } as Partial<User>)
             : participant;
 
-        console.log("👤 Other participant:", userParticipant);
         return userParticipant as User | null;
       } catch (error) {
         console.error("Error finding other participant:", error);
         return null;
       }
     }, [isChannel, selectedChat, currentUserId]);
-
-    console.log({ selectedChat });
 
     const getUserStatus = useCallback(
       (
@@ -94,8 +91,6 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
             return { isOnline: false };
           }
 
-          console.log(`🔍 Checking status for user: ${userId}`);
-          console.log(`📡 Connected: ${isConnectedRef.current}`);
           console.log(
             `👥 Total online users: ${onlineUsersRef.current.length}`
           );
@@ -104,10 +99,6 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
 
           const onlineUser = currentOnlineUsers.find((u) => u._id === userId);
           if (onlineUser) {
-            console.log(
-              `✅ User ${userId} found in onlineUsers:`,
-              onlineUser.isOnline
-            );
             return {
               isOnline: onlineUser.isOnline || false,
               lastSeen: onlineUser.lastSeen,
@@ -189,11 +180,6 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
       try {
         const status = getUserStatus(otherParticipant);
 
-        console.log(
-          `📱 Direct chat status for ${otherParticipant._id}:`,
-          status
-        );
-
         if (status.isOnline) {
           return "Online";
         } else if (status.lastSeen) {
@@ -227,9 +213,6 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
           if (otherParticipant) {
             const status = getUserStatus(otherParticipant);
             setIsOnline(status.isOnline);
-            console.log(
-              `🔄 Updated online status for ${otherParticipant._id}: ${status.isOnline}`
-            );
           } else {
             setIsOnline(false);
           }
@@ -266,18 +249,11 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
 
     useEffect(() => {
       if (isConnected && state.socket) {
-        console.log("📡 Requesting online users...");
         state.socket.emit("getOnlineUsers");
       }
     }, [isConnected, state.socket]);
 
     useEffect(() => {
-      console.log("🔄 Online users updated, total:", safeOnlineUsers.length);
-      console.log(
-        "📋 Online user IDs:",
-        safeOnlineUsers.map((u) => u._id)
-      );
-
       if (otherParticipant && !isChannel) {
         const status = getUserStatus(otherParticipant);
         console.log(`🔍 Current status for ${otherParticipant._id}:`, {
