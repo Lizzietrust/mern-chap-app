@@ -32,8 +32,6 @@ const MessageComponent: React.FC<ExtendedMessageDisplayProps> = ({
   const messageRef = useRef<HTMLDivElement>(null);
   const hasBeenReadRef = useRef(false);
 
-  console.log({ message });
-
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [showMenu, setShowMenu] = useState(false);
