@@ -70,8 +70,6 @@ export function ChatPage() {
     selectedChat?.type
   );
 
-  console.log({ messages });
-
   const {
     data: channelsData,
     // isLoading: channelsLoading
