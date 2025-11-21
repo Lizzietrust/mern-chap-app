@@ -6,12 +6,14 @@ import { useTheme } from "../contexts/theme";
 import { Layout } from "../components/Layout";
 import { useUpdateProfile } from "../hooks/auth";
 import { LogoutButton } from "../components/LogoutButton";
+import { useUpdateUserProfileCache } from "../hooks/users/useUserProfile";
 
 export function ProfilePage() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, socket } = useApp();
   const { success, error } = useNotifications();
   const { isDark, theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const { updateUserProfileCache } = useUpdateUserProfileCache();
 
   const initialData = useMemo(
     () => ({
@@ -43,7 +45,6 @@ export function ProfilePage() {
   }>({});
   const updateProfileMutation = useUpdateProfile();
 
-  // Setup state (available when user has not completed profile setup)
   const initialFirst = useMemo(
     () => state.user?.name?.split(" ")?.[0] || "",
     [state.user]
@@ -105,7 +106,7 @@ export function ProfilePage() {
           const updatedUser = {
             ...state.user!,
             name: fullName,
-            profileSetup: response.user.profileSetup ?? true, // Provide default
+            profileSetup: response.user.profileSetup ?? true,
             avatar: response.user.image || formData.avatar,
             bio: response.user.bio,
             phone: response.user.phone,
@@ -179,6 +180,38 @@ export function ProfilePage() {
             website: response.user.website,
           };
           dispatch({ type: "SET_USER", payload: updatedUser });
+
+          updateUserProfileCache(state.user!._id, {
+            _id: state.user!._id,
+            firstName: response.user.firstName,
+            lastName: response.user.lastName,
+            email: state.user!.email,
+            image: response.user.image,
+            bio: response.user.bio,
+            phone: response.user.phone,
+            location: response.user.location,
+            website: response.user.website,
+            isOnline: state.user!.isOnline,
+            lastSeen: state.user!.lastSeen,
+            name: formData.name,
+          });
+
+          if (socket) {
+            socket.emit("profile_updated", {
+              userId: state.user!._id,
+              updates: {
+                firstName: response.user.firstName,
+                lastName: response.user.lastName,
+                image: response.user.image,
+                bio: response.user.bio,
+                phone: response.user.phone,
+                location: response.user.location,
+                website: response.user.website,
+                name: formData.name,
+              },
+            });
+          }
+
           success("Profile updated successfully!");
           setIsEditing(false);
         },
