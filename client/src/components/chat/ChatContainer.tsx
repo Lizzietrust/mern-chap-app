@@ -16,6 +16,8 @@ import { useSocket } from "../../hooks/useSocket";
 import { useClearChat } from "../../hooks/chats/useClearchat";
 import ChatSettingsModal from "../modals/ChatSettingsModal";
 import ClearChatModal from "../modals/ClearChatModal";
+import { ParticipantsModal } from "../modals/ParticipantsModal";
+import { useNavigate } from "react-router-dom";
 
 interface MessageStatusUpdateData {
   messageId: string;
@@ -46,6 +48,14 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showClearChatModal, setShowClearChatModal] = useState(false);
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false);
+  const navigate = useNavigate();
+
+  console.log({ selectedChat });
+
+  const handleViewProfile = (user: User) => {
+    navigate(`/profile/${user._id}`);
+  };
 
   const safeOnlineUsers = useMemo(() => {
     return Array.isArray(onlineUsers) ? onlineUsers : [];
@@ -271,35 +281,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   };
 
   const handleParticipantsClick = () => {
-    if (!displayChat) return;
-
-    if (isChannelChat(displayChat)) {
-      alert(
-        `Channel Members: ${
-          displayChat.members?.length || 0
-        } members\n\n• View all members\n• See online status\n• Manage roles\n• Add/remove members`
-      );
-    } else if (displayChat.type === "direct" && displayChat.participants) {
-      const otherUser = displayChat.participants.find(
-        (p) => getUserId(p) !== state.user?._id
-      );
-
-      if (otherUser) {
-        const otherUserName =
-          typeof otherUser === "string"
-            ? "Unknown User"
-            : `${otherUser.firstName} ${otherUser.lastName}`;
-
-        const isOnline =
-          typeof otherUser === "object" ? otherUser.isOnline : false;
-
-        alert(
-          `Chat with: ${otherUserName}\n\nStatus: ${
-            isOnline ? "Online" : "Offline"
-          }\n\n• View profile\n• Shared media\n• Common groups`
-        );
-      }
-    }
+    setShowParticipantsModal(true);
   };
 
   const handleSearchClick = () => {
@@ -427,6 +409,17 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
           onFileSelect={handleFileSelect}
         />
       </div>
+
+      {showParticipantsModal && (
+        <ParticipantsModal
+          isOpen={showParticipantsModal}
+          onClose={() => setShowParticipantsModal(false)}
+          chat={selectedChat}
+          currentUser={state.user}
+          isDark={isDark}
+          onViewProfile={handleViewProfile}
+        />
+      )}
 
       <ChatSettingsModal
         isOpen={showSettingsModal}
