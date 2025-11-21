@@ -17,6 +17,7 @@ export interface User {
   lastSeen?: Date;
   createdAt: string;
   updatedAt: string;
+  joinedDate?: string;
 }
 
 export interface UsersResponse {
@@ -581,3 +582,11 @@ export const hasUserReadMessage = (
     typeof user === "string" ? user === userId : user._id === userId
   );
 };
+
+export interface AppNotification {
+  id: string;
+  type: "success" | "error" | "warning" | "info";
+  message: string;
+  duration?: number;
+  title?: string;
+}
