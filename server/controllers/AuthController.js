@@ -4,7 +4,6 @@ import jwt from "jsonwebtoken";
 const maxAge = 1 * 24 * 60 * 60 * 1000;
 
 const createToken = ({ email, userId }) => {
-  // Check if JWT_KEY is set
   if (!process.env.JWT_KEY) {
     throw new Error("JWT_KEY environment variable is not set");
   }
@@ -24,7 +23,6 @@ export const register = async (req, res, next) => {
         .json({ message: "Email and password are required" });
     }
 
-    // Check if user already exists
     const existingUser = await Users.findOne({ email });
     if (existingUser) {
       return res
@@ -61,14 +59,12 @@ export const register = async (req, res, next) => {
   } catch (error) {
     console.log({ error });
 
-    // Handle specific MongoDB errors
     if (error.code === 11000) {
       return res.status(409).json({
         message: "User with this email already exists",
       });
     }
 
-    // Handle JWT errors
     if (error.message === "JWT_KEY environment variable is not set") {
       return res.status(500).json({
         message: "Server configuration error. Please contact administrator.",
@@ -90,7 +86,6 @@ export const login = async (req, res, next) => {
         .json({ message: "Email and password are required" });
     }
 
-    // Check if user already exists
     const existingUser = await Users.findOne({ email });
     if (!existingUser) {
       return res.status(404).json({ message: "User not found" });
@@ -129,7 +124,6 @@ export const login = async (req, res, next) => {
   } catch (error) {
     console.log({ error });
 
-    // Handle JWT errors
     if (error.message === "JWT_KEY environment variable is not set") {
       return res.status(500).json({
         message: "Server configuration error. Please contact administrator.",
@@ -143,9 +137,8 @@ export const login = async (req, res, next) => {
 
 export const logout = async (req, res, next) => {
   try {
-    const userId = req.userId; // Get the user ID from the auth middleware
+    const userId = req.userId;
 
-    // Clear the JWT cookie
     const isProd = process.env.NODE_ENV === "production";
     res.clearCookie("jwt", {
       httpOnly: true,
@@ -153,14 +146,10 @@ export const logout = async (req, res, next) => {
       sameSite: isProd ? "None" : "Lax",
     });
 
-    // Update user as offline in database
     await Users.findByIdAndUpdate(userId, {
       isOnline: false,
       lastSeen: new Date(),
     });
-
-    // Note: We can't directly access socket.io from the controller
-    // The actual socket disconnection will happen when the client refreshes/closes
 
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
@@ -178,7 +167,6 @@ export const getUserInfo = async (req, res, next) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Match the response shape used in register/login
     res.status(200).json({
       user: {
         _id: userData._id,
@@ -198,7 +186,6 @@ export const getUserInfo = async (req, res, next) => {
   } catch (error) {
     console.log({ error });
 
-    // Handle JWT errors
     if (error.message === "JWT_KEY environment variable is not set") {
       return res.status(500).json({
         message: "Server configuration error. Please contact administrator.",
@@ -218,7 +205,6 @@ export const updateProfile = async (req, res, next) => {
 
     const updateData = {};
 
-    // Conditionally add fields to the update object
     if (firstName !== undefined) updateData.firstName = firstName;
     if (lastName !== undefined) updateData.lastName = lastName;
     if (image !== undefined) updateData.image = image;
@@ -227,31 +213,47 @@ export const updateProfile = async (req, res, next) => {
     if (location !== undefined) updateData.location = location;
     if (website !== undefined) updateData.website = website;
 
-    // Check if there are any fields to update
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({
         message: "At least one field is required for update",
       });
     }
 
-    // Mark profile as setup if firstName and lastName are being provided
     if (updateData.firstName && updateData.lastName) {
       updateData.profileSetup = true;
     }
 
-    // Use findByIdAndUpdate with $set to avoid triggering pre-save hooks on password
     const updatedUser = await Users.findByIdAndUpdate(
       userId,
       { $set: updateData },
       { new: true, runValidators: true }
-    );
+    ).select("-password -refreshToken -__v");
 
     if (!updatedUser) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Return updated user data
+    const io = req.app.get("io");
+
+    io.emit("profile_updated", {
+      userId: updatedUser._id.toString(),
+      updates: {
+        _id: updatedUser._id.toString(),
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        email: updatedUser.email,
+        image: updatedUser.image,
+        bio: updatedUser.bio,
+        phone: updatedUser.phone,
+        location: updatedUser.location,
+        website: updatedUser.website,
+        profileSetup: updatedUser.profileSetup,
+        name: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
+      },
+    });
+
     res.status(200).json({
+      message: "Profile updated successfully",
       user: {
         _id: updatedUser._id,
         email: updatedUser.email,
