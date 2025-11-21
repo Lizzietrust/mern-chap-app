@@ -1,9 +1,13 @@
-import React from "react";
+import React, { type SetStateAction } from "react";
 import { useTheme } from "../contexts/theme";
 import { Layout } from "../components/Layout";
 import { useSocket } from "../hooks/useSocket";
 import { useMessages } from "../hooks/chats";
-import { isChannelChat, type ChannelChat } from "../types/types";
+import {
+  isChannelChat,
+  type ChannelChat,
+  type ChatOrNull,
+} from "../types/types";
 
 import { useChatLogic } from "../hooks/chats/useChatLogic";
 import { useChatData } from "../hooks/chats/useChatData";
@@ -58,6 +62,8 @@ export function ChatPage() {
   } = useMessageHandling(selectedChat, user);
   useSocketHandlers();
 
+  console.log({ selectedChat });
+
   const { joinChat, leaveChat, isConnected } = useSocket();
 
   const [showCreateChannelModal, setShowCreateChannelModal] =
@@ -75,16 +81,39 @@ export function ChatPage() {
     // isLoading: channelsLoading
   } = useChannels();
 
-  const allChannels = React.useMemo(() => {
-    const channelsFromChats = separatedChannelChats || [];
-    const channelsFromHook = channelsData || [];
+  console.log({ channelsData });
 
-    if (channelsFromChats.length > 0) {
-      return channelsFromChats;
+  const enhancedChannels = React.useMemo(() => {
+    if (!channelsData || channelsData.length === 0) {
+      return separatedChannelChats || [];
     }
 
-    return channelsFromHook;
-  }, [separatedChannelChats, channelsData]);
+    const channelsMap = new Map();
+    channelsData.forEach((channel: ChannelChat) => {
+      channelsMap.set(channel._id, channel);
+    });
+
+    if (separatedChannelChats && separatedChannelChats.length > 0) {
+      return separatedChannelChats.map((chat: ChannelChat) => {
+        const completeChannel = channelsMap.get(chat._id);
+        return completeChannel || chat;
+      });
+    }
+
+    return channelsData;
+  }, [channelsData, separatedChannelChats]);
+
+  const enhancedSelectedChat = React.useMemo(() => {
+    if (!selectedChat || !isChannelChat(selectedChat)) {
+      return selectedChat;
+    }
+
+    const completeChannel = enhancedChannels.find(
+      (channel: ChannelChat) => channel._id === selectedChat._id
+    );
+
+    return completeChannel || selectedChat;
+  }, [selectedChat, enhancedChannels]);
 
   const currentChatRoomRef = React.useRef<string | null>(null);
 
@@ -147,8 +176,8 @@ export function ChatPage() {
     chatsLoading || (chatsFetching && uniqueDirectChats.length === 0);
 
   const getSafeChatTitle = () => {
-    if (!selectedChat) return "Select a chat";
-    return getChatTitle(selectedChat, user);
+    if (!enhancedSelectedChat) return "Select a chat";
+    return getChatTitle(enhancedSelectedChat, user);
   };
 
   const handleNextPage = () => {
@@ -194,10 +223,36 @@ export function ChatPage() {
 
   const handleShowChannelSettings = React.useCallback(
     (channel: ChannelChat) => {
-      setSelectedChat(channel);
+      const completeChannel = enhancedChannels.find(
+        (ch: ChannelChat) => ch._id === channel._id
+      );
+      setSelectedChat(completeChannel || channel);
       setShowChannelSettings(true);
     },
-    [setSelectedChat]
+    [enhancedChannels, setSelectedChat]
+  );
+
+  const handleChatSelect = React.useCallback(
+    (chat: SetStateAction<ChatOrNull>) => {
+      if (typeof chat === "function") {
+        setSelectedChat(chat);
+      } else {
+        if (!chat) {
+          setSelectedChat(null);
+          return;
+        }
+
+        if (isChannelChat(chat)) {
+          const completeChannel = enhancedChannels.find(
+            (ch: ChannelChat) => ch._id === chat._id
+          );
+          setSelectedChat(completeChannel || chat);
+        } else {
+          setSelectedChat(chat);
+        }
+      }
+    },
+    [enhancedChannels, setSelectedChat]
   );
 
   const fixedMessagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -223,12 +278,12 @@ export function ChatPage() {
           <Sidebar
             key={user._id}
             isDark={isDark}
-            selectedChat={selectedChat}
+            selectedChat={enhancedSelectedChat}
             users={usersData?.users}
             handleSearch={handleSearch}
             directChats={uniqueDirectChats}
-            channels={allChannels}
-            setSelectedChat={setSelectedChat}
+            channels={enhancedChannels}
+            setSelectedChat={handleChatSelect}
             currentPage={currentPage}
             totalUsers={usersData?.totalUsers || 0}
             onPageChange={handlePageChange}
@@ -238,10 +293,14 @@ export function ChatPage() {
             onCreateChannel={() => setShowCreateChannelModal(true)}
             onShowChannelSettings={handleShowChannelSettings}
             getDisplayUnreadCount={(chat) =>
-              getDisplayUnreadCount(chat, selectedChat?._id, user._id)
+              getDisplayUnreadCount(chat, enhancedSelectedChat?._id, user._id)
             }
             getChannelDisplayUnreadCount={(channel) =>
-              getDisplayUnreadCount(channel, selectedChat?._id, user._id)
+              getDisplayUnreadCount(
+                channel,
+                enhancedSelectedChat?._id,
+                user._id
+              )
             }
             onNextPage={handleNextPage}
             onPrevPage={handlePrevPage}
@@ -253,9 +312,9 @@ export function ChatPage() {
           <LoadingMessages isDark={isDark} />
         ) : (
           <ChatContainer
-            selectedChat={selectedChat}
+            selectedChat={enhancedSelectedChat}
             isDark={isDark}
-            setSelectedChat={setSelectedChat}
+            setSelectedChat={handleChatSelect}
             getChatTitle={getSafeChatTitle}
             messages={messages || []}
             formatTime={formatTime}
@@ -271,7 +330,7 @@ export function ChatPage() {
             }}
             isSending={isSending}
             onShowChannelSettings={() => {
-              if (selectedChat && isChannelChat(selectedChat)) {
+              if (enhancedSelectedChat && isChannelChat(enhancedSelectedChat)) {
                 setShowChannelSettings(true);
               }
             }}
@@ -294,14 +353,16 @@ export function ChatPage() {
           />
         )}
 
-        {showChannelSettings && selectedChat && isChannelChat(selectedChat) && (
-          <ChannelSettingsModal
-            isDark={isDark}
-            channel={selectedChat}
-            onClose={() => setShowChannelSettings(false)}
-            onUpdate={handleChannelUpdate}
-          />
-        )}
+        {showChannelSettings &&
+          enhancedSelectedChat &&
+          isChannelChat(enhancedSelectedChat) && (
+            <ChannelSettingsModal
+              isDark={isDark}
+              channel={enhancedSelectedChat}
+              onClose={() => setShowChannelSettings(false)}
+              onUpdate={handleChannelUpdate}
+            />
+          )}
       </div>
     </Layout>
   );
