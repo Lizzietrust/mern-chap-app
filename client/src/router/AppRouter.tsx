@@ -5,6 +5,7 @@ import { ProfilePage } from "../pages/ProfilePage";
 import { ChatPage } from "../pages/ChatPage";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { useApp } from "../contexts/appcontext/index";
+import { UserProfilePage } from "../pages/UserProfilePage";
 
 export function AppRouter() {
   const { state } = useApp();
@@ -53,6 +54,14 @@ export function AppRouter() {
           element={
             <ProtectedRoute>
               <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile/:userId"
+          element={
+            <ProtectedRoute>
+              <UserProfilePage />
             </ProtectedRoute>
           }
         />
