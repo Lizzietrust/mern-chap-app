@@ -26,6 +26,8 @@ export const useSidebar = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
 
+  console.log({ channels });
+
   const [activeTab, setActiveTab] = useState<"direct" | "channels">(() => {
     const savedTab = localStorage.getItem("sidebar-active-tab");
     return savedTab === "direct" || savedTab === "channels"
