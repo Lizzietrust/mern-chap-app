@@ -61,12 +61,14 @@ export type AppAction =
   | { type: "SET_USER"; payload: User | null }
   | { type: "SET_AUTHENTICATED"; payload: boolean }
   | { type: "SET_THEME"; payload: "light" | "dark" }
+  | { type: "TOGGLE_THEME" }
   | { type: "TOGGLE_SIDEBAR" }
   | { type: "SET_SIDEBAR_OPEN"; payload: boolean }
   | { type: "ADD_NOTIFICATION"; payload: AppNotification }
   | { type: "REMOVE_NOTIFICATION"; payload: string }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "LOGOUT" }
+  | { type: "LOGIN"; payload: User }
   | { type: "SET_SOCKET"; payload: Socket | null }
   | { type: "SET_ONLINE_USERS"; payload: User[] };
 
@@ -80,4 +82,5 @@ export interface AppContextType {
   addNotification: (notification: Omit<AppNotification, "id">) => void;
   removeNotification: (id: string) => void;
   setLoading: (loading: boolean) => void;
+  socket: Socket | null;
 }
