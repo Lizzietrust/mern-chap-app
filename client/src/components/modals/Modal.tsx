@@ -1,6 +1,7 @@
 import React from "react";
 
 interface ModalProps {
+  isOpen: boolean;
   isDark: boolean;
   onClose: () => void;
   title: string;
@@ -9,6 +10,7 @@ interface ModalProps {
 }
 
 export const Modal: React.FC<ModalProps> = ({
+  isOpen,
   isDark,
   onClose,
   title,
@@ -22,13 +24,15 @@ export const Modal: React.FC<ModalProps> = ({
     xl: "max-w-6xl",
   };
 
+  if (!isOpen) return null;
+
   return (
     <div
-      className="fixed inset-0 bg-white/30 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div
-        className={`rounded-lg w-full h-[90vh] ${sizeClasses[size]} ${
+        className={`rounded-lg w-full ${sizeClasses[size]} ${
           isDark ? "bg-gray-800 text-white" : "bg-white text-gray-900"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -45,9 +49,7 @@ export const Modal: React.FC<ModalProps> = ({
             ✕
           </button>
         </div>
-        <div className="p-6 h-[calc(90vh-100px)] overflow-y-auto">
-          {children}
-        </div>
+        <div className="p-6 max-h-[70vh] overflow-y-auto">{children}</div>
       </div>
     </div>
   );
