@@ -51,6 +51,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     selectedChat,
   });
 
+  console.log({ sortedChannels });
+
   const totalUnreadCount = React.useMemo(() => {
     const directUnread =
       sortedDirectChats?.reduce((total, chat) => {
