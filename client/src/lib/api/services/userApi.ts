@@ -16,7 +16,8 @@ export const userApi = {
     );
   },
 
-  getUser: (id: string) => apiClient.get<User>(`/api/users/${id}`),
+  getUserProfile: (userId: string): Promise<User> =>
+    apiClient.get<User>(`/api/user/${userId}/profile`),
 
   createUser: (user: Omit<User, "_id">) =>
     apiClient.post<User>("/api/users", user),
