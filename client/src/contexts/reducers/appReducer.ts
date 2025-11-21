@@ -6,7 +6,7 @@ export const initialState: AppState = {
   theme: "light",
   sidebarOpen: false,
   notifications: [],
-  loading: true,
+  loading: false,
   socket: null,
   onlineUsers: [],
 };
@@ -28,6 +28,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         theme: action.payload,
+      };
+    case "TOGGLE_THEME":
+      return {
+        ...state,
+        theme: state.theme === "light" ? "dark" : "light",
       };
     case "TOGGLE_SIDEBAR":
       return {
@@ -60,6 +65,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...initialState,
         theme: state.theme,
+      };
+    case "LOGIN":
+      return {
+        ...state,
+        user: action.payload,
+        isAuthenticated: true,
       };
     case "SET_SOCKET":
       return {
