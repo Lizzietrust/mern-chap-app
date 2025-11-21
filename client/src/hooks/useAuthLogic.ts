@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../lib/api";
 import { useApp } from "../contexts/appcontext/index";
@@ -122,12 +122,21 @@ export function useMe(enabled: boolean = true) {
 
 export function useUpdateProfile() {
   const { cacheManager, showSuccess, showError } = useAuthBase();
+  const queryClient = useQueryClient();
 
   return useMutation<AuthResponse, Error, UpdateProfileData>({
     mutationFn: (data: UpdateProfileData) => authApi.updateProfile(data),
     onSuccess: (response: AuthResponse) => {
       cacheManager.updateUserData(response.user);
       showSuccess("Profile updated successfully!");
+
+      queryClient.invalidateQueries({ queryKey: AUTH_KEYS.USER() });
+      queryClient.invalidateQueries({ queryKey: ["userProfile"] });
+
+      queryClient.setQueryData(
+        ["userProfile", response.user._id],
+        response.user
+      );
     },
     onError: (error: Error) => {
       showError("Failed to update profile");
