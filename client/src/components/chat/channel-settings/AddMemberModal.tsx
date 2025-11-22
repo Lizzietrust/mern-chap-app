@@ -4,6 +4,7 @@ import { useUsers } from "../../../hooks/useUsers";
 import type { User } from "../../../types/types";
 
 interface AddMemberModalProps {
+  isOpen: boolean;
   isDark: boolean;
   onClose: () => void;
   onAddMember: (userId: string) => void;
@@ -12,6 +13,7 @@ interface AddMemberModalProps {
 }
 
 export const AddMemberModal: React.FC<AddMemberModalProps> = ({
+  isOpen,
   isDark,
   onClose,
   onAddMember,
@@ -59,7 +61,13 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   };
 
   return (
-    <Modal isDark={isDark} onClose={onClose} title="Add Member" size="sm">
+    <Modal
+      isOpen={isOpen}
+      isDark={isDark}
+      onClose={onClose}
+      title="Add Member"
+      size="sm"
+    >
       <div className="space-y-4">
         <div>
           <input
