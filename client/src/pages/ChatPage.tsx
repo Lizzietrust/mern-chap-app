@@ -342,6 +342,7 @@ export function ChatPage() {
         {/* Modals */}
         {showCreateChannelModal && (
           <CreateChannelModal
+            isOpen={showCreateChannelModal}
             isDark={isDark}
             onClose={() => setShowCreateChannelModal(false)}
             onChannelCreated={(channel) => {
@@ -357,6 +358,7 @@ export function ChatPage() {
           enhancedSelectedChat &&
           isChannelChat(enhancedSelectedChat) && (
             <ChannelSettingsModal
+              isOpen={showChannelSettings}
               isDark={isDark}
               channel={enhancedSelectedChat}
               onClose={() => setShowChannelSettings(false)}
