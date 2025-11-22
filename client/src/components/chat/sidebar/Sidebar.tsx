@@ -139,6 +139,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {showNewChatModal && (
         <NewChatModal
+          isOpen={showNewChatModal}
           isDark={isDark}
           onClose={closeNewChatModal}
           users={users || []}
