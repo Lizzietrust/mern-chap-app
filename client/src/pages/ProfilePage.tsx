@@ -9,7 +9,8 @@ import { LogoutButton } from "../components/LogoutButton";
 import { useUpdateUserProfileCache } from "../hooks/users/useUserProfile";
 
 export function ProfilePage() {
-  const { state, dispatch, socket } = useApp();
+  const { state, dispatch } = useApp();
+  const { socket } = state;
   const { success, error } = useNotifications();
   const { isDark, theme, setTheme } = useTheme();
   const navigate = useNavigate();
