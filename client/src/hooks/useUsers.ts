@@ -17,13 +17,13 @@ export function useUsers(page?: number, limit?: number, search?: string) {
   });
 }
 
-export function useUser(id: string) {
-  return useQuery({
-    queryKey: userKeys.detail(id),
-    queryFn: () => userApi.getUser(id),
-    enabled: !!id,
-  });
-}
+// export function useUser(id: string) {
+//   return useQuery({
+//     queryKey: userKeys.detail(id),
+//     queryFn: () => userApi.getUser(id),
+//     enabled: !!id,
+//   });
+// }
 
 export function useCreateUser() {
   const queryClient = useQueryClient();
