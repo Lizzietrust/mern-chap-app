@@ -6,6 +6,7 @@ import { CreateChannelSteps } from "./CreateChannelSteps";
 export { UserItem } from "../../shared/user-item/UserItem";
 
 const CreateChannelModal: React.FC<CreateChannelModalProps> = ({
+  isOpen,
   isDark,
   onClose,
   onChannelCreated,
@@ -22,7 +23,7 @@ const CreateChannelModal: React.FC<CreateChannelModalProps> = ({
   } = useCreateChannelModal(onClose, onChannelCreated);
 
   return (
-    <Modal isDark={isDark} onClose={onClose} title="Create Channel" size="md">
+    <Modal isOpen={isOpen} isDark={isDark} onClose={onClose} title="Create Channel" size="md">
       <CreateChannelSteps
         step={step}
         formData={formData}
