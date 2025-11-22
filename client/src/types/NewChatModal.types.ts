@@ -1,6 +1,7 @@
 import type { User } from "./types";
 
 export interface NewChatModalProps {
+  isOpen: boolean;
   isDark: boolean;
   onClose: () => void;
   users: User[];
