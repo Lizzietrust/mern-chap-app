@@ -12,20 +12,21 @@ interface AppProviderProps {
 export function AppProvider({ children }: AppProviderProps) {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
+  const contextValue = {
+    state,
+    dispatch,
+    socket: state.socket,
+    login: () => {},
+    logout: () => {},
+    toggleTheme: () => {},
+    toggleSidebar: () => {},
+    addNotification: () => {},
+    removeNotification: () => {},
+    setLoading: () => {},
+  };
+
   return (
-    <AppContext.Provider
-      value={{
-        state,
-        dispatch,
-        login: () => {},
-        logout: () => {},
-        toggleTheme: () => {},
-        toggleSidebar: () => {},
-        addNotification: () => {},
-        removeNotification: () => {},
-        setLoading: () => {},
-      }}
-    >
+    <AppContext.Provider value={contextValue}>
       <SelectedChatProvider>
         <AppLogic state={state} dispatch={dispatch}>
           {children}
