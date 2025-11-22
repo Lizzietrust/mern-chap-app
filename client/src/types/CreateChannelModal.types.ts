@@ -1,6 +1,7 @@
 import type { ChannelChat, User } from "./types";
 
 export interface CreateChannelModalProps {
+  isOpen: boolean;
   isDark: boolean;
   onClose: () => void;
   onChannelCreated: (channel: ChannelChat) => void;
