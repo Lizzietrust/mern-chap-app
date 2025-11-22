@@ -7,6 +7,7 @@ import { Pagination } from "../../shared/pagination/Pagination";
 import type { NewChatModalProps } from "../../../types/NewChatModal.types";
 
 const NewChatModal: React.FC<NewChatModalProps> = ({
+  isOpen,
   isDark,
   onClose,
   users,
@@ -36,7 +37,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
   console.log("NewChatModal render", { currentPage, totalPages, totalUsers });
 
   return (
-    <Modal isDark={isDark} onClose={onClose} title="New Chat" size="md">
+    <Modal isOpen={isOpen} isDark={isDark} onClose={onClose} title="New Chat" size="md">
       <div className="flex flex-col h-full">
         <SearchInput
           searchTerm={searchTerm}
