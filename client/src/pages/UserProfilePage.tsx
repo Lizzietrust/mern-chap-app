@@ -12,7 +12,7 @@ import type { User } from "../types/types";
 export function UserProfilePage() {
   const { userId } = useParams<{ userId: string }>();
   const { state } = useApp();
-  const socket = state.socket;
+  const { socket } = state;
   const { isDark } = useTheme();
   const navigate = useNavigate();
   const { updateUserProfileCache } = useUpdateUserProfileCache();
