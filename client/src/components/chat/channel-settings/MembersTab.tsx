@@ -102,6 +102,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
 
       {showAddMemberModal && (
         <AddMemberModal
+          isOpen={showAddMemberModal}
           isDark={isDark}
           onClose={() => setShowAddMemberModal(false)}
           onAddMember={handleAddMember}
