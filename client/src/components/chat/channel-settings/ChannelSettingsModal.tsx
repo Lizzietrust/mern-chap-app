@@ -8,6 +8,7 @@ import { MembersTab } from "./MembersTab";
 import { useClearChat } from "../../../hooks/chats/useClearchat";
 
 interface Props {
+  isOpen: boolean;
   isDark: boolean;
   channel: ChannelChat;
   onClose: () => void;
@@ -15,6 +16,7 @@ interface Props {
 }
 
 const ChannelSettingsModal: React.FC<Props> = ({
+  isOpen,
   isDark,
   channel,
   onClose,
@@ -127,7 +129,7 @@ const ChannelSettingsModal: React.FC<Props> = ({
   ];
 
   return (
-    <Modal isDark={isDark} onClose={onClose} title="Channel Settings" size="md">
+    <Modal isOpen={isOpen} isDark={isDark} onClose={onClose} title="Channel Settings" size="md">
       <Tabs<"settings" | "members">
         tabs={tabs}
         activeTab={activeTab}
