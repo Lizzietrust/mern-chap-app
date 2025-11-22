@@ -20,6 +20,7 @@ export const AppLogic: React.FC<AppLogicProps> = ({
   const contextValue: AppContextType = {
     state,
     dispatch,
+    socket: state.socket, 
     ...actions,
   };
 
