@@ -1,5 +1,5 @@
 import { apiClient } from "../ApiClient";
-import type { Chat, UserChat } from "../../../types/types";
+import type { Chat, Message, UserChat } from "../../../types/types";
 
 export interface CreateChatRequest {
   userId: string;
@@ -39,4 +39,40 @@ export const chatApi = {
         data: { deleteForEveryone },
       }
     ),
+
+  async getSharedMedia(userId1: string, userId2: string): Promise<Message[]> {
+    const response = await apiClient.get<{ media: Message[] }>(
+      `/api/messages/chats/shared-media`,
+      {
+        params: { userId1, userId2 },
+      }
+    );
+    return response.media || [];
+  },
+
+  async getSharedMediaPaginated(
+    userId1: string,
+    userId2: string,
+    page: number = 1,
+    limit: number = 50
+  ): Promise<{
+    media: Message[];
+    totalCount: number;
+    totalPages: number;
+    currentPage: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  }> {
+    const response = await apiClient.get<{
+      media: Message[];
+      totalCount: number;
+      totalPages: number;
+      currentPage: number;
+      hasNextPage: boolean;
+      hasPrevPage: boolean;
+    }>(`/chats/shared-media/paginated`, {
+      params: { userId1, userId2, page, limit },
+    });
+    return response;
+  },
 };
