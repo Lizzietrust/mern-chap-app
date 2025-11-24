@@ -7,9 +7,12 @@ import {
   useUpdateUserProfileCache,
   useUserProfile,
 } from "../hooks/users/useUserProfile";
-import type { User, Message, FileMessage } from "../types/types";
+import type { User, Message, FileMessage, ChannelChat } from "../types/types";
 import { isFileMessage } from "../types/types";
 import { useSharedMedia } from "../hooks/chats/useSharedMedia";
+import { useCommonChannels } from "../hooks/channels/useCommonChannels";
+import { useChatLogic } from "../hooks/chats";
+import { useChatContext } from "../hooks/useChatContext";
 
 export function UserProfilePage() {
   const { userId } = useParams<{ userId: string }>();
@@ -33,6 +36,11 @@ export function UserProfilePage() {
   );
 
   console.log({ sharedMedia });
+
+  const { data: commonChannels, isLoading: commonChannelsLoading } =
+    useCommonChannels(state.user?._id || "", userId || "");
+
+  console.log({ commonChannels });
 
   const enhancedUserProfile = useMemo(() => {
     if (!userProfile || !state.onlineUsers) return userProfile;
@@ -161,6 +169,124 @@ export function UserProfilePage() {
     }
   };
 
+  const { setSelectedChat } = useChatLogic();
+  const { setActiveTab } = useChatContext();
+
+  const handleChannelClick = (channel: ChannelChat) => {
+    navigate("/chat");
+    setSelectedChat(channel);
+    setActiveTab("channels");
+  };
+
+  const renderCommonChannels = () => {
+    if (commonChannelsLoading) {
+      return (
+        <div className="text-center py-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
+          <p className={isDark ? "text-gray-400" : "text-gray-500"}>
+            Loading common channels...
+          </p>
+        </div>
+      );
+    }
+
+    if (!commonChannels || commonChannels.length === 0) {
+      return (
+        <div className="text-center py-6">
+          <div className="text-4xl mb-4">👥</div>
+          <p className={isDark ? "text-gray-400" : "text-gray-500"}>
+            No common channels yet
+          </p>
+          <p
+            className={`text-sm mt-2 ${
+              isDark ? "text-gray-500" : "text-gray-400"
+            }`}
+          >
+            You're not in any channels with this user
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {commonChannels.map((channel) => (
+          <div
+            key={channel._id}
+            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200 hover:scale-[1.02] ${
+              isDark
+                ? "bg-gray-700 hover:bg-gray-600"
+                : "bg-gray-100 hover:bg-gray-200"
+            }`}
+            onClick={() => handleChannelClick(channel)}
+            title={`Go to ${channel.name}`}
+          >
+            <div className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden">
+              {/* {channel.image ? (
+                <img
+                  src={channel.image}
+                  alt={channel.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : ( */}
+              <div
+                className={`w-full h-full flex items-center justify-center ${
+                  isDark ? "bg-blue-600" : "bg-blue-500"
+                } text-white font-semibold text-sm`}
+              >
+                {channel.name?.charAt(0)?.toUpperCase() || "G"}
+              </div>
+              {/* )} */}
+            </div>
+
+            <div className="flex-1">
+              <h4
+                className={`font-medium ${
+                  isDark ? "text-white" : "text-gray-900"
+                }`}
+              >
+                {channel.name}
+              </h4>
+              <p
+                className={`text-sm ${
+                  isDark ? "text-gray-400" : "text-gray-500"
+                }`}
+              >
+                {channel.members?.length || 0} members
+                {channel.description && ` • ${channel.description}`}
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-1">
+              <span
+                className={`text-xs ${
+                  isDark ? "text-blue-400" : "text-blue-600"
+                }`}
+              >
+                View
+              </span>
+              <svg
+                className={`w-4 h-4 ${
+                  isDark ? "text-blue-400" : "text-blue-600"
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderMediaSection = (
     title: string,
     media: Message[],
@@ -188,7 +314,7 @@ export function UserProfilePage() {
           {fileMedia.slice(0, 12).map((item) => (
             <div
               key={item._id}
-              className={`relative group cursor-pointer rounded-lg overflow-hidden ${
+              className={`relative channel cursor-pointer rounded-lg overflow-hidden ${
                 isDark ? "bg-gray-700" : "bg-gray-100"
               }`}
               onClick={() => handleMediaClick(item)}
@@ -677,6 +803,20 @@ export function UserProfilePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Common Channels Section - Only show for other users */}
+              {!isCurrentUser && (
+                <div className="px-0 pb-0 border-t border-gray-200 dark:border-gray-700 pt-6 mb-6">
+                  <h2
+                    className={`text-xl font-semibold mb-4 ${
+                      isDark ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    Common Channels
+                  </h2>
+                  {renderCommonChannels()}
+                </div>
+              )}
 
               {/* Shared Media Section - Only show for other users */}
               {!isCurrentUser && (
