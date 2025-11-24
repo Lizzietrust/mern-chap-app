@@ -7,6 +7,7 @@ import { appReducer, initialState } from "../reducers/appReducer";
 import { AppContext } from "./appConstants";
 import type { User, AppNotification } from "../../types/types";
 import { ChatProvider } from "../chat";
+import { CallProvider } from "../call/CallProvider";
 
 interface AppProviderProps {
   children: ReactNode;
@@ -21,6 +22,11 @@ export function AppProvider({ children }: AppProviderProps) {
 
     newSocket.on("connect", () => {
       console.log("Connected to server with ID:", newSocket.id);
+
+      if (state.user?._id) {
+        console.log("🔐 Identifying socket with user ID:", state.user._id);
+        newSocket.emit("identify", state.user._id);
+      }
     });
 
     newSocket.on("disconnect", (reason) => {
@@ -42,10 +48,22 @@ export function AppProvider({ children }: AppProviderProps) {
       newSocket.off("profile_updated");
       newSocket.disconnect();
     };
-  }, []);
+  }, [state.user?._id]);
+
+  useEffect(() => {
+    if (socket && state.user?._id) {
+      console.log("🔐 Identifying socket with user ID:", state.user._id);
+      socket.emit("identify", state.user._id);
+    }
+  }, [state.user?._id, socket]);
 
   const login = (user: User) => {
     dispatch({ type: "LOGIN", payload: user });
+
+    if (socket && user._id) {
+      console.log("🔐 Identifying socket after login:", user._id);
+      socket.emit("identify", user._id);
+    }
   };
 
   const logout = () => {
@@ -93,9 +111,11 @@ export function AppProvider({ children }: AppProviderProps) {
     <AppContext.Provider value={contextValue}>
       <SelectedChatProvider>
         <ChatProvider>
-          <AppLogic state={state} dispatch={dispatch}>
-            {children}
-          </AppLogic>
+          <CallProvider>
+            <AppLogic state={state} dispatch={dispatch}>
+              {children}
+            </AppLogic>
+          </CallProvider>
         </ChatProvider>
       </SelectedChatProvider>
     </AppContext.Provider>
