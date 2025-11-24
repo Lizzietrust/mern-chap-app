@@ -15,6 +15,9 @@ import {
   deleteMessage,
   clearChat,
   clearChatMessages,
+  getSharedMedia,
+  getSharedMediaPaginated,
+  getSharedMediaByType,
 } from "../controllers/MessageController.js";
 import { verifyToken } from "../middlewares/AuthMiddleware.js";
 import multer from "multer";
@@ -67,5 +70,12 @@ messageRoutes.patch("/:messageId/edit", verifyToken, editMessage);
 messageRoutes.delete("/:messageId", verifyToken, deleteMessage);
 messageRoutes.delete("/chats/:chatId/clear", verifyToken, clearChat);
 messageRoutes.delete("/chats/:chatId/messages", verifyToken, clearChatMessages);
+messageRoutes.get("/chats/shared-media", verifyToken, getSharedMediaPaginated);
+messageRoutes.get(
+  "/chats/shared-media/paginated",
+  verifyToken,
+  getSharedMediaPaginated
+);
+messageRoutes.get("/shared-media/by-type", verifyToken, getSharedMediaByType);
 
 export default messageRoutes;
