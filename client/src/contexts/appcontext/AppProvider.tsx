@@ -6,6 +6,7 @@ import { AppLogic } from "../AppLogic";
 import { appReducer, initialState } from "../reducers/appReducer";
 import { AppContext } from "./appConstants";
 import type { User, AppNotification } from "../../types/types";
+import { ChatProvider } from "../chat";
 
 interface AppProviderProps {
   children: ReactNode;
@@ -91,9 +92,11 @@ export function AppProvider({ children }: AppProviderProps) {
   return (
     <AppContext.Provider value={contextValue}>
       <SelectedChatProvider>
-        <AppLogic state={state} dispatch={dispatch}>
-          {children}
-        </AppLogic>
+        <ChatProvider>
+          <AppLogic state={state} dispatch={dispatch}>
+            {children}
+          </AppLogic>
+        </ChatProvider>
       </SelectedChatProvider>
     </AppContext.Provider>
   );
