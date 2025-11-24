@@ -3,6 +3,7 @@ import { Modal } from "../modals/Modal";
 import type { UserChat, ChannelChat, User } from "../../types/types";
 import { getUserId } from "../../types/types";
 import { useNavigate } from "react-router-dom";
+import { useApp } from "../../contexts/appcontext/index";
 
 interface ParticipantsModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
   isDark,
 }) => {
   const navigate = useNavigate();
+  const { state } = useApp();
 
   const isChannel = useMemo(() => chat?.type === "channel", [chat]);
 
@@ -31,17 +33,35 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
       : (chat as UserChat).participants;
   }, [chat, isChannel]);
 
-  const otherParticipants = useMemo(() => {
-    if (!participants || !currentUser) return [];
+  const enhancedParticipants = useMemo(() => {
+    if (!participants || !state.onlineUsers) return participants;
 
-    return participants.filter((participant) => {
+    return participants.map((participant) => {
+      const participantId = getUserId(participant);
+      const onlineUser = state.onlineUsers.find(
+        (user) => user._id === participantId
+      );
+
+      if (typeof participant === "object") {
+        return {
+          ...participant,
+          isOnline: onlineUser?.isOnline || false,
+          lastSeen: onlineUser?.lastSeen || participant.lastSeen,
+        };
+      }
+
+      return participant;
+    });
+  }, [participants, state.onlineUsers]);
+
+  const otherParticipants = useMemo(() => {
+    if (!enhancedParticipants || !currentUser) return [];
+
+    return enhancedParticipants.filter((participant) => {
       const participantId = getUserId(participant);
       return participantId !== currentUser._id;
     });
-  }, [participants, currentUser]);
-
-  console.log({ participants });
-  console.log({ chat });
+  }, [enhancedParticipants, currentUser]);
 
   const getParticipantName = (participant: User | string): string => {
     if (typeof participant === "string") {
@@ -89,6 +109,12 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
     }
     return null;
   };
+
+  const onlineCount = useMemo(() => {
+    return enhancedParticipants.filter(
+      (p) => typeof p === "object" && p.isOnline
+    ).length;
+  }, [enhancedParticipants]);
 
   if (!chat) return null;
 
@@ -203,26 +229,25 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                   </div>
 
                   <div className="flex items-center space-x-3">
-                    {typeof participant === "object" &&
-                      participant.isOnline !== undefined && (
-                        <div className="flex items-center space-x-2">
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              participant.isOnline
-                                ? "bg-green-500 animate-pulse"
-                                : "bg-gray-400"
-                            }`}
-                            title={participant.isOnline ? "Online" : "Offline"}
-                          />
-                          <span
-                            className={`text-xs ${
-                              isDark ? "text-gray-400" : "text-gray-500"
-                            }`}
-                          >
-                            {participant.isOnline ? "Online" : "Offline"}
-                          </span>
-                        </div>
-                      )}
+                    {typeof participant === "object" && (
+                      <div className="flex items-center space-x-2">
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            participant.isOnline
+                              ? "bg-green-500 animate-pulse"
+                              : "bg-gray-400"
+                          }`}
+                          title={participant.isOnline ? "Online" : "Offline"}
+                        />
+                        <span
+                          className={`text-xs ${
+                            isDark ? "text-gray-400" : "text-gray-500"
+                          }`}
+                        >
+                          {participant.isOnline ? "Online" : "Offline"}
+                        </span>
+                      </div>
+                    )}
 
                     {isClickable && (
                       <div className="flex items-center space-x-1">
@@ -268,16 +293,15 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              <strong>Total members:</strong> {participants?.length || 0}
+              <strong>Total members:</strong>{" "}
+              {enhancedParticipants?.length || 0}
             </p>
             <p
               className={`text-sm ${
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              <strong>Online:</strong>{" "}
-              {participants?.filter((p) => typeof p === "object" && p.isOnline)
-                .length || 0}
+              <strong>Online:</strong> {onlineCount}
             </p>
             <p
               className={`text-sm ${
