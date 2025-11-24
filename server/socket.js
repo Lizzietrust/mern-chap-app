@@ -158,6 +158,126 @@ const setupSocket = (server) => {
     }
   };
 
+  const setupCallHandlers = (socket) => {
+    socket.on("start_call", (data) => {
+      const { receiverId, type, caller, offer } = data;
+      console.log(`📞 Call from ${caller._id} to ${receiverId}`);
+
+      socket.to(receiverId).emit("incoming_call", {
+        caller: caller,
+        type: type,
+      });
+
+      if (offer) {
+        setTimeout(() => {
+          socket.to(receiverId).emit("offer", {
+            offer: offer,
+            callerId: socket.userId,
+          });
+          console.log(`📨 Sent WebRTC offer to ${receiverId}`);
+        }, 1000);
+      }
+    });
+
+    socket.on("accept_call", (data) => {
+      const { callerId } = data;
+      console.log(
+        `✅ Call accepted by ${socket.userId} for caller ${callerId}`
+      );
+
+      socket.to(callerId).emit("call_accepted");
+      console.log(`📤 Notified caller ${callerId} that call was accepted`);
+    });
+
+    socket.on("reject_call", (data) => {
+      const { callerId } = data;
+      console.log(
+        `❌ Call rejected by ${socket.userId} for caller ${callerId}`
+      );
+
+      socket.to(callerId).emit("call_rejected");
+      console.log(`📤 Notified caller ${callerId} that call was rejected`);
+    });
+
+    socket.on("end_call", (data) => {
+      const { receiverId } = data;
+      console.log(`📞 Call ended by ${socket.userId}`);
+
+      socket.to(receiverId).emit("call_ended");
+      console.log(`📤 Notified receiver ${receiverId} that call ended`);
+    });
+
+    socket.on("offer", (data) => {
+      const { offer, receiverId } = data;
+      console.log(`📨 Forwarding offer from ${socket.userId} to ${receiverId}`);
+
+      const receiverSocket = Array.from(connectedUsers.entries()).find(
+        ([userId, userData]) => userId === receiverId
+      );
+
+      if (receiverSocket) {
+        socket.to(receiverSocket[1].socketId).emit("offer", {
+          offer: offer,
+          callerId: socket.userId,
+        });
+        console.log(`✅ Offer forwarded to ${receiverId}`);
+      } else {
+        console.log(`❌ Receiver ${receiverId} is not online for offer`);
+        socket.emit("receiver_offline", { receiverId });
+      }
+    });
+
+    socket.on("answer", (data) => {
+      const { answer, callerId } = data;
+      console.log(`📨 Forwarding answer from ${socket.userId} to ${callerId}`);
+
+      const callerSocket = Array.from(connectedUsers.entries()).find(
+        ([userId, userData]) => userId === callerId
+      );
+
+      if (callerSocket) {
+        socket.to(callerSocket[1].socketId).emit("answer", {
+          answer: answer,
+          receiverId: socket.userId,
+        });
+        console.log(`✅ Answer forwarded to ${callerId}`);
+      } else {
+        console.log(`❌ Caller ${callerId} is not online for answer`);
+        socket.emit("caller_unavailable", { callerId });
+      }
+    });
+
+    socket.on("ice-candidate", (data) => {
+      const { candidate, receiverId } = data;
+      console.log(
+        `❄️ Forwarding ICE candidate from ${socket.userId} to ${receiverId}`
+      );
+
+      const receiverSocket = Array.from(connectedUsers.entries()).find(
+        ([userId, userData]) => userId === receiverId
+      );
+
+      if (receiverSocket) {
+        socket.to(receiverSocket[1].socketId).emit("ice-candidate", {
+          candidate: candidate,
+          senderId: socket.userId,
+        });
+        console.log(`✅ ICE candidate forwarded to ${receiverId}`);
+      } else {
+        console.log(
+          `❌ Receiver ${receiverId} is not online for ICE candidate`
+        );
+      }
+    });
+
+    socket.on("call_timeout", (data) => {
+      const { receiverId } = data;
+      console.log(`⏰ Call timeout from ${socket.userId} to ${receiverId}`);
+
+      socket.to(receiverId).emit("call_timeout");
+    });
+  };
+
   const setupChatHandlers = (socket) => {
     socket.on("sendMessage", async (data) => {
       try {
@@ -390,10 +510,12 @@ const setupSocket = (server) => {
     console.log(`✅ User ${socket.userId} connected with socket ${socket.id}`);
 
     socket.join(socket.userId);
+    console.log(`🏠 User ${socket.userId} joined room: ${socket.userId}`);
 
     setupMessageStatusHandlers(socket, io);
     setupChatHandlers(socket);
     setupUserHandlers(socket);
+    setupCallHandlers(socket);
 
     markAllUndeliveredAsDelivered(socket.userId);
 
