@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { Navigation } from "./navigation/Navigation";
 import { useApp } from "../contexts/appcontext/index";
+import { CallInterface } from "./call/CallInterface";
 
 interface LayoutProps {
   children: ReactNode;
@@ -21,7 +22,10 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen">
       {!isChatPage && <Navigation />}
-      <main>{children}</main>
+      <main>
+        {children}
+        <CallInterface />
+      </main>
     </div>
   );
 }
