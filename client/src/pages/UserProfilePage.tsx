@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useApp } from "../contexts/appcontext/index";
 import { useTheme } from "../contexts/theme";
@@ -7,7 +7,9 @@ import {
   useUpdateUserProfileCache,
   useUserProfile,
 } from "../hooks/users/useUserProfile";
-import type { User } from "../types/types";
+import type { User, Message, FileMessage } from "../types/types";
+import { isFileMessage } from "../types/types";
+import { useSharedMedia } from "../hooks/chats/useSharedMedia";
 
 export function UserProfilePage() {
   const { userId } = useParams<{ userId: string }>();
@@ -25,6 +27,13 @@ export function UserProfilePage() {
     isRefetching,
   } = useUserProfile(userId);
 
+  const { data: sharedMedia, isLoading: sharedMediaLoading } = useSharedMedia(
+    userId,
+    state.user?._id
+  );
+
+  console.log({ sharedMedia });
+
   const enhancedUserProfile = useMemo(() => {
     if (!userProfile || !state.onlineUsers) return userProfile;
 
@@ -40,6 +49,30 @@ export function UserProfilePage() {
   const isCurrentUser = useMemo(() => {
     return userId === state.user?._id;
   }, [userId, state.user]);
+
+  const groupedMedia = useMemo(() => {
+    if (!sharedMedia) return { images: [], videos: [], files: [], audio: [] };
+
+    const fileMessages = sharedMedia.filter(isFileMessage);
+
+    return {
+      images: fileMessages.filter(
+        (msg) => msg.messageType === "image" && !msg.isDeleted
+      ),
+      videos: fileMessages.filter(
+        (msg) => msg.messageType === "video" && !msg.isDeleted
+      ),
+      files: fileMessages.filter(
+        (msg) => msg.messageType === "file" && !msg.isDeleted
+      ),
+      audio: fileMessages.filter(
+        (msg) => msg.messageType === "audio" && !msg.isDeleted
+      ),
+    };
+  }, [sharedMedia]);
+
+  const [selectedMedia, setSelectedMedia] = useState<Message | null>(null);
+  const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
 
   useEffect(() => {
     if (!socket || !userId) return;
@@ -60,7 +93,6 @@ export function UserProfilePage() {
         );
 
         updateUserProfileCache(userId, data.updates);
-
         refetch();
       }
     };
@@ -68,7 +100,6 @@ export function UserProfilePage() {
     const handleUserOnline = (data: { userId: string; isOnline: boolean }) => {
       if (data.userId === userId) {
         console.log("🟢 User online status updated:", data);
-
         refetch();
       }
     };
@@ -101,6 +132,162 @@ export function UserProfilePage() {
 
   const handleBackToChat = () => {
     navigate(-1);
+  };
+
+  const handleMediaClick = (media: Message) => {
+    setSelectedMedia(media);
+    setMediaViewerOpen(true);
+  };
+
+  const handleDownloadMedia = async (media: Message) => {
+    if (!isFileMessage(media)) return;
+
+    const fileUrl = media.fileUrl;
+    const fileName = media.fileName || `file-${media._id}`;
+
+    try {
+      const response = await fetch(fileUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading file:", error);
+    }
+  };
+
+  const renderMediaSection = (
+    title: string,
+    media: Message[],
+    icon: string,
+    type: string
+  ) => {
+    const fileMedia = media.filter(
+      (msg): msg is FileMessage =>
+        isFileMessage(msg) && msg.messageType === type && !msg.isDeleted
+    );
+
+    if (fileMedia.length === 0) return null;
+
+    return (
+      <div className="mb-6">
+        <h3
+          className={`text-lg font-semibold mb-3 flex items-center gap-2 ${
+            isDark ? "text-white" : "text-gray-900"
+          }`}
+        >
+          <span>{icon}</span>
+          {title} ({fileMedia.length})
+        </h3>
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+          {fileMedia.slice(0, 12).map((item) => (
+            <div
+              key={item._id}
+              className={`relative group cursor-pointer rounded-lg overflow-hidden ${
+                isDark ? "bg-gray-700" : "bg-gray-100"
+              }`}
+              onClick={() => handleMediaClick(item)}
+            >
+              {type === "image" && (
+                <img
+                  src={item.fileUrl}
+                  alt="Shared media"
+                  className="w-full h-20 object-cover hover:scale-105 transition-transform duration-200"
+                />
+              )}
+              {type === "video" && (
+                <div className="relative w-full h-20">
+                  <video className="w-full h-20 object-cover">
+                    <source src={item.fileUrl} type="video/mp4" />
+                  </video>
+                  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
+                    <svg
+                      className="w-6 h-6 text-white"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </div>
+                </div>
+              )}
+              {(type === "file" || type === "audio") && (
+                <div className="w-full h-20 flex flex-col items-center justify-center p-2">
+                  <svg
+                    className="w-8 h-8 text-gray-400 mb-1"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d={
+                        type === "file"
+                          ? "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          : "M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                      }
+                    />
+                  </svg>
+                  <span className="text-xs text-center truncate w-full">
+                    {item.fileName || "File"}
+                  </span>
+                </div>
+              )}
+
+              {/* Overlay with download button */}
+              <div
+                className={`absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100`}
+              >
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownloadMedia(item);
+                  }}
+                  className="p-1 bg-white bg-opacity-90 rounded-full hover:bg-opacity-100 transition-colors"
+                >
+                  <svg
+                    className="w-4 h-4 text-gray-700"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {fileMedia.length > 12 && (
+            <div
+              className={`flex items-center justify-center rounded-lg ${
+                isDark ? "bg-gray-600" : "bg-gray-200"
+              }`}
+            >
+              <span
+                className={`text-sm ${
+                  isDark ? "text-gray-300" : "text-gray-600"
+                }`}
+              >
+                +{fileMedia.length - 12} more
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -490,10 +677,165 @@ export function UserProfilePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Shared Media Section - Only show for other users */}
+              {!isCurrentUser && (
+                <div className="px-0 pb-0 border-t border-gray-200 dark:border-gray-700 pt-6">
+                  <h2
+                    className={`text-xl font-semibold mb-4 ${
+                      isDark ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    Shared Media
+                  </h2>
+
+                  {sharedMediaLoading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                      <p className={isDark ? "text-gray-400" : "text-gray-500"}>
+                        Loading shared media...
+                      </p>
+                    </div>
+                  ) : sharedMedia && sharedMedia.length > 0 ? (
+                    <div className="space-y-6">
+                      {renderMediaSection(
+                        "Photos",
+                        groupedMedia.images,
+                        "🖼️",
+                        "image"
+                      )}
+                      {renderMediaSection(
+                        "Videos",
+                        groupedMedia.videos,
+                        "🎬",
+                        "video"
+                      )}
+                      {renderMediaSection(
+                        "Files",
+                        groupedMedia.files,
+                        "📎",
+                        "file"
+                      )}
+                      {renderMediaSection(
+                        "Audio",
+                        groupedMedia.audio,
+                        "🎵",
+                        "audio"
+                      )}
+
+                      <div
+                        className={`text-center pt-4 border-t ${
+                          isDark ? "border-gray-700" : "border-gray-200"
+                        }`}
+                      >
+                        <p
+                          className={isDark ? "text-gray-400" : "text-gray-500"}
+                        >
+                          Total {sharedMedia.length} shared items
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="text-4xl mb-4">📁</div>
+                      <p className={isDark ? "text-gray-400" : "text-gray-500"}>
+                        No shared media yet
+                      </p>
+                      <p
+                        className={`text-sm mt-2 ${
+                          isDark ? "text-gray-500" : "text-gray-400"
+                        }`}
+                      >
+                        Start a conversation to share photos, videos, and files
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Media Viewer Modal */}
+      {mediaViewerOpen && selectedMedia && isFileMessage(selectedMedia) && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
+          <div className="relative max-w-4xl max-h-full">
+            <button
+              onClick={() => setMediaViewerOpen(false)}
+              className="absolute top-4 right-4 text-white text-2xl z-10 bg-black bg-opacity-50 rounded-full w-10 h-10 flex items-center justify-center hover:bg-opacity-70"
+            >
+              ✕
+            </button>
+
+            {selectedMedia.messageType === "image" && (
+              <img
+                src={selectedMedia.fileUrl}
+                alt="Shared media"
+                className="max-w-full max-h-full object-contain"
+              />
+            )}
+
+            {selectedMedia.messageType === "video" && (
+              <video controls autoPlay className="max-w-full max-h-full">
+                <source src={selectedMedia.fileUrl} type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+            )}
+
+            {(selectedMedia.messageType === "file" ||
+              selectedMedia.messageType === "audio") && (
+              <div
+                className={`p-8 rounded-lg max-w-md ${
+                  isDark ? "bg-gray-800" : "bg-white"
+                }`}
+              >
+                <div className="text-center">
+                  <svg
+                    className="w-16 h-16 mx-auto mb-4 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d={
+                        selectedMedia.messageType === "file"
+                          ? "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          : "M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                      }
+                    />
+                  </svg>
+                  <h3
+                    className={`text-lg font-semibold mb-2 ${
+                      isDark ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    {selectedMedia.fileName || "File"}
+                  </h3>
+                  {selectedMedia.fileSize && (
+                    <p className={isDark ? "text-gray-400" : "text-gray-500"}>
+                      {(selectedMedia.fileSize / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  )}
+                  <button
+                    onClick={() => handleDownloadMedia(selectedMedia)}
+                    className={`mt-4 px-6 py-2 rounded-lg font-medium ${
+                      isDark
+                        ? "bg-blue-600 text-white hover:bg-blue-700"
+                        : "bg-blue-500 text-white hover:bg-blue-600"
+                    } cursor-pointer`}
+                  >
+                    Download
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
