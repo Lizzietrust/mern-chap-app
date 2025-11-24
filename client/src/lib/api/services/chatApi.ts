@@ -1,5 +1,9 @@
 import { apiClient } from "../ApiClient";
-import type { Chat, Message, UserChat } from "../../../types/types";
+import type {
+  Chat,
+  Message,
+  UserChat,
+} from "../../../types/types";
 
 export interface CreateChatRequest {
   userId: string;
