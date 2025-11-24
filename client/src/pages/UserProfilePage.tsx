@@ -25,6 +25,18 @@ export function UserProfilePage() {
     isRefetching,
   } = useUserProfile(userId);
 
+  const enhancedUserProfile = useMemo(() => {
+    if (!userProfile || !state.onlineUsers) return userProfile;
+
+    const onlineUser = state.onlineUsers.find((user) => user._id === userId);
+
+    return {
+      ...userProfile,
+      isOnline: onlineUser?.isOnline || userProfile.isOnline || false,
+      lastSeen: onlineUser?.lastSeen || userProfile.lastSeen,
+    };
+  }, [userProfile, state.onlineUsers, userId]);
+
   const isCurrentUser = useMemo(() => {
     return userId === state.user?._id;
   }, [userId, state.user]);
@@ -53,11 +65,23 @@ export function UserProfilePage() {
       }
     };
 
+    const handleUserOnline = (data: { userId: string; isOnline: boolean }) => {
+      if (data.userId === userId) {
+        console.log("🟢 User online status updated:", data);
+
+        refetch();
+      }
+    };
+
     socket.on("profile_updated", handleProfileUpdate);
+    socket.on("userOnline", handleUserOnline);
+    socket.on("userOffline", handleUserOnline);
 
     return () => {
       console.log("🧹 Cleaning up profile_updated listener for user:", userId);
       socket.off("profile_updated", handleProfileUpdate);
+      socket.off("userOnline", handleUserOnline);
+      socket.off("userOffline", handleUserOnline);
     };
   }, [socket, userId, updateUserProfileCache, refetch]);
 
@@ -69,15 +93,9 @@ export function UserProfilePage() {
     refetch();
   };
 
-  // const handleFollowToggle = async () => {
-  //   // Implement follow/unfollow logic here
-  //   setIsFollowing(!isFollowing);
-  //   // You would call your follow/unfollow API here
-  // };
-
   const handleSendMessage = () => {
-    if (userProfile) {
-      navigate(`/chat?userId=${userProfile._id}`);
+    if (enhancedUserProfile) {
+      navigate(`/chat?userId=${enhancedUserProfile._id}`);
     }
   };
 
@@ -104,7 +122,7 @@ export function UserProfilePage() {
     );
   }
 
-  if (error || !userProfile) {
+  if (error || !enhancedUserProfile) {
     return (
       <Layout>
         <div
@@ -170,6 +188,21 @@ export function UserProfilePage() {
     );
   }
 
+  const safeAvatar =
+    enhancedUserProfile.avatar ||
+    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+      enhancedUserProfile.name || enhancedUserProfile.email || "User"
+    )}`;
+
+  const safeName = enhancedUserProfile.name || "Unknown User";
+  const safeEmail = enhancedUserProfile.email || "No email";
+  const safeBio = enhancedUserProfile.bio;
+  const safeLocation = enhancedUserProfile.location;
+  const safeWebsite = enhancedUserProfile.website;
+  const safePhone = enhancedUserProfile.phone;
+  const safeJoinedDate = enhancedUserProfile.joinedDate;
+  const safeLastSeen = enhancedUserProfile.lastSeen;
+
   return (
     <Layout>
       <div className={`min-h-screen ${isDark ? "bg-gray-900" : "bg-gray-50"}`}>
@@ -207,9 +240,9 @@ export function UserProfilePage() {
           >
             {/* Cover Photo */}
             <div className="h-32 bg-gradient-to-r from-blue-500 to-purple-600 relative">
-              {/* {userProfile.coverPhoto && (
+              {/* {enhancedUserProfile.coverPhoto && (
                 <img
-                  src={userProfile.coverPhoto}
+                  src={enhancedUserProfile.coverPhoto}
                   alt="Cover"
                   className="w-full h-full object-cover"
                 />
@@ -222,16 +255,11 @@ export function UserProfilePage() {
               <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 -mt-16 mb-6">
                 <div className="relative">
                   <img
-                    src={
-                      userProfile.avatar ||
-                      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                        userProfile.name || userProfile.email
-                      )}`
-                    }
+                    src={safeAvatar}
                     alt="Profile"
                     className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800 object-cover"
                   />
-                  {userProfile.isOnline && (
+                  {enhancedUserProfile.isOnline && (
                     <div className="absolute bottom-2 right-2 w-6 h-6 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></div>
                   )}
                 </div>
@@ -244,29 +272,19 @@ export function UserProfilePage() {
                           isDark ? "text-white" : "text-gray-900"
                         }`}
                       >
-                        {userProfile.name}
+                        {safeName}
                       </h1>
                       <p
                         className={`text-lg ${
                           isDark ? "text-gray-300" : "text-gray-600"
                         }`}
                       >
-                        {userProfile.email}
+                        {safeEmail}
                       </p>
                     </div>
 
                     {!isCurrentUser && (
                       <div className="flex gap-3">
-                        {/* <button
-                          onClick={handleFollowToggle}
-                          className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                            isFollowing
-                              ? "bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-                              : "bg-blue-600 text-white hover:bg-blue-700"
-                          } cursor-pointer`}
-                        >
-                          {isFollowing ? "Following" : "Follow"}
-                        </button> */}
                         <button
                           onClick={handleSendMessage}
                           className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 cursor-pointer"
@@ -279,78 +297,6 @@ export function UserProfilePage() {
                 </div>
               </div>
 
-              {/* Stats */}
-              {/* <div
-                className={`grid grid-cols-2 md:grid-cols-4 gap-4 py-6 border-y ${
-                  isDark ? "border-gray-700" : "border-gray-200"
-                }`}
-              >
-                <div className="text-center">
-                  <div
-                    className={`text-2xl font-bold ${
-                      isDark ? "text-white" : "text-gray-900"
-                    }`}
-                  >
-                    {userProfile.followers?.length || 0}
-                  </div>
-                  <div
-                    className={`text-sm ${
-                      isDark ? "text-gray-400" : "text-gray-500"
-                    }`}
-                  >
-                    Followers
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div
-                    className={`text-2xl font-bold ${
-                      isDark ? "text-white" : "text-gray-900"
-                    }`}
-                  >
-                    {userProfile.following?.length || 0}
-                  </div>
-                  <div
-                    className={`text-sm ${
-                      isDark ? "text-gray-400" : "text-gray-500"
-                    }`}
-                  >
-                    Following
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div
-                    className={`text-2xl font-bold ${
-                      isDark ? "text-white" : "text-gray-900"
-                    }`}
-                  >
-                    {userProfile.postsCount || 0}
-                  </div>
-                  <div
-                    className={`text-sm ${
-                      isDark ? "text-gray-400" : "text-gray-500"
-                    }`}
-                  >
-                    Posts
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div
-                    className={`text-2xl font-bold ${
-                      isDark ? "text-white" : "text-gray-900"
-                    }`}
-                  >
-                    {userProfile.groupsCount || 0}
-                  </div>
-                  <div
-                    className={`text-sm ${
-                      isDark ? "text-gray-400" : "text-gray-500"
-                    }`}
-                  >
-                    Groups
-                  </div>
-                </div>
-              </div> */}
-
               {/* Bio and Details */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 py-6">
                 {/* Left Column - Bio */}
@@ -362,13 +308,13 @@ export function UserProfilePage() {
                   >
                     About
                   </h2>
-                  {userProfile.bio ? (
+                  {safeBio ? (
                     <p
                       className={`leading-relaxed ${
                         isDark ? "text-gray-300" : "text-gray-600"
                       }`}
                     >
-                      {userProfile.bio}
+                      {safeBio}
                     </p>
                   ) : (
                     <p
@@ -382,7 +328,7 @@ export function UserProfilePage() {
 
                   {/* Additional Info */}
                   <div className="mt-6 space-y-3">
-                    {userProfile.location && (
+                    {safeLocation && (
                       <div className="flex items-center gap-3">
                         <svg
                           className="w-5 h-5 text-gray-400"
@@ -406,12 +352,12 @@ export function UserProfilePage() {
                         <span
                           className={isDark ? "text-gray-300" : "text-gray-600"}
                         >
-                          {userProfile.location}
+                          {safeLocation}
                         </span>
                       </div>
                     )}
 
-                    {userProfile.website && (
+                    {safeWebsite && (
                       <div className="flex items-center gap-3">
                         <svg
                           className="w-5 h-5 text-gray-400"
@@ -427,19 +373,19 @@ export function UserProfilePage() {
                           />
                         </svg>
                         <a
-                          href={userProfile.website}
+                          href={safeWebsite}
                           target="_blank"
                           rel="noopener noreferrer"
                           className={`hover:underline ${
                             isDark ? "text-blue-400" : "text-blue-600"
                           }`}
                         >
-                          {userProfile.website.replace(/^https?:\/\//, "")}
+                          {safeWebsite.replace(/^https?:\/\//, "")}
                         </a>
                       </div>
                     )}
 
-                    {userProfile.joinedDate && (
+                    {safeJoinedDate && (
                       <div className="flex items-center gap-3">
                         <svg
                           className="w-5 h-5 text-gray-400"
@@ -457,10 +403,7 @@ export function UserProfilePage() {
                         <span
                           className={isDark ? "text-gray-300" : "text-gray-600"}
                         >
-                          Joined{" "}
-                          {new Date(
-                            userProfile.joinedDate
-                          ).toLocaleDateString()}
+                          Joined {new Date(safeJoinedDate).toLocaleDateString()}
                         </span>
                       </div>
                     )}
@@ -478,7 +421,7 @@ export function UserProfilePage() {
                       Contact Information
                     </h3>
                     <div className="space-y-2">
-                      {userProfile.phone && (
+                      {safePhone && (
                         <div>
                           <div
                             className={`text-sm font-medium ${
@@ -492,7 +435,7 @@ export function UserProfilePage() {
                               isDark ? "text-gray-300" : "text-gray-600"
                             }
                           >
-                            {userProfile.phone}
+                            {safePhone}
                           </div>
                         </div>
                       )}
@@ -507,7 +450,7 @@ export function UserProfilePage() {
                         <div
                           className={isDark ? "text-gray-300" : "text-gray-600"}
                         >
-                          {userProfile.email}
+                          {safeEmail}
                         </div>
                       </div>
                     </div>
@@ -524,7 +467,7 @@ export function UserProfilePage() {
                     <div className="flex items-center gap-2">
                       <div
                         className={`w-3 h-3 rounded-full ${
-                          userProfile.isOnline
+                          enhancedUserProfile.isOnline
                             ? "bg-green-500 animate-pulse"
                             : "bg-gray-400"
                         }`}
@@ -532,17 +475,16 @@ export function UserProfilePage() {
                       <span
                         className={isDark ? "text-gray-300" : "text-gray-600"}
                       >
-                        {userProfile.isOnline ? "Online" : "Offline"}
+                        {enhancedUserProfile.isOnline ? "Online" : "Offline"}
                       </span>
                     </div>
-                    {userProfile.lastSeen && !userProfile.isOnline && (
+                    {safeLastSeen && !enhancedUserProfile.isOnline && (
                       <div
                         className={`text-sm mt-1 ${
                           isDark ? "text-gray-400" : "text-gray-500"
                         }`}
                       >
-                        Last seen{" "}
-                        {new Date(userProfile.lastSeen).toLocaleString()}
+                        Last seen {new Date(safeLastSeen).toLocaleString()}
                       </div>
                     )}
                   </div>
