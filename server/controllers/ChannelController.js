@@ -409,3 +409,29 @@ export const getChannelMessages = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getCommonChannels = async (req, res) => {
+  try {
+    const { userId1, userId2 } = req.params;
+
+    console.log("🔍 Fetching common channels for users:", { userId1, userId2 });
+
+    const commonChannels = await Chat.find({
+      type: "channel",
+      members: {
+        $all: [userId1, userId2],
+      },
+    })
+      .populate("members", "firstName lastName email image isOnline lastSeen")
+      .populate("admins", "firstName lastName email image")
+      .populate("createdBy", "firstName lastName email image")
+      .sort({ updatedAt: -1 });
+
+    console.log(`📊 Found ${commonChannels.length} common channels`);
+
+    res.status(200).json(commonChannels);
+  } catch (error) {
+    console.error("❌ Error fetching common channels:", error);
+    res.status(500).json({ error: "Failed to fetch common channels" });
+  }
+};
