@@ -134,4 +134,14 @@ export const channelApi = {
       throw new Error(errorMessage);
     }
   },
+
+  async getCommonChannels(
+    userId1: string,
+    userId2: string
+  ): Promise<ChannelChat[]> {
+    const response = await apiClient.get<ChannelChat[]>(
+      `/api/channels/common-channels/${userId1}/${userId2}`
+    );
+    return response;
+  },
 };
