@@ -8,6 +8,7 @@ import {
   updateChannelAdmin,
   getUserChannels,
   getChannelMessages,
+  getCommonChannels,
 } from "../controllers/ChannelController.js";
 import { verifyToken } from "../middlewares/AuthMiddleware.js";
 
@@ -28,5 +29,6 @@ channelRoutes.delete(
 channelRoutes.put("/:channelId/admin", verifyToken, updateChannelAdmin);
 
 channelRoutes.get("/:channelId/messages", verifyToken, getChannelMessages);
+channelRoutes.get("/common-channels/:userId1/:userId2", getCommonChannels);
 
 export default channelRoutes;
