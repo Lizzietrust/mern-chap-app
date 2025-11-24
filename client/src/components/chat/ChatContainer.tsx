@@ -73,13 +73,8 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
           );
           return {
             ...p,
-            isOnline:
-              onlineUser?.isOnline ||
-              (typeof p === "object" ? p.isOnline : false) ||
-              false,
-            lastSeen:
-              onlineUser?.lastSeen ||
-              (typeof p === "object" ? p.lastSeen : undefined),
+            isOnline: onlineUser?.isOnline || false,
+            lastSeen: onlineUser?.lastSeen,
           };
         }),
       };
