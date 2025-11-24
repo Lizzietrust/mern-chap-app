@@ -127,7 +127,7 @@ messageSchema.virtual("effectiveChat").get(function () {
 messageSchema.index({ content: "text" });
 
 messageSchema.index({ chat: 1, createdAt: -1 });
-messageSchema.index({ chatId: 1, createdAt: -1 });
+messageSchema.index({ chatId: 1, createdAt: -1 }); 
 messageSchema.index({ recipient: 1, createdAt: -1 });
 messageSchema.index({ sender: 1, createdAt: -1 });
 messageSchema.index({ readBy: 1 });
