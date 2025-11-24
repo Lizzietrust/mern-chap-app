@@ -165,7 +165,7 @@ export const sendMessage = async (req, res, next) => {
       fileUrl: fileUrl || undefined,
       fileName: fileName || undefined,
       fileSize: fileSize || undefined,
-      chat: chatId, 
+      chat: chatId,
       status: "sent",
       readBy: [sender],
       readReceipts: [
@@ -180,14 +180,12 @@ export const sendMessage = async (req, res, next) => {
     const savedMessage = await newMessage.save();
     console.log("✅ Message saved to database:", savedMessage._id);
 
-    
     await Chat.findByIdAndUpdate(chatId, {
       lastMessage: content?.trim() || fileName || "File shared",
       lastMessageAt: new Date(),
       $push: { messages: savedMessage._id },
     });
 
-    
     try {
       const db = mongoose.connection.db;
 
@@ -240,12 +238,10 @@ export const sendMessage = async (req, res, next) => {
       console.error("❌ Error updating unread counts:", unreadError);
     }
 
-    
     const populatedMessage = await Message.findById(savedMessage._id)
       .populate("sender", "_id firstName lastName email image")
       .populate("readBy", "_id firstName lastName email image");
 
-    
     const io = req.app.get("io");
 
     if (io) {
@@ -261,7 +257,7 @@ export const sendMessage = async (req, res, next) => {
         fileName: populatedMessage.fileName,
         fileSize: populatedMessage.fileSize,
         chat: populatedMessage.chat.toString(),
-        chatId: populatedMessage.chat.toString(), 
+        chatId: populatedMessage.chat.toString(),
         createdAt: populatedMessage.createdAt.toISOString(),
         timestamp: populatedMessage.createdAt.toISOString(),
         status: populatedMessage.status,
@@ -269,28 +265,56 @@ export const sendMessage = async (req, res, next) => {
         readReceipts: populatedMessage.readReceipts,
       };
 
-      
       if (chat.type === "direct") {
         chat.participants.forEach((participantId) => {
           io.to(participantId.toString()).emit("newMessage", messagePayload);
           io.to(participantId.toString()).emit(
             "messageReceived",
             messagePayload
-          ); 
+          );
           console.log(`✅ Emitted to participant: ${participantId}`);
         });
+
+        if (savedMessage.messageType !== "text") {
+          console.log(
+            `📁 Emitting sharedMediaUpdated for file message: ${savedMessage._id}`
+          );
+
+          chat.participants.forEach((participantId) => {
+            io.to(participantId.toString()).emit("sharedMediaUpdated", {
+              chatId: chat._id.toString(),
+              participants: chat.participants.map((p) => p.toString()),
+              newMedia: {
+                _id: savedMessage._id,
+                messageType: savedMessage.messageType,
+                fileUrl: savedMessage.fileUrl,
+                fileName: savedMessage.fileName,
+                fileSize: savedMessage.fileSize,
+                createdAt: savedMessage.createdAt,
+                sender: {
+                  _id: populatedMessage.sender._id,
+                  firstName: populatedMessage.sender.firstName,
+                  lastName: populatedMessage.sender.lastName,
+                  image: populatedMessage.sender.image,
+                },
+              },
+            });
+            console.log(
+              `📁 Emitted sharedMediaUpdated to participant: ${participantId}`
+            );
+          });
+        }
       } else if (chat.type === "channel") {
         chat.members.forEach((memberId) => {
           io.to(memberId.toString()).emit("newMessage", messagePayload);
-          io.to(memberId.toString()).emit("messageReceived", messagePayload); 
+          io.to(memberId.toString()).emit("messageReceived", messagePayload);
           console.log(`✅ Emitted to member: ${memberId}`);
         });
-        
+
         io.to(chatId).emit("newMessage", messagePayload);
         io.to(chatId).emit("messageReceived", messagePayload);
       }
 
-     
       io.emit("chatUpdated", {
         chatId,
         lastMessage: messagePayload.content,
@@ -358,14 +382,14 @@ export const getMessages = async (req, res, next) => {
     let messages = [];
 
     if (!userClearedAt) {
-      messages = await Message.find({ chat: chatId }) 
+      messages = await Message.find({ chat: chatId })
         .populate("sender", "_id firstName lastName email image")
         .populate("readBy", "_id firstName lastName email image")
         .populate("readReceipts.user", "_id firstName lastName email image")
         .sort({ createdAt: 1 });
     } else {
       messages = await Message.find({
-        chat: chatId, 
+        chat: chatId,
         createdAt: { $gt: userClearedAt },
       })
         .populate("sender", "_id firstName lastName email image")
@@ -1248,4 +1272,253 @@ export const clearChatMessages = async (req, res, next) => {
   }
 };
 
+export const getSharedMedia = async (req, res, next) => {
+  try {
+    const { userId1, userId2 } = req.query;
+    const currentUserId = req.userId;
 
+    console.log(`📁 Getting shared media between ${userId1} and ${userId2}`);
+
+    if (!userId1 || !userId2) {
+      return res.status(400).json({
+        message: "Both userId1 and userId2 are required",
+      });
+    }
+
+    if (currentUserId !== userId1 && currentUserId !== userId2) {
+      return res.status(403).json({
+        message: "You can only view shared media for chats you're part of",
+      });
+    }
+
+    const chat = await Chat.findOne({
+      type: "direct",
+      participants: {
+        $all: [userId1, userId2],
+        $size: 2,
+      },
+    });
+
+    if (!chat) {
+      console.log("❌ No direct chat found between users");
+      return res.status(200).json([]);
+    }
+
+    console.log(`✅ Found chat: ${chat._id} between users`);
+
+    const sharedMedia = await Message.find({
+      chat: chat._id,
+      messageType: { $in: ["image", "video", "file", "audio"] },
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false },
+        { deletedForEveryone: false },
+      ],
+    })
+      .populate("sender", "_id firstName lastName email image")
+      .sort({ createdAt: -1 })
+      .select(
+        "_id messageType content fileUrl fileName fileSize mimeType createdAt sender isDeleted"
+      );
+
+    console.log(`✅ Found ${sharedMedia.length} shared media items`);
+
+    const formattedMedia = sharedMedia.map((media) => ({
+      _id: media._id,
+      messageType: media.messageType,
+      content: media.content,
+      fileUrl: media.fileUrl,
+      fileName: media.fileName,
+      fileSize: media.fileSize,
+      mimeType: media.mimeType,
+      createdAt: media.createdAt,
+      sender: media.sender,
+      isDeleted: media.isDeleted || false,
+    }));
+
+    res.status(200).json(formattedMedia);
+  } catch (error) {
+    console.error("❌ Error in getSharedMedia:", error);
+    res.status(500).json({
+      message: "Failed to get shared media",
+      error: error.message,
+    });
+  }
+};
+
+export const getSharedMediaPaginated = async (req, res, next) => {
+  try {
+    const { userId1, userId2 } = req.query;
+    const currentUserId = req.userId;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    if (!userId1 || !userId2) {
+      return res.status(400).json({
+        message: "Both userId1 and userId2 are required",
+      });
+    }
+
+    if (currentUserId !== userId1 && currentUserId !== userId2) {
+      return res.status(403).json({
+        message: "You can only view shared media for chats you're part of",
+      });
+    }
+
+    const chat = await Chat.findOne({
+      type: "direct",
+      participants: {
+        $all: [userId1, userId2],
+        $size: 2,
+      },
+    });
+
+    if (!chat) {
+      return res.status(200).json({
+        media: [],
+        totalCount: 0,
+        totalPages: 0,
+        currentPage: page,
+      });
+    }
+
+    const totalCount = await Message.countDocuments({
+      chat: chat._id,
+      messageType: { $in: ["image", "video", "file", "audio"] },
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false },
+        { deletedForEveryone: false },
+      ],
+    });
+
+    const sharedMedia = await Message.find({
+      chat: chat._id,
+      messageType: { $in: ["image", "video", "file", "audio"] },
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false },
+        { deletedForEveryone: false },
+      ],
+    })
+      .populate("sender", "_id firstName lastName email image")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select(
+        "_id messageType content fileUrl fileName fileSize mimeType createdAt sender isDeleted"
+      );
+
+    const formattedMedia = sharedMedia.map((media) => ({
+      _id: media._id,
+      messageType: media.messageType,
+      content: media.content,
+      fileUrl: media.fileUrl,
+      fileName: media.fileName,
+      fileSize: media.fileSize,
+      mimeType: media.mimeType,
+      createdAt: media.createdAt,
+      sender: media.sender,
+      isDeleted: media.isDeleted || false,
+    }));
+
+    res.status(200).json({
+      media: formattedMedia,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page,
+      hasNextPage: page < Math.ceil(totalCount / limit),
+      hasPrevPage: page > 1,
+    });
+  } catch (error) {
+    console.error("❌ Error in getSharedMediaPaginated:", error);
+    res.status(500).json({
+      message: "Failed to get shared media",
+      error: error.message,
+    });
+  }
+};
+
+export const getSharedMediaByType = async (req, res, next) => {
+  try {
+    const { userId1, userId2, types } = req.query;
+    const currentUserId = req.userId;
+
+    console.log(
+      `📁 Getting shared media by type between ${userId1} and ${userId2}`
+    );
+
+    if (!userId1 || !userId2) {
+      return res.status(400).json({
+        message: "Both userId1 and userId2 are required",
+      });
+    }
+
+    if (currentUserId !== userId1 && currentUserId !== userId2) {
+      return res.status(403).json({
+        message: "You can only view shared media for chats you're part of",
+      });
+    }
+
+    let messageTypes = ["image", "video", "file", "audio"];
+    if (types) {
+      const requestedTypes = Array.isArray(types) ? types : [types];
+      messageTypes = messageTypes.filter((type) =>
+        requestedTypes.includes(type)
+      );
+    }
+
+    const chat = await Chat.findOne({
+      type: "direct",
+      participants: {
+        $all: [userId1, userId2],
+        $size: 2,
+      },
+    });
+
+    if (!chat) {
+      return res.status(200).json([]);
+    }
+
+    const sharedMedia = await Message.find({
+      chat: chat._id,
+      messageType: { $in: messageTypes },
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false },
+        { deletedForEveryone: false },
+      ],
+    })
+      .populate("sender", "_id firstName lastName email image")
+      .sort({ createdAt: -1 })
+      .select(
+        "_id messageType content fileUrl fileName fileSize mimeType createdAt sender isDeleted"
+      );
+
+    const groupedMedia = {
+      images: sharedMedia.filter((media) => media.messageType === "image"),
+      videos: sharedMedia.filter((media) => media.messageType === "video"),
+      files: sharedMedia.filter((media) => media.messageType === "file"),
+      audio: sharedMedia.filter((media) => media.messageType === "audio"),
+    };
+
+    res.status(200).json({
+      all: sharedMedia,
+      grouped: groupedMedia,
+      counts: {
+        total: sharedMedia.length,
+        images: groupedMedia.images.length,
+        videos: groupedMedia.videos.length,
+        files: groupedMedia.files.length,
+        audio: groupedMedia.audio.length,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error in getSharedMediaByType:", error);
+    res.status(500).json({
+      message: "Failed to get shared media",
+      error: error.message,
+    });
+  }
+};
