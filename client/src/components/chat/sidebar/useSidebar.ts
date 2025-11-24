@@ -1,8 +1,9 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useApp } from "../../../contexts/appcontext/index";
 import { useSocket } from "../../../hooks/useSocket";
 import { useMarkAsRead } from "../../../hooks/useMarkAsRead";
 import type { UserChat, ChannelChat, ChatOrNull } from "../../../types/types";
+import { useChatContext } from "../../../hooks/useChatContext";
 
 interface UseSidebarProps {
   directChats: UserChat[];
@@ -28,20 +29,11 @@ export const useSidebar = ({
 
   console.log({ channels });
 
-  const [activeTab, setActiveTab] = useState<"direct" | "channels">(() => {
-    const savedTab = localStorage.getItem("sidebar-active-tab");
-    return savedTab === "direct" || savedTab === "channels"
-      ? savedTab
-      : "direct";
-  });
+  const { activeTab, setActiveTab } = useChatContext();
 
   const { state } = useApp();
   const { onlineUsers } = useSocket();
   const markAsReadMutation = useMarkAsRead();
-
-  useEffect(() => {
-    localStorage.setItem("sidebar-active-tab", activeTab);
-  }, [activeTab]);
 
   const safeOnlineUsers = useMemo(() => {
     return Array.isArray(onlineUsers) ? onlineUsers : [];
@@ -101,9 +93,12 @@ export const useSidebar = ({
     setShowNewChatModal(false);
   }, []);
 
-  const handleTabChange = useCallback((tab: "direct" | "channels") => {
-    setActiveTab(tab);
-  }, []);
+  const handleTabChange = useCallback(
+    (tab: "direct" | "channels") => {
+      setActiveTab(tab);
+    },
+    [setActiveTab]
+  );
 
   const enhancedChats = useMemo(() => {
     return directChats?.map((chat) => {
