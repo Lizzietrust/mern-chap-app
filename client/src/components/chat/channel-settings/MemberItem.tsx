@@ -1,9 +1,12 @@
 import React from "react";
 import type { User } from "../../../types/types";
-import { getInitials } from "../../../functions";
+import { useNavigate } from "react-router-dom";
 
 interface MemberItemProps {
-  member: User;
+  member: User & {
+    isOnline?: boolean;
+    lastSeen?: string;
+  };
   isAdmin: boolean;
   isCurrentUser: boolean;
   isCurrentUserAdmin: boolean;
@@ -21,6 +24,8 @@ export const MemberItem: React.FC<MemberItemProps> = ({
   onRemoveMember,
   isDark,
 }) => {
+  const navigate = useNavigate();
+
   const handleToggleAdmin = () => {
     onToggleAdmin(member._id, !isAdmin);
   };
@@ -28,6 +33,15 @@ export const MemberItem: React.FC<MemberItemProps> = ({
   const handleRemoveMember = () => {
     onRemoveMember(member._id);
   };
+
+  const getMemberName = (member: User | string): string => {
+    if (typeof member === "string") {
+      return "Unknown User";
+    }
+    return `${member.firstName} ${member.lastName}`;
+  };
+
+  const displayIsOnline = isCurrentUser ? true : member.isOnline;
 
   return (
     <div
@@ -40,11 +54,39 @@ export const MemberItem: React.FC<MemberItemProps> = ({
       <div className="flex items-center space-x-3">
         <div className="flex-shrink-0">
           <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${
+            className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium cursor-pointer relative ${
               isDark ? "bg-blue-600" : "bg-blue-500"
             }`}
+            onClick={() =>
+              !isCurrentUser
+                ? navigate(`/profile/${member._id}`)
+                : navigate(`/profile`)
+            }
           >
-            {getInitials(member.firstName || "", member.lastName || "")}
+            {member.image ? (
+              <img
+                src={member.image}
+                alt={`${getMemberName(member)}'s avatar`}
+                className="w-full h-full rounded-full object-cover"
+              />
+            ) : (
+              <div
+                className={`w-full h-full flex items-center justify-center ${
+                  isDark ? "bg-blue-600" : "bg-blue-500"
+                } text-white font-semibold`}
+              >
+                {member.firstName && member.lastName
+                  ? `${member.firstName[0]}${member.lastName[0]}`.toUpperCase()
+                  : "UU"}
+              </div>
+            )}
+
+            {/* Online status indicator */}
+            <div
+              className={`w-2 h-2 rounded-full absolute bottom-0 right-0 ${
+                displayIsOnline ? "bg-green-500 animate-pulse" : "bg-gray-400"
+              }`}
+            />
           </div>
         </div>
         <div>
@@ -75,6 +117,11 @@ export const MemberItem: React.FC<MemberItemProps> = ({
             className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
           >
             {member.email}
+            {!displayIsOnline && member.lastSeen && (
+              <span className="ml-2 text-xs">
+                • Last seen {new Date(member.lastSeen).toLocaleDateString()}
+              </span>
+            )}
           </div>
         </div>
       </div>
