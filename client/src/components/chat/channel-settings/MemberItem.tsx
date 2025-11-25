@@ -41,6 +41,30 @@ export const MemberItem: React.FC<MemberItemProps> = ({
     return `${member.firstName} ${member.lastName}`;
   };
 
+  const formatLastSeen = (lastSeen?: string): string => {
+    if (!lastSeen) return "a long time ago";
+
+    try {
+      const lastSeenDate = new Date(lastSeen);
+      const now = new Date();
+      const diffMs = now.getTime() - lastSeenDate.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMins < 1) return "just now";
+      if (diffMins < 60) return `${diffMins} min ago`;
+      if (diffHours < 24)
+        return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+      if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+
+      return lastSeenDate.toLocaleDateString();
+    } catch (error) {
+      console.error("Error formatting last seen:", error);
+      return "a long time ago";
+    }
+  };
+
   const displayIsOnline = isCurrentUser ? true : member.isOnline;
 
   return (
@@ -119,7 +143,7 @@ export const MemberItem: React.FC<MemberItemProps> = ({
             {member.email}
             {!displayIsOnline && member.lastSeen && (
               <span className="ml-2 text-xs">
-                • Last seen {new Date(member.lastSeen).toLocaleDateString()}
+                • Last seen {formatLastSeen(member.lastSeen)}
               </span>
             )}
           </div>
