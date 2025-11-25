@@ -130,9 +130,17 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
 
           const onlineUser = currentOnlineUsers.find((u) => u._id === userId);
           if (onlineUser) {
+            let lastSeenDate: Date | undefined;
+            if (onlineUser.lastSeen) {
+              lastSeenDate =
+                typeof onlineUser.lastSeen === "string"
+                  ? new Date(onlineUser.lastSeen)
+                  : onlineUser.lastSeen;
+            }
+
             return {
               isOnline: onlineUser.isOnline || false,
-              lastSeen: onlineUser.lastSeen,
+              lastSeen: lastSeenDate,
               userObject: onlineUser,
             };
           }
@@ -142,9 +150,18 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
               `ℹ️ Using user object data for ${userId}:`,
               user.isOnline
             );
+
+            let lastSeenDate: Date | undefined;
+            if (user.lastSeen) {
+              lastSeenDate =
+                typeof user.lastSeen === "string"
+                  ? new Date(user.lastSeen)
+                  : user.lastSeen;
+            }
+
             return {
               isOnline: user.isOnline || false,
-              lastSeen: user.lastSeen,
+              lastSeen: lastSeenDate,
               userObject: user,
             };
           }
