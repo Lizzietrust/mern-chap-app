@@ -26,6 +26,30 @@ export const getChatTitle = (chat: Chat, currentUser: User | null): string => {
   return "Select a chat";
 };
 
+export const getChatImage = (chat: Chat, currentUser: User | null): string => {
+  if (!chat) return "Select a chat";
+
+  if (chat.type === "channel") {
+    return chat.name || "Channel";
+  }
+
+  if (chat.type === "direct") {
+    const otherUser = chat.participants?.find(
+      (p: User) => p._id !== currentUser?._id
+    );
+
+    if (otherUser) {
+      return (
+        otherUser.image ||
+        "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
+      );
+    }
+    return "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
+  }
+
+  return "Select a chat";
+};
+
 export const getDisplayUnreadCount = (
   chat: UserChat | ChannelChat,
   selectedChatId: string | undefined,
