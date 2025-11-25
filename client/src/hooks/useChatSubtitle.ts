@@ -1,7 +1,12 @@
 import { useCallback, useMemo } from "react";
 import { useSocket } from "./useSocket";
-import type { Chat, ChannelChat, UserChat } from "../types/types";
-import type { User } from "../types/app";
+import type {
+  Chat,
+  ChannelChat,
+  UserChat,
+  User as TypesUser,
+} from "../types/types";
+import type { User as AppUser } from "../types/app";
 import type { ChatSubtitleConfig, UserStatus } from "../types/chat";
 import { DEFAULT_SUBTITLE_CONFIG, STATUS_TEXTS } from "../constants/chat";
 
@@ -25,9 +30,25 @@ const formatTime = (
   });
 };
 
+const convertToAppUser = (user: TypesUser): AppUser => {
+  return {
+    ...user,
+    lastSeen:
+      user.lastSeen instanceof Date
+        ? user.lastSeen
+        : typeof user.lastSeen === "string"
+        ? new Date(user.lastSeen)
+        : undefined,
+  };
+};
+
+const convertOnlineUsers = (onlineUsers: TypesUser[]): AppUser[] => {
+  return onlineUsers.map(convertToAppUser);
+};
+
 const getUserStatus = (
-  user: User,
-  onlineUsers: User[],
+  user: AppUser,
+  onlineUsers: AppUser[],
   config: ChatSubtitleConfig
 ): UserStatus => {
   const isOnline = onlineUsers.some(
@@ -48,10 +69,7 @@ const getUserStatus = (
     )}`;
     return {
       isOnline: false,
-      lastSeen:
-        typeof user.lastSeen === "string"
-          ? new Date(user.lastSeen)
-          : user.lastSeen,
+      lastSeen: user.lastSeen,
       statusText: lastSeenText,
     };
   }
@@ -82,8 +100,8 @@ const getChannelSubtitle = (
 
 const getDirectChatSubtitle = (
   chat: UserChat,
-  currentUser: User | null,
-  onlineUsers: User[],
+  currentUser: AppUser | null,
+  onlineUsers: AppUser[],
   config: ChatSubtitleConfig
 ): string => {
   const otherUser = chat.participants?.find((p) => p._id !== currentUser?._id);
@@ -92,12 +110,17 @@ const getDirectChatSubtitle = (
     return "Unknown User";
   }
 
-  const userStatus = getUserStatus(otherUser, onlineUsers, config);
+  const appUser = convertToAppUser(otherUser);
+  const userStatus = getUserStatus(appUser, onlineUsers, config);
   return userStatus.statusText;
 };
 
 export const useChatSubtitle = (userConfig?: Partial<ChatSubtitleConfig>) => {
-  const { onlineUsers } = useSocket();
+  const { onlineUsers: typesOnlineUsers } = useSocket();
+
+  const onlineUsers = useMemo(() => {
+    return convertOnlineUsers(typesOnlineUsers);
+  }, [typesOnlineUsers]);
 
   const config = useMemo(
     () => ({
@@ -108,7 +131,7 @@ export const useChatSubtitle = (userConfig?: Partial<ChatSubtitleConfig>) => {
   );
 
   const getChatSubtitle = useCallback(
-    (selectedChat: Chat | null, currentUser: User | null): string => {
+    (selectedChat: Chat | null, currentUser: AppUser | null): string => {
       if (!selectedChat) {
         return "";
       }
@@ -138,14 +161,14 @@ export const useChatSubtitle = (userConfig?: Partial<ChatSubtitleConfig>) => {
   );
 
   const chatSubtitle = useCallback(
-    (selectedChat: Chat | null, currentUser: User | null): string => {
+    (selectedChat: Chat | null, currentUser: AppUser | null): string => {
       return getChatSubtitle(selectedChat, currentUser);
     },
     [getChatSubtitle]
   );
 
   const getUserChatStatus = useCallback(
-    (user: User): UserStatus => {
+    (user: AppUser): UserStatus => {
       return getUserStatus(user, onlineUsers, config);
     },
     [onlineUsers, config]
