@@ -14,7 +14,7 @@ export interface User {
   lastName?: string;
   image?: string;
   isOnline?: boolean;
-  lastSeen?: Date;
+  lastSeen?: Date | string;
   createdAt: string;
   updatedAt: string;
   joinedDate?: string;
