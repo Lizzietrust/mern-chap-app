@@ -6,6 +6,7 @@ export interface ChatContainerProps {
   isDark: boolean;
   setSelectedChat: Dispatch<SetStateAction<ChatOrNull>>;
   getChatTitle: () => string;
+  getChatImage: () => string;
   messages: Message[];
   formatTime: (date: Date | string) => string;
   isTyping: boolean;
@@ -34,6 +35,7 @@ export interface ChatHeaderProps {
   isDark: boolean;
   onBack: () => void;
   title: string;
+  image: string;
   subtitle: string;
   onSearch: () => void;
   onMenu: () => void;
