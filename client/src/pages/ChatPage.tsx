@@ -23,6 +23,7 @@ import {
   getChatTitle,
   formatTime,
   getDisplayUnreadCount,
+  getChatImage,
 } from "../utils/chat/chatUtils";
 import { chatApi } from "../lib/api";
 import type { User } from "../types/auth";
@@ -180,6 +181,11 @@ export function ChatPage() {
     return getChatTitle(enhancedSelectedChat, user);
   };
 
+  const getSafeChatImage = () => {
+    if (!enhancedSelectedChat) return "Select a chat";
+    return getChatImage(enhancedSelectedChat, user);
+  };
+
   const handleNextPage = () => {
     if (currentPage < totalPages) {
       handlePageChange(currentPage + 1);
@@ -316,6 +322,7 @@ export function ChatPage() {
             isDark={isDark}
             setSelectedChat={handleChatSelect}
             getChatTitle={getSafeChatTitle}
+            getChatImage={getSafeChatImage}
             messages={messages || []}
             formatTime={formatTime}
             isTyping={isTyping}
