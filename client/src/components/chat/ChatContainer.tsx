@@ -31,6 +31,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   isDark,
   setSelectedChat,
   getChatTitle,
+  getChatImage,
   messages,
   formatTime,
   isTyping,
@@ -379,6 +380,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
           isDark={isDark}
           onBack={() => setSelectedChat(null)}
           title={getChatTitle()}
+          image={getChatImage()}
           subtitle={subtitle}
           onSearch={handleSearchClick}
           onMenu={handleMenuClick}
