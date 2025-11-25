@@ -1,9 +1,22 @@
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { User, NotificationDemo } from "../../types/types";
+import type { User as TypesUser, NotificationDemo } from "../../types/types";
+import type { User as AppUser } from "../../types/app";
 import { useApp } from "../../contexts/appcontext/index";
 import { useTheme } from "../../hooks/useTheme";
 import { useNotifications } from "../../contexts";
+
+const convertToAppUser = (user: TypesUser): AppUser => {
+  return {
+    ...user,
+    lastSeen:
+      user.lastSeen instanceof Date
+        ? user.lastSeen
+        : typeof user.lastSeen === "string"
+        ? new Date(user.lastSeen)
+        : undefined,
+  };
+};
 
 export const useContextDemo = () => {
   const { state, login, logout, toggleSidebar, setLoading } = useApp();
@@ -11,17 +24,21 @@ export const useContextDemo = () => {
   const { success, error, warning, info, addNotification } = useNotifications();
   const queryClient = useQueryClient();
 
- 
-  const [demoUser] = useState<User>({
-    _id: "demo-user-1", 
+  const [demoUser] = useState<TypesUser>({
+    _id: "demo-user-1",
     name: "Demo User",
     email: "demo@example.com",
-    avatar: "", 
-    isOnline: true, 
-  } as User); 
+    profileSetup: true,
+    avatar: "",
+    isOnline: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastSeen: new Date(),
+  });
 
   const handleLogin = useCallback(() => {
-    login(demoUser);
+    const loginUser: AppUser = convertToAppUser(demoUser);
+    login(loginUser);
     success("Successfully logged in!", "Welcome back");
   }, [login, demoUser, success]);
 
