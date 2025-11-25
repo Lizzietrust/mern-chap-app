@@ -5,13 +5,26 @@ import { SelectedChatProvider } from "../selectedChatContext";
 import { AppLogic } from "../AppLogic";
 import { appReducer, initialState } from "../reducers/appReducer";
 import { AppContext } from "./appConstants";
-import type { User, AppNotification } from "../../types/types";
+import type { User as TypesUser, AppNotification } from "../../types/types";
+import type { User as AppUser } from "../../types/app";
 import { ChatProvider } from "../chat";
 import { CallProvider } from "../call/CallProvider";
 
 interface AppProviderProps {
   children: ReactNode;
 }
+
+const convertToAppUser = (user: TypesUser): AppUser => {
+  return {
+    ...user,
+    lastSeen:
+      user.lastSeen instanceof Date
+        ? user.lastSeen
+        : typeof user.lastSeen === "string"
+        ? new Date(user.lastSeen)
+        : undefined,
+  };
+};
 
 export function AppProvider({ children }: AppProviderProps) {
   const [state, dispatch] = useReducer(appReducer, initialState);
@@ -57,8 +70,9 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [state.user?._id, socket]);
 
-  const login = (user: User) => {
-    dispatch({ type: "LOGIN", payload: user });
+  const login = (user: TypesUser) => {
+    const appUser: AppUser = convertToAppUser(user);
+    dispatch({ type: "LOGIN", payload: appUser });
 
     if (socket && user._id) {
       console.log("🔐 Identifying socket after login:", user._id);
