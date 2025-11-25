@@ -6,7 +6,11 @@ import { API_BASE_URL } from "../lib/api";
 import { MESSAGE_KEYS as messageKeys } from "../hooks/chats";
 import { SOCKET_EVENTS, SOCKET_CONFIG } from "../constants/socket";
 import type { SocketContextType } from "../types/socket";
-import type { User, Message as ClientMessage } from "../types/types";
+import type {
+  User as TypesUser,
+  Message as ClientMessage,
+} from "../types/types";
+import type { User as AppUser } from "../types/app";
 
 interface ServerMessage {
   _id: string;
@@ -19,17 +23,17 @@ interface ServerMessage {
   fileName?: string;
   fileSize?: number;
   status?: "sent" | "delivered" | "read";
-  readBy?: string[] | User[];
+  readBy?: string[] | TypesUser[];
   readReceipts?: Array<{
-    user: string | User;
+    user: string | TypesUser;
     readAt: Date;
   }>;
-  deliveredTo?: string[] | User[];
+  deliveredTo?: string[] | TypesUser[];
 }
 
 interface UserOnlineData {
   userId: string;
-  user: User;
+  user: TypesUser;
 }
 
 interface UserOfflineData {
@@ -40,11 +44,27 @@ interface UserOfflineData {
 interface MessageStatusUpdateData {
   messageId: string;
   status: "sent" | "delivered" | "read";
-  readBy?: string[] | User[];
+  readBy?: string[] | TypesUser[];
   chatId: string;
 }
 
 type SocketEventHandler = (...args: unknown[]) => void;
+
+const convertToAppUser = (user: TypesUser): AppUser => {
+  return {
+    ...user,
+    lastSeen:
+      user.lastSeen instanceof Date
+        ? user.lastSeen
+        : typeof user.lastSeen === "string"
+        ? new Date(user.lastSeen)
+        : undefined,
+  };
+};
+
+const convertOnlineUsers = (onlineUsers: TypesUser[]): AppUser[] => {
+  return onlineUsers.map(convertToAppUser);
+};
 
 export function useSocketLogic(): SocketContextType {
   const [isConnected, setIsConnected] = useState(false);
@@ -65,14 +85,15 @@ export function useSocketLogic(): SocketContextType {
   );
 
   const setOnlineUsersInAppState = useCallback(
-    (users: User[]) => {
-      dispatch({ type: "SET_ONLINE_USERS", payload: users });
+    (users: TypesUser[]) => {
+      const appUsers = convertOnlineUsers(users);
+      dispatch({ type: "SET_ONLINE_USERS", payload: appUsers });
     },
     [dispatch]
   );
 
   const updateOnlineUsers = useCallback(
-    (updater: (prev: User[]) => User[]) => {
+    (updater: (prev: AppUser[]) => AppUser[]) => {
       dispatch({
         type: "SET_ONLINE_USERS",
         payload: updater(state.onlineUsers || []),
@@ -82,7 +103,7 @@ export function useSocketLogic(): SocketContextType {
   );
 
   const normalizeSender = useCallback(
-    (sender: string | { _id: string }): string | User => {
+    (sender: string | { _id: string }): string | TypesUser => {
       if (typeof sender === "string") {
         return sender;
       }
@@ -248,7 +269,7 @@ export function useSocketLogic(): SocketContextType {
   );
 
   const handleOnlineUsers = useCallback(
-    (users: User[]) => {
+    (users: TypesUser[]) => {
       console.log("📋 Received online users:", users.length);
       setOnlineUsersInAppState(users);
     },
@@ -265,7 +286,9 @@ export function useSocketLogic(): SocketContextType {
             u._id === data.userId ? { ...u, isOnline: true } : u
           );
         }
-        return [...prev, { ...data.user, isOnline: true }];
+
+        const appUser = convertToAppUser(data.user);
+        return [...prev, { ...appUser, isOnline: true }];
       });
     },
     [updateOnlineUsers]
@@ -351,7 +374,7 @@ export function useSocketLogic(): SocketContextType {
         setIsConnected(false);
       },
       [SOCKET_EVENTS.ONLINE_USERS]: (users: unknown) => {
-        handleOnlineUsers(users as User[]);
+        handleOnlineUsers(users as TypesUser[]);
       },
       [SOCKET_EVENTS.USER_ONLINE]: (data: unknown) => {
         handleUserOnline(data as UserOnlineData);
@@ -484,7 +507,7 @@ export function useSocketLogic(): SocketContextType {
       chatId: string;
       content: string;
       messageType: string;
-      sender: User;
+      sender: TypesUser;
     }) => {
       if (
         socketRef.current?.connected &&
