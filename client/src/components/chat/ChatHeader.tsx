@@ -54,6 +54,20 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
     const isChannel = selectedChat?.type === "channel";
     const currentUserId = state.user?._id;
 
+    const isChannelAdmin = useMemo(() => {
+      if (!isChannel || !selectedChat?.admins) return false;
+
+      return selectedChat.admins.some((admin) => {
+        if (typeof admin === "string") {
+          return admin === currentUserId;
+        } else {
+          return admin._id === currentUserId;
+        }
+      });
+    }, [isChannel, selectedChat, currentUserId]);
+
+    console.log("isChannelAdmin:", isChannelAdmin);
+
     const otherParticipant = useMemo(() => {
       if (isChannel || !selectedChat || !isDirectChat(selectedChat))
         return null;
@@ -81,6 +95,18 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
       }
     }, [isChannel, selectedChat, currentUserId]);
 
+    const getSafeUserId = useCallback(
+      (user: User | string | null): string | null => {
+        if (!user) return null;
+        return typeof user === "string" ? user : user._id;
+      },
+      []
+    );
+
+    const isUserObject = (user: User | string | null): user is User => {
+      return user !== null && typeof user === "object" && "_id" in user;
+    };
+
     const getUserStatus = useCallback(
       (
         user: User | string | null
@@ -90,7 +116,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
             return { isOnline: false };
           }
 
-          const userId = typeof user === "string" ? user : user?._id;
+          const userId = getSafeUserId(user);
 
           if (!userId) {
             return { isOnline: false };
@@ -111,7 +137,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
             };
           }
 
-          if (typeof user !== "string") {
+          if (isUserObject(user)) {
             console.log(
               `ℹ️ Using user object data for ${userId}:`,
               user.isOnline
@@ -130,7 +156,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
           return { isOnline: false };
         }
       },
-      []
+      [getSafeUserId]
     );
 
     const formatLastSeen = useCallback((lastSeen?: Date): string => {
@@ -203,8 +229,64 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
     );
     const [isOnline, setIsOnline] = useState<boolean>(false);
     const [showMobileMenu, setShowMobileMenu] = useState<boolean>(false);
+    const [showCallDropdown, setShowCallDropdown] = useState<boolean>(false);
+    const [showRingtonesDropdown, setShowRingtonesDropdown] =
+      useState<boolean>(false);
 
     const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const callDropdownRef = useRef<HTMLDivElement>(null);
+    const ringtonesDropdownRef = useRef<HTMLDivElement>(null);
+
+    const ringtones = useMemo(
+      () => [
+        { id: "default", name: "Default Ringtone", file: "default.mp3" },
+        { id: "classic", name: "Classic Ring", file: "classic.mp3" },
+        { id: "digital", name: "Digital Beep", file: "digital.mp3" },
+        { id: "melody", name: "Soft Melody", file: "melody.mp3" },
+        { id: "chime", name: "Wind Chime", file: "chime.mp3" },
+      ],
+      []
+    );
+
+    const [selectedRingtone, setSelectedRingtone] = useState<string>(() => {
+      return localStorage.getItem("selectedRingtone") || "default";
+    });
+
+    const handleRingtoneSelect = useCallback(
+      (ringtoneId: string) => {
+        setSelectedRingtone(ringtoneId);
+        localStorage.setItem("selectedRingtone", ringtoneId);
+        setShowRingtonesDropdown(false);
+
+        const ringtone = ringtones.find((r) => r.id === ringtoneId);
+        if (ringtone) {
+          console.log(`Selected ringtone: ${ringtone.name}`);
+        }
+      },
+      [ringtones]
+    );
+
+    useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+        if (
+          callDropdownRef.current &&
+          !callDropdownRef.current.contains(event.target as Node)
+        ) {
+          setShowCallDropdown(false);
+        }
+        if (
+          ringtonesDropdownRef.current &&
+          !ringtonesDropdownRef.current.contains(event.target as Node)
+        ) {
+          setShowRingtonesDropdown(false);
+        }
+      };
+
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }, []);
 
     const updateStatus = useCallback(() => {
       try {
@@ -262,33 +344,52 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
     useEffect(() => {
       if (otherParticipant && !isChannel) {
         const status = getUserStatus(otherParticipant);
-        console.log(`🔍 Current status for ${otherParticipant._id}:`, {
-          isOnline: status.isOnline,
-          lastSeen: status.lastSeen,
-          foundInOnlineUsers: safeOnlineUsers.some(
-            (u) => u._id === otherParticipant._id
-          ),
-        });
+        console.log(
+          `🔍 Current status for ${getSafeUserId(otherParticipant)}:`,
+          {
+            isOnline: status.isOnline,
+            lastSeen: status.lastSeen,
+            foundInOnlineUsers: safeOnlineUsers.some(
+              (u) => u._id === getSafeUserId(otherParticipant)
+            ),
+          }
+        );
       }
-    }, [safeOnlineUsers, otherParticipant, isChannel, getUserStatus]);
+    }, [
+      safeOnlineUsers,
+      otherParticipant,
+      isChannel,
+      getUserStatus,
+      getSafeUserId,
+    ]);
 
     useEffect(() => {
       if (otherParticipant) {
-        console.log(`👤 Participant changed to:`, otherParticipant._id);
+        console.log(
+          `👤 Participant changed to:`,
+          getSafeUserId(otherParticipant)
+        );
         updateStatus();
       }
-    }, [otherParticipant, updateStatus]);
+    }, [otherParticipant, updateStatus, getSafeUserId]);
 
     const handleAudioCall = () => {
-      if (otherParticipant) {
+      if (otherParticipant && isUserObject(otherParticipant)) {
         startCall(otherParticipant, "audio");
       }
+      setShowCallDropdown(false);
     };
 
     const handleVideoCall = () => {
-      if (otherParticipant) {
+      if (otherParticipant && isUserObject(otherParticipant)) {
         startCall(otherParticipant, "video");
       }
+      setShowCallDropdown(false);
+    };
+
+    const handleCallHistory = () => {
+      console.log("Open call history");
+      setShowCallDropdown(false);
     };
 
     const handleMobileMenuClick = () => {
@@ -299,6 +400,234 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
       action();
       setShowMobileMenu(false);
     };
+
+    const handleProfileNavigation = () => {
+      if (otherParticipant && isUserObject(otherParticipant)) {
+        navigate(`/profile/${otherParticipant._id}`);
+      }
+    };
+
+    const renderRingtonesDropdown = () => (
+      <div className="relative" ref={ringtonesDropdownRef}>
+        <button
+          onClick={() => setShowRingtonesDropdown(!showRingtonesDropdown)}
+          className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+            isDark ? "text-gray-300" : "text-gray-700"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 001.414 1.414m-2.828-9.9a9 9 0 012.728-2.728"
+                />
+              </svg>
+              <span>Select Ringtone</span>
+            </div>
+            <svg
+              className={`w-4 h-4 transform transition-transform ${
+                showRingtonesDropdown ? "rotate-180" : ""
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </div>
+        </button>
+
+        {/* Ringtones Submenu */}
+        {showRingtonesDropdown && (
+          <div
+            className={`absolute top-10 left-10 ml-1 w-56 rounded-lg shadow-lg py-2 z-50 ${
+              isDark
+                ? "bg-gray-800 border border-gray-700"
+                : "bg-white border border-gray-200"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className={`px-4 py-2 border-b ${
+                isDark
+                  ? "border-gray-700 text-gray-400"
+                  : "border-gray-200 text-gray-600"
+              } text-sm font-medium`}
+            >
+              Select Ringtone
+            </div>
+
+            {ringtones.map((ringtone) => (
+              <button
+                key={ringtone.id}
+                onClick={() => handleRingtoneSelect(ringtone.id)}
+                className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                  isDark ? "text-gray-300" : "text-gray-700"
+                } ${
+                  selectedRingtone === ringtone.id
+                    ? isDark
+                      ? "bg-blue-900 text-blue-300"
+                      : "bg-blue-100 text-blue-700"
+                    : ""
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span>{ringtone.name}</span>
+                  {selectedRingtone === ringtone.id && (
+                    <svg
+                      className="w-4 h-4"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+
+    const renderCallButton = () => (
+      <div className="relative" ref={callDropdownRef}>
+        <button
+          onClick={() => setShowCallDropdown(!showCallDropdown)}
+          title="Call Options"
+          className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+            isDark ? "text-gray-300" : "text-gray-600"
+          }`}
+        >
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+            />
+          </svg>
+        </button>
+
+        {/* Call Dropdown Menu */}
+        {showCallDropdown && (
+          <div
+            className={`absolute right-0 top-12 w-48 rounded-lg shadow-lg py-2 z-50 ${
+              isDark
+                ? "bg-gray-800 border border-gray-700"
+                : "bg-white border border-gray-200"
+            }`}
+          >
+            {/* Audio Call Option */}
+            <button
+              onClick={handleAudioCall}
+              className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                isDark ? "text-gray-300" : "text-gray-700"
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                  />
+                </svg>
+                <span>Audio Call</span>
+              </div>
+            </button>
+
+            {/* Video Call Option */}
+            <button
+              onClick={handleVideoCall}
+              className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                isDark ? "text-gray-300" : "text-gray-700"
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+                <span>Video Call</span>
+              </div>
+            </button>
+
+            {/* Call History Option */}
+            <button
+              onClick={handleCallHistory}
+              className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                isDark ? "text-gray-300" : "text-gray-700"
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span>Call History</span>
+              </div>
+            </button>
+
+            {/* Divider */}
+            <div
+              className={`border-t my-1 ${
+                isDark ? "border-gray-700" : "border-gray-200"
+              }`}
+            />
+
+            {/* Ringtones Option */}
+            {renderRingtonesDropdown()}
+          </div>
+        )}
+      </div>
+    );
 
     const renderDesktopActions = () => (
       <div className="hidden md:flex items-center space-x-2">
@@ -340,56 +669,9 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
           <MdOutlineNotificationsNone className="w-6 h-6" />
         </button>
 
-        {/* Call Buttons - Only for direct chats */}
-        {!isChannel && otherParticipant && (
-          <>
-            {/* Audio Call Button */}
-            <button
-              onClick={handleAudioCall}
-              title="Audio Call"
-              className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                />
-              </svg>
-            </button>
-
-            {/* Video Call Button */}
-            <button
-              onClick={handleVideoCall}
-              title="Video Call"
-              className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
-            </button>
-          </>
-        )}
+        {/* Call Button - Show for direct chats OR channels if admin */}
+        {((!isChannel && otherParticipant) || (isChannel && isChannelAdmin)) &&
+          renderCallButton()}
 
         {/* Settings Button */}
         {onSettings && (
@@ -423,7 +705,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
         )}
 
         {/* Participants Button - Only for channels */}
-        {isChannel && onParticipants && (
+        {/* {isChannel && onParticipants && (
           <button
             onClick={onParticipants}
             title="View participants"
@@ -445,7 +727,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
               />
             </svg>
           </button>
-        )}
+        )} */}
       </div>
     );
 
@@ -535,8 +817,9 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
               </div>
             </button>
 
-            {/* Call Options - Only for direct chats */}
-            {!isChannel && otherParticipant && (
+            {/* Call Options - Show for direct chats OR channels if admin */}
+            {((!isChannel && otherParticipant) ||
+              (isChannel && isChannelAdmin)) && (
               <>
                 <button
                   onClick={() => handleMobileAction(handleAudioCall)}
@@ -583,6 +866,55 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
                       />
                     </svg>
                     <span>Video Call</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleMobileAction(handleCallHistory)}
+                  className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                    isDark ? "text-gray-300" : "text-gray-700"
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <span>Call History</span>
+                  </div>
+                </button>
+
+                {/* Ringtones Option in Mobile Menu */}
+                <button
+                  onClick={() => setShowRingtonesDropdown(true)}
+                  className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                    isDark ? "text-gray-300" : "text-gray-700"
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 001.414 1.414m-2.828-9.9a9 9 0 012.728-2.728"
+                      />
+                    </svg>
+                    <span>Ringtones</span>
                   </div>
                 </button>
               </>
@@ -686,17 +1018,19 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
                   {selectedChat.isPrivate ? "🔒" : "#"}
                 </div>
               )}
-              <div
-                className="flex items-center space-x-3 cursor-pointer"
-                onClick={() => navigate(`/profile/${otherParticipant?._id}`)}
-              >
-                <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center">
-                  <img
-                    src={image}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+              <div className="flex items-center space-x-3">
+                {!isChannel && (
+                  <div
+                    className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center cursor-pointer"
+                    onClick={handleProfileNavigation}
+                  >
+                    <img
+                      src={image}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
 
                 <div className="flex flex-col">
                   <h1
