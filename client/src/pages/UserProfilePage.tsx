@@ -7,13 +7,20 @@ import {
   useUpdateUserProfileCache,
   useUserProfile,
 } from "../hooks/users/useUserProfile";
-import type { User, Message, FileMessage, ChannelChat } from "../types/types";
+import type {
+  User,
+  Message,
+  FileMessage,
+  ChannelChat,
+  Chat,
+} from "../types/types";
 import { isFileMessage } from "../types/types";
 import { useSharedMedia } from "../hooks/chats/useSharedMedia";
 import { useCommonChannels } from "../hooks/channels/useCommonChannels";
 import { useChatLogic } from "../hooks/chats";
 import { useChatContext } from "../hooks/useChatContext";
 import { useCallContext } from "../hooks/useCallContext";
+import { chatApi } from "../lib/api";
 
 export function UserProfilePage() {
   const { userId } = useParams<{ userId: string }>();
@@ -134,16 +141,51 @@ export function UserProfilePage() {
     refetch();
   };
 
-  const handleSendMessage = () => {
+  const { setSelectedChat } = useChatLogic();
+  const { setActiveTab } = useChatContext();
+
+  const handleSendMessage = async () => {
     if (enhancedUserProfile) {
-      navigate(`/chat`);
-      // setSelectedChat(enhancedUserProfile);
-      setActiveTab("direct");
+      try {
+        navigate(`/chat`);
+
+        const existingChat = await findOrCreateChat(enhancedUserProfile._id);
+
+        if (existingChat) {
+          setSelectedChat(existingChat);
+          setActiveTab("direct");
+        }
+      } catch (error) {
+        console.error("Error starting chat:", error);
+
+        navigate(`/chat`);
+        setActiveTab("direct");
+      }
     }
   };
 
-  const { setSelectedChat } = useChatLogic();
-  const { setActiveTab } = useChatContext();
+  const findOrCreateChat = async (targetUserId: string) => {
+    try {
+      const userChats = await chatApi.getUserChats();
+      const existingChat = userChats.find(
+        (chat: Chat) =>
+          chat.type === "direct" &&
+          chat.participants.some(
+            (participant: User) => participant._id === targetUserId
+          )
+      );
+
+      if (existingChat) {
+        return existingChat;
+      }
+
+      const newChat = await chatApi.createChat(targetUserId);
+      return newChat;
+    } catch (error) {
+      console.error("Error finding or creating chat:", error);
+      return null;
+    }
+  };
 
   const handleChannelClick = (channel: ChannelChat) => {
     navigate("/chat");
