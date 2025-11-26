@@ -12,6 +12,7 @@ import {
   type User,
   type UserChat,
   isDirectChat,
+  type ChannelCallData,
 } from "../../types/types";
 import { useApp } from "../../contexts/appcontext/index";
 import { useCallContext } from "../../hooks/useCallContext";
@@ -57,7 +58,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
     const isChannelAdmin = useMemo(() => {
       if (!isChannel || !selectedChat?.admins) return false;
 
-      return selectedChat.admins.some((admin) => {
+      return selectedChat.admins.some((admin: User | string) => {
         if (typeof admin === "string") {
           return admin === currentUserId;
         } else {
@@ -76,24 +77,49 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
       if (!directChat.participants) return null;
 
       try {
-        const participant = directChat.participants.find((participant) => {
-          const participantId = getUserId(participant);
-          return participantId !== currentUserId;
-        });
+        const participant = directChat.participants.find(
+          (participant: User | string) => {
+            const participantId = getUserId(participant);
+            return participantId !== currentUserId;
+          }
+        );
 
         if (!participant) return null;
 
-        const userParticipant =
-          typeof participant === "string"
-            ? ({ _id: participant } as Partial<User>)
-            : participant;
+        if (typeof participant === "string") {
+          console.warn(
+            "Participant is string ID, missing full user data:",
+            participant
+          );
 
-        return userParticipant as User | null;
+          const fullUser = safeOnlineUsers.find(
+            (u: User) => u._id === participant
+          );
+
+          if (fullUser) {
+            return fullUser;
+          } else {
+            const fallbackUser: Partial<User> = {
+              _id: participant,
+              name: title || "Unknown User",
+              avatar: image,
+              isOnline: false,
+            };
+            return fallbackUser as User;
+          }
+        } else {
+          const userWithFallbacks: User = {
+            ...participant,
+            name: participant.name || title || "Unknown User",
+            avatar: participant.avatar || image,
+          };
+          return userWithFallbacks;
+        }
       } catch (error) {
         console.error("Error finding other participant:", error);
         return null;
       }
-    }, [isChannel, selectedChat, currentUserId]);
+    }, [isChannel, selectedChat, currentUserId, safeOnlineUsers, title, image]);
 
     const getSafeUserId = useCallback(
       (user: User | string | null): string | null => {
@@ -128,7 +154,9 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
 
           const currentOnlineUsers = onlineUsersRef.current;
 
-          const onlineUser = currentOnlineUsers.find((u) => u._id === userId);
+          const onlineUser = currentOnlineUsers.find(
+            (u: User) => u._id === userId
+          );
           if (onlineUser) {
             let lastSeenDate: Date | undefined;
             if (onlineUser.lastSeen) {
@@ -176,12 +204,13 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
       [getSafeUserId]
     );
 
-    const formatLastSeen = useCallback((lastSeen?: Date): string => {
+    const formatLastSeen = useCallback((lastSeen?: Date | string): string => {
       if (!lastSeen) return "a long time ago";
 
       try {
         const now = new Date();
-        const lastSeenDate = new Date(lastSeen);
+        const lastSeenDate =
+          typeof lastSeen === "string" ? new Date(lastSeen) : lastSeen;
         const diffMs = now.getTime() - lastSeenDate.getTime();
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMins / 60);
@@ -201,15 +230,47 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
       }
     }, []);
 
+    type DateInput = string | Date | null | undefined;
+
+    const safeDateToString = (date: DateInput): string => {
+      if (!date) return new Date().toISOString();
+
+      if (typeof date === "string") {
+        return date;
+      }
+
+      if (date instanceof Date) {
+        return date.toISOString();
+      }
+
+      return new Date().toISOString();
+    };
+
+    const safeOptionalDateToString = (date: DateInput): string | undefined => {
+      if (!date) return undefined;
+
+      if (typeof date === "string") {
+        return date;
+      }
+
+      if (date instanceof Date) {
+        return date.toISOString();
+      }
+
+      return undefined;
+    };
+
     const getChannelMemberInfo = useCallback((): string => {
       if (!isChannel || !selectedChat?.members) return subtitle || "";
 
       try {
         const totalMembers = selectedChat.members.length;
-        const onlineMembers = selectedChat.members.filter((member) => {
-          const status = getUserStatus(member);
-          return status.isOnline;
-        }).length;
+        const onlineMembers = selectedChat.members.filter(
+          (member: User | string) => {
+            const status = getUserStatus(member);
+            return status.isOnline;
+          }
+        ).length;
 
         return `${totalMembers} member${
           totalMembers !== 1 ? "s" : ""
@@ -367,7 +428,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
             isOnline: status.isOnline,
             lastSeen: status.lastSeen,
             foundInOnlineUsers: safeOnlineUsers.some(
-              (u) => u._id === getSafeUserId(otherParticipant)
+              (u: User) => u._id === getSafeUserId(otherParticipant)
             ),
           }
         );
@@ -391,15 +452,93 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
     }, [otherParticipant, updateStatus, getSafeUserId]);
 
     const handleAudioCall = () => {
-      if (otherParticipant && isUserObject(otherParticipant)) {
-        startCall(otherParticipant, "audio");
+      if (isChannel && isChannelAdmin) {
+        console.log("📞 Starting audio call for channel:", selectedChat.name);
+
+        const channelCallData: ChannelCallData = {
+          _id: selectedChat._id,
+          name: selectedChat.name || "Unnamed Channel",
+          type: "channel",
+          participants: selectedChat.members || [],
+          isPrivate: selectedChat.isPrivate || false,
+          admins: selectedChat.admins || [],
+          createdBy: selectedChat.createdBy,
+          description: selectedChat.description,
+        };
+
+        startCall(channelCallData, "audio", "channel");
+      } else if (
+        !isChannel &&
+        otherParticipant &&
+        isUserObject(otherParticipant)
+      ) {
+        console.log("📞 Starting audio call with:", otherParticipant);
+
+        const callUser: User = {
+          _id: otherParticipant._id,
+          name: otherParticipant.name || title || "Unknown User",
+          email: otherParticipant.email || "",
+          avatar: otherParticipant.avatar || image,
+          isOnline: otherParticipant.isOnline || false,
+          lastSeen: safeOptionalDateToString(otherParticipant.lastSeen),
+          profileSetup: otherParticipant.profileSetup || false,
+          createdAt: safeDateToString(otherParticipant.createdAt),
+          updatedAt: safeDateToString(otherParticipant.updatedAt),
+        };
+
+        startCall(callUser, "audio", "direct");
+      } else {
+        console.error("❌ Cannot start call: invalid conditions", {
+          isChannel,
+          isChannelAdmin,
+          otherParticipant,
+        });
       }
       setShowCallDropdown(false);
     };
 
     const handleVideoCall = () => {
-      if (otherParticipant && isUserObject(otherParticipant)) {
-        startCall(otherParticipant, "video");
+      if (isChannel && isChannelAdmin) {
+        console.log("🎥 Starting video call for channel:", selectedChat.name);
+
+        const channelCallData: ChannelCallData = {
+          _id: selectedChat._id,
+          name: selectedChat.name || "Unnamed Channel",
+          type: "channel",
+          participants: selectedChat.members || [],
+          isPrivate: selectedChat.isPrivate || false,
+          admins: selectedChat.admins || [],
+          createdBy: selectedChat.createdBy,
+          description: selectedChat.description,
+        };
+
+        startCall(channelCallData, "video", "channel");
+      } else if (
+        !isChannel &&
+        otherParticipant &&
+        isUserObject(otherParticipant)
+      ) {
+        console.log("🎥 Starting video call with:", otherParticipant);
+
+        const callUser: User = {
+          _id: otherParticipant._id,
+          name: otherParticipant.name || title || "Unknown User",
+          email: otherParticipant.email || "",
+          avatar: otherParticipant.avatar || image,
+          isOnline: otherParticipant.isOnline || false,
+          lastSeen: safeOptionalDateToString(otherParticipant.lastSeen),
+          profileSetup: otherParticipant.profileSetup || false,
+          createdAt: safeDateToString(otherParticipant.createdAt),
+          updatedAt: safeDateToString(otherParticipant.updatedAt),
+        };
+
+        startCall(callUser, "video", "direct");
+      } else {
+        console.error("❌ Cannot start call: invalid conditions", {
+          isChannel,
+          isChannelAdmin,
+          otherParticipant,
+        });
       }
       setShowCallDropdown(false);
     };
@@ -646,6 +785,18 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
       </div>
     );
 
+    const shouldShowCallButton = useMemo(() => {
+      if (!isChannel && otherParticipant && isUserObject(otherParticipant)) {
+        return true;
+      }
+
+      if (isChannel && isChannelAdmin) {
+        return true;
+      }
+
+      return false;
+    }, [isChannel, otherParticipant, isChannelAdmin]);
+
     const renderDesktopActions = () => (
       <div className="hidden md:flex items-center space-x-2">
         {/* Search Button */}
@@ -686,9 +837,8 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
           <MdOutlineNotificationsNone className="w-6 h-6" />
         </button>
 
-        {/* Call Button - Show for direct chats OR channels if admin */}
-        {((!isChannel && otherParticipant) || (isChannel && isChannelAdmin)) &&
-          renderCallButton()}
+        {/* Call Button - Show for direct chats with valid participants */}
+        {shouldShowCallButton && renderCallButton()}
 
         {/* Settings Button */}
         {onSettings && (
@@ -722,7 +872,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
         )}
 
         {/* Participants Button - Only for channels */}
-        {/* {isChannel && onParticipants && (
+        {isChannel && onParticipants && (
           <button
             onClick={onParticipants}
             title="View participants"
@@ -744,7 +894,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
               />
             </svg>
           </button>
-        )} */}
+        )}
       </div>
     );
 
@@ -834,9 +984,8 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
               </div>
             </button>
 
-            {/* Call Options - Show for direct chats OR channels if admin */}
-            {((!isChannel && otherParticipant) ||
-              (isChannel && isChannelAdmin)) && (
+            {/* Call Options - Show for direct chats with valid participants */}
+            {shouldShowCallButton && (
               <>
                 <button
                   onClick={() => handleMobileAction(handleAudioCall)}
