@@ -3,9 +3,28 @@ import {
   CallContext,
   type CallState,
   type CallContextType,
+  type ChannelCallData,
 } from "./call-context";
 import type { User } from "../../types/types";
 import { useApp } from "../appcontext/index";
+
+interface IncomingDirectCallData {
+  caller: User;
+  type: "audio" | "video";
+  callMode: "direct";
+}
+
+interface IncomingChannelCallData {
+  caller: User;
+  type: "audio" | "video";
+  callMode: "channel";
+  channelData: ChannelCallData;
+}
+
+interface UserJoinedChannelCallData {
+  user: User;
+  channelId: string;
+}
 
 export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -23,11 +42,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     isOnCall: false,
     callReceiver: null,
     callType: null,
+    callMode: null,
     localStream: null,
     remoteStream: null,
     isLocalVideoEnabled: true,
     isLocalAudioEnabled: true,
     isRemoteVideoEnabled: true,
+    participants: [],
+    callStatus: "idle",
   });
 
   const cleanupMediaStreams = useCallback(() => {
@@ -45,35 +67,45 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  const getLocalStream = useCallback(async (type: "audio" | "video") => {
-    try {
-      const constraints: MediaStreamConstraints = {
-        audio: true,
-        video:
-          type === "video"
-            ? {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-              }
-            : false,
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      localStreamRef.current = stream;
-
-      setCallState((prev) => ({
-        ...prev,
-        localStream: stream,
-        isLocalVideoEnabled: type === "video",
-        isLocalAudioEnabled: true,
-      }));
-
-      return stream;
-    } catch (error) {
-      console.error("❌ Error accessing media devices:", error);
-      throw error;
-    }
+  const updateCallParticipants = useCallback((user: User) => {
+    setCallState((prev) => ({
+      ...prev,
+      participants: [...prev.participants, user],
+    }));
   }, []);
+
+  const getLocalStream = useCallback(
+    async (type: "audio" | "video"): Promise<MediaStream> => {
+      try {
+        const constraints: MediaStreamConstraints = {
+          audio: true,
+          video:
+            type === "video"
+              ? {
+                  width: { ideal: 1280 },
+                  height: { ideal: 720 },
+                }
+              : false,
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        localStreamRef.current = stream;
+
+        setCallState((prev) => ({
+          ...prev,
+          localStream: stream,
+          isLocalVideoEnabled: type === "video",
+          isLocalAudioEnabled: true,
+        }));
+
+        return stream;
+      } catch (error) {
+        console.error("❌ Error accessing media devices:", error);
+        throw error;
+      }
+    },
+    []
+  );
 
   const addLocalStreamToPeerConnection = useCallback((stream: MediaStream) => {
     if (!peerConnection.current) return;
@@ -85,10 +117,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const endCall = useCallback(() => {
     console.log("📞 Ending call");
+
     if (socket && callState.callReceiver) {
-      socket.emit("end_call", {
-        receiverId: callState.callReceiver._id,
-      });
+      if (callState.callMode === "channel") {
+        socket.emit("end_channel_call", {
+          channelId: callState.callReceiver._id,
+        });
+      } else {
+        socket.emit("end_call", {
+          receiverId: callState.callReceiver._id,
+        });
+      }
     }
 
     cleanupMediaStreams();
@@ -98,13 +137,16 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       isOnCall: false,
       callReceiver: null,
       callType: null,
+      callMode: null,
       localStream: null,
       remoteStream: null,
       isLocalVideoEnabled: true,
       isLocalAudioEnabled: true,
       isRemoteVideoEnabled: true,
+      participants: [],
+      callStatus: "ended",
     });
-  }, [socket, callState.callReceiver, cleanupMediaStreams]);
+  }, [socket, callState.callReceiver, callState.callMode, cleanupMediaStreams]);
 
   const createPeerConnection = useCallback(() => {
     const configuration: RTCConfiguration = {
@@ -130,10 +172,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     pc.onicecandidate = (event) => {
       if (event.candidate && socket && callState.callReceiver) {
         console.log("❄️ Sending ICE candidate");
-        socket.emit("ice-candidate", {
-          candidate: event.candidate,
-          receiverId: callState.callReceiver._id,
-        });
+
+        if (callState.callMode === "channel") {
+          socket.emit("ice-candidate-channel", {
+            candidate: event.candidate,
+            channelId: callState.callReceiver._id,
+          });
+        } else {
+          socket.emit("ice-candidate", {
+            candidate: event.candidate,
+            receiverId: callState.callReceiver._id,
+          });
+        }
       }
     };
 
@@ -141,6 +191,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       console.log(`🔗 Connection state: ${pc.connectionState}`);
       if (pc.connectionState === "connected") {
         console.log("✅ WebRTC connection established");
+        setCallState((prev) => ({ ...prev, callStatus: "ongoing" }));
       } else if (
         pc.connectionState === "disconnected" ||
         pc.connectionState === "failed"
@@ -151,11 +202,48 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     return pc;
-  }, [socket, callState.callReceiver, endCall]);
+  }, [socket, callState.callReceiver, callState.callMode, endCall]);
 
   const startCall = useCallback(
-    async (user: User, type: "audio" | "video") => {
-      console.log("📞 Starting call to:", user._id, "Type:", type);
+    async (
+      target: User | ChannelCallData,
+      type: "audio" | "video",
+      callMode: "direct" | "channel"
+    ) => {
+      console.log("Starting call:", { target, type, callMode });
+
+      if (!target) {
+        console.error("Invalid call target");
+        return;
+      }
+
+      let participants: User[] = [];
+
+      if (callMode === "channel") {
+        const channelData = target as ChannelCallData;
+
+        participants = channelData.participants.map((participant) => {
+          if (typeof participant === "string") {
+            return {
+              _id: participant,
+              name: "Unknown User",
+              isOnline: false,
+            } as User;
+          }
+          return participant;
+        });
+      } else {
+        participants = [target as User];
+      }
+
+      console.log(
+        "📞 Starting call to:",
+        target._id,
+        "Type:",
+        type,
+        "Mode:",
+        callMode
+      );
 
       try {
         peerConnection.current = createPeerConnection();
@@ -167,25 +255,37 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
           isIncomingCall: false,
           isOutgoingCall: true,
           isOnCall: false,
-          callReceiver: user,
+          callReceiver: target,
           callType: type,
+          callMode: callMode,
           localStream: stream,
           remoteStream: null,
           isLocalVideoEnabled: type === "video",
           isLocalAudioEnabled: true,
           isRemoteVideoEnabled: true,
+          participants,
+          callStatus: "calling",
         });
 
         const offer = await peerConnection.current.createOffer();
         await peerConnection.current.setLocalDescription(offer);
 
         if (socket && state.user) {
-          socket.emit("start_call", {
-            receiverId: user._id,
-            type,
-            caller: state.user,
-            offer: offer,
-          });
+          if (callMode === "channel") {
+            socket.emit("startChannelCall", {
+              channelId: target._id,
+              type,
+              caller: state.user,
+              offer: offer,
+            });
+          } else {
+            socket.emit("start_call", {
+              receiverId: target._id,
+              type,
+              caller: state.user,
+              offer: offer,
+            });
+          }
         }
       } catch (error) {
         console.error("❌ Error starting call:", error);
@@ -202,6 +302,94 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     ]
   );
 
+  const handleIncomingCall = useCallback(
+    (data: {
+      caller: User | ChannelCallData;
+      type: "audio" | "video";
+      callMode: "direct" | "channel";
+      channelData?: ChannelCallData;
+    }) => {
+      console.log("📞 Incoming call received:", data);
+
+      const callReceiver =
+        data.callMode === "channel" ? data.channelData! : data.caller;
+      const participants =
+        data.callMode === "channel"
+          ? (data.channelData?.participants as User[]) || []
+          : [data.caller as User];
+
+      setCallState({
+        isIncomingCall: true,
+        isOutgoingCall: false,
+        isOnCall: false,
+        callReceiver: callReceiver,
+        callType: data.type,
+        callMode: data.callMode,
+        localStream: null,
+        remoteStream: null,
+        isLocalVideoEnabled: data.type === "video",
+        isLocalAudioEnabled: true,
+        isRemoteVideoEnabled: true,
+        participants,
+        callStatus: "ringing",
+      });
+    },
+    []
+  );
+
+  const joinCall = useCallback(async () => {
+    if (
+      callState.isIncomingCall &&
+      callState.callReceiver &&
+      callState.callType
+    ) {
+      console.log("✅ Joining call");
+
+      try {
+        peerConnection.current = createPeerConnection();
+
+        const stream = await getLocalStream(callState.callType);
+        addLocalStreamToPeerConnection(stream);
+
+        setCallState((prev) => ({
+          ...prev,
+          isIncomingCall: false,
+          isOnCall: true,
+          isOutgoingCall: false,
+          callStatus: "ongoing",
+          localStream: stream,
+        }));
+
+        if (state.socket && state.user) {
+          if (callState.callMode === "channel") {
+            state.socket.emit("joinChannelCall", {
+              channelId: callState.callReceiver._id,
+              user: state.user,
+            });
+          } else {
+            state.socket.emit("accept_call", {
+              callerId: callState.callReceiver._id,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("❌ Error joining call:", error);
+        endCall();
+      }
+    }
+  }, [
+    callState.isIncomingCall,
+    callState.callReceiver,
+    callState.callType,
+    callState.callMode,
+    state.socket,
+    state.user,
+    createPeerConnection,
+    getLocalStream,
+    addLocalStreamToPeerConnection,
+    endCall,
+  ]);
+
   const acceptCall = useCallback(async () => {
     console.log("✅ Accepting call");
 
@@ -217,11 +405,22 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         ...prev,
         isIncomingCall: false,
         isOnCall: true,
+        isOutgoingCall: false,
         localStream: stream,
+        callStatus: "ongoing",
       }));
 
-      if (socket && callState.callReceiver) {
-        socket.emit("accept_call", { callerId: callState.callReceiver._id });
+      if (socket && callState.callReceiver && state.user) {
+        if (callState.callMode === "channel") {
+          socket.emit("acceptChannelCall", {
+            channelId: callState.callReceiver._id,
+            user: state.user,
+          });
+        } else {
+          socket.emit("accept_call", {
+            callerId: callState.callReceiver._id,
+          });
+        }
       }
     } catch (error) {
       console.error("❌ Error accepting call:", error);
@@ -229,8 +428,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [
     socket,
+    state.user,
     callState.callReceiver,
     callState.callType,
+    callState.callMode,
     createPeerConnection,
     getLocalStream,
     addLocalStreamToPeerConnection,
@@ -240,7 +441,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
   const rejectCall = useCallback(() => {
     console.log("❌ Rejecting call");
     if (socket && callState.callReceiver) {
-      socket.emit("reject_call", { callerId: callState.callReceiver._id });
+      if (callState.callMode === "channel") {
+        socket.emit("rejectChannelCall", {
+          channelId: callState.callReceiver._id,
+        });
+      } else {
+        socket.emit("reject_call", {
+          callerId: callState.callReceiver._id,
+        });
+      }
     }
 
     cleanupMediaStreams();
@@ -250,33 +459,81 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       isOnCall: false,
       callReceiver: null,
       callType: null,
+      callMode: null,
       localStream: null,
       remoteStream: null,
       isLocalVideoEnabled: true,
       isLocalAudioEnabled: true,
       isRemoteVideoEnabled: true,
+      participants: [],
+      callStatus: "ended",
     });
-  }, [socket, callState.callReceiver, cleanupMediaStreams]);
+  }, [socket, callState.callReceiver, callState.callMode, cleanupMediaStreams]);
+
+  useEffect(() => {
+    if (state.socket) {
+      state.socket.on("incomingDirectCall", (data: IncomingDirectCallData) => {
+        handleIncomingCall({
+          ...data,
+          callMode: "direct" as const,
+        });
+      });
+
+      state.socket.on(
+        "incomingChannelCall",
+        (data: IncomingChannelCallData) => {
+          handleIncomingCall(data);
+        }
+      );
+
+      state.socket.on(
+        "userJoinedChannelCall",
+        (data: UserJoinedChannelCallData) => {
+          updateCallParticipants(data.user);
+        }
+      );
+
+      return () => {
+        state.socket?.off("incomingDirectCall");
+        state.socket?.off("incomingChannelCall");
+        state.socket?.off("userJoinedChannelCall");
+      };
+    }
+  }, [state.socket, handleIncomingCall, updateCallParticipants]);
 
   useEffect(() => {
     if (!socket) return;
 
-    const handleIncomingCall = async (data: {
+    const handleIncomingCallEvent = async (data: {
       caller: User;
       type: "audio" | "video";
     }) => {
-      console.log("📞 Incoming call received:", data);
-      setCallState({
-        isIncomingCall: true,
-        isOutgoingCall: false,
-        isOnCall: false,
-        callReceiver: data.caller,
-        callType: data.type,
-        localStream: null,
-        remoteStream: null,
-        isLocalVideoEnabled: data.type === "video",
-        isLocalAudioEnabled: true,
-        isRemoteVideoEnabled: true,
+      console.log("📞 Incoming direct call received:", data);
+
+      if (!data.caller || !data.caller._id || !data.caller.name) {
+        console.error("Invalid caller data in incoming call:", data.caller);
+        return;
+      }
+
+      handleIncomingCall({
+        caller: data.caller,
+        type: data.type,
+        callMode: "direct",
+      });
+    };
+
+    const handleIncomingChannelCallEvent = async (data: {
+      channel: ChannelCallData;
+      type: "audio" | "video";
+      caller: User;
+    }) => {
+      console.log("📞 Incoming channel call received:", data);
+
+      handleIncomingCall({
+        caller: data.caller,
+        type: data.type,
+        callMode: "channel",
+        channelData: data.channel,
       });
     };
 
@@ -289,10 +546,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
           await peerConnection.current.setLocalDescription(offer);
 
           if (socket && callState.callReceiver) {
-            socket.emit("offer", {
-              offer,
-              receiverId: callState.callReceiver._id,
-            });
+            if (callState.callMode === "channel") {
+              socket.emit("channel-offer", {
+                offer,
+                channelId: callState.callReceiver._id,
+              });
+            } else {
+              socket.emit("offer", {
+                offer,
+                receiverId: callState.callReceiver._id,
+              });
+            }
           }
         }
 
@@ -301,6 +565,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
           isIncomingCall: false,
           isOutgoingCall: false,
           isOnCall: true,
+          callStatus: "ongoing",
         }));
       } catch (error) {
         console.error("❌ Error creating offer:", error);
@@ -317,11 +582,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         isOnCall: false,
         callReceiver: null,
         callType: null,
+        callMode: null,
         localStream: null,
         remoteStream: null,
         isLocalVideoEnabled: true,
         isLocalAudioEnabled: true,
         isRemoteVideoEnabled: true,
+        participants: [],
+        callStatus: "ended",
       });
     };
 
@@ -334,11 +602,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         isOnCall: false,
         callReceiver: null,
         callType: null,
+        callMode: null,
         localStream: null,
         remoteStream: null,
         isLocalVideoEnabled: true,
         isLocalAudioEnabled: true,
         isRemoteVideoEnabled: true,
+        participants: [],
+        callStatus: "ended",
       });
     };
 
@@ -394,7 +665,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     };
 
-    socket.on("incoming_call", handleIncomingCall);
+    socket.on("incoming_call", handleIncomingCallEvent);
+    socket.on("incoming_channel_call", handleIncomingChannelCallEvent);
     socket.on("call_accepted", handleCallAccepted);
     socket.on("call_rejected", handleCallRejected);
     socket.on("call_ended", handleCallEnded);
@@ -404,7 +676,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     socket.on("ice-candidate", handleIceCandidate);
 
     return () => {
-      socket.off("incoming_call", handleIncomingCall);
+      socket.off("incoming_call", handleIncomingCallEvent);
+      socket.off("incoming_channel_call", handleIncomingChannelCallEvent);
       socket.off("call_accepted", handleCallAccepted);
       socket.off("call_rejected", handleCallRejected);
       socket.off("call_ended", handleCallEnded);
@@ -412,7 +685,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       socket.off("answer", handleAnswer);
       socket.off("ice-candidate", handleIceCandidate);
     };
-  }, [socket, callState.callReceiver, cleanupMediaStreams, endCall]);
+  }, [
+    socket,
+    callState.callReceiver,
+    callState.callMode,
+    cleanupMediaStreams,
+    endCall,
+    handleIncomingCall,
+  ]);
 
   const toggleVideo = useCallback(() => {
     if (localStreamRef.current) {
@@ -450,6 +730,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     endCall,
     toggleVideo,
     toggleAudio,
+    handleIncomingCall,
+    joinCall,
   };
 
   return <CallContext.Provider value={value}>{children}</CallContext.Provider>;
