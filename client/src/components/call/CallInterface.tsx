@@ -1,5 +1,7 @@
 import React from "react";
 import { useCallContext } from "../../hooks/useCallContext";
+import type { ChannelCallData } from "../../contexts/call/call-context";
+import type { User } from "../../types/types";
 
 export const CallInterface: React.FC = () => {
   const {
@@ -9,19 +11,20 @@ export const CallInterface: React.FC = () => {
     endCall,
     toggleVideo,
     toggleAudio,
+    joinCall,
   } = useCallContext();
 
-  if (
-    !callState.isIncomingCall &&
-    !callState.isOutgoingCall &&
-    !callState.isOnCall
-  ) {
+  const shouldShowCallInterface =
+    callState.isIncomingCall || callState.isOutgoingCall || callState.isOnCall;
+
+  if (!shouldShowCallInterface) {
     return null;
   }
 
   const {
     callReceiver,
     callType,
+    callMode,
     isIncomingCall,
     isOutgoingCall,
     isOnCall,
@@ -29,7 +32,49 @@ export const CallInterface: React.FC = () => {
     remoteStream,
     isLocalVideoEnabled,
     isLocalAudioEnabled,
+    participants,
   } = callState;
+
+  const isChannelCall = callMode === "channel";
+
+  const getCallerInfo = () => {
+    if (!callReceiver) {
+      return { name: "Unknown", avatar: "/default-avatar.png" };
+    }
+
+    if (isChannelCall) {
+      const channelData = callReceiver as ChannelCallData;
+      return {
+        name: channelData.name || "Channel Call",
+        avatar: "/channel-avatar.png",
+        participants: participants.length,
+      };
+    } else {
+      const userData = callReceiver as User;
+      return {
+        name: userData.name || "Unknown User",
+        avatar: userData.avatar || "/default-avatar.png",
+        participants: 1,
+      };
+    }
+  };
+
+  const callerInfo = getCallerInfo();
+
+  const getCallStatusText = () => {
+    if (isIncomingCall) return "Incoming call";
+    if (isOutgoingCall) return "Calling...";
+    if (isOnCall) return "On call";
+    return "Call";
+  };
+
+  const getCallTypeText = () => {
+    const typeText = callType === "audio" ? "Audio Call" : "Video Call";
+    if (isChannelCall) {
+      return `${typeText} • ${callerInfo.participants} participants`;
+    }
+    return typeText;
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
@@ -37,30 +82,85 @@ export const CallInterface: React.FC = () => {
         {/* Call Header */}
         <div className="mb-6 text-center">
           <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
-            {callReceiver?.avatar ? (
+            {callerInfo.avatar ? (
               <img
-                src={callReceiver.avatar}
-                alt={callReceiver.name}
+                src={callerInfo.avatar}
+                alt={callerInfo.name}
                 className="w-full h-full object-cover"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-blue-500 text-white text-2xl font-semibold">
-                {callReceiver?.name?.charAt(0)?.toUpperCase() || "U"}
+                {callerInfo.name?.charAt(0)?.toUpperCase() || "U"}
               </div>
             )}
           </div>
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            {callReceiver?.name || "Unknown User"}
+            {callerInfo.name}
           </h3>
           <p className="text-gray-600 dark:text-gray-400">
-            {isIncomingCall && "Incoming call"}
-            {isOutgoingCall && "Calling..."}
-            {isOnCall && "On call"}
+            {getCallStatusText()}
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
-            {callType === "audio" ? "Audio Call" : "Video Call"}
+            {getCallTypeText()}
           </p>
+
+          {/* Channel call participants info */}
+          {isChannelCall && isOnCall && (
+            <div className="mt-3">
+              <p className="text-sm text-green-600 dark:text-green-400">
+                {participants.length} people in call
+              </p>
+            </div>
+          )}
         </div>
+
+        {/* Participants List for Channel Calls */}
+        {isChannelCall &&
+          (isOnCall || isIncomingCall) &&
+          participants.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 text-center">
+                Participants
+              </h4>
+              <div className="flex flex-wrap justify-center gap-2 max-h-32 overflow-y-auto">
+                {participants.slice(0, 6).map((participant) => (
+                  <div
+                    key={participant._id}
+                    className="flex flex-col items-center"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden">
+                      {participant.avatar ? (
+                        <img
+                          src={participant.avatar}
+                          alt={participant.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs font-medium">
+                          {participant.name?.charAt(0)?.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs mt-1 text-gray-600 dark:text-gray-400 max-w-16 truncate">
+                      {participant.name}
+                    </span>
+                  </div>
+                ))}
+                {participants.length > 6 && (
+                  <div className="flex flex-col items-center">
+                    <div className="w-10 h-10 rounded-full bg-gray-400 dark:bg-gray-500 flex items-center justify-center">
+                      <span className="text-xs font-medium text-white">
+                        +{participants.length - 6}
+                      </span>
+                    </div>
+                    <span className="text-xs mt-1 text-gray-600 dark:text-gray-400">
+                      More
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
         {/* Video Streams */}
         {callType === "video" && isOnCall && (
@@ -84,7 +184,7 @@ export const CallInterface: React.FC = () => {
                   <div className="text-center">
                     <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-gray-600 flex items-center justify-center">
                       <span className="text-2xl">
-                        {callReceiver?.name?.charAt(0)?.toUpperCase() || "U"}
+                        {callerInfo.name?.charAt(0)?.toUpperCase() || "U"}
                       </span>
                     </div>
                     <p>Connecting...</p>
@@ -92,7 +192,7 @@ export const CallInterface: React.FC = () => {
                 </div>
               )}
               <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm">
-                {callReceiver?.name}
+                {callerInfo.name}
               </div>
             </div>
 
@@ -131,21 +231,47 @@ export const CallInterface: React.FC = () => {
         {callType === "audio" && isOnCall && (
           <div className="text-center mb-6">
             <div className="w-32 h-32 mx-auto mb-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-              {callReceiver?.avatar ? (
+              {callerInfo.avatar ? (
                 <img
-                  src={callReceiver.avatar}
-                  alt={callReceiver.name}
+                  src={callerInfo.avatar}
+                  alt={callerInfo.name}
                   className="w-full h-full object-cover rounded-full"
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-blue-500 text-white text-4xl font-semibold rounded-full">
-                  {callReceiver?.name?.charAt(0)?.toUpperCase() || "U"}
+                  {callerInfo.name?.charAt(0)?.toUpperCase() || "U"}
                 </div>
               )}
             </div>
             <p className="text-gray-600 dark:text-gray-400">
-              Audio call in progress...
+              {isChannelCall
+                ? "Channel audio call in progress..."
+                : "Audio call in progress..."}
             </p>
+
+            {/* Active participants for audio channel calls */}
+            {isChannelCall && participants.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                  Active participants:
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {participants.slice(0, 8).map((participant) => (
+                    <div
+                      key={participant._id}
+                      className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                        <span className="text-xs text-white">
+                          {participant.name?.charAt(0)?.toUpperCase()}
+                        </span>
+                      </div>
+                      <span className="text-sm">{participant.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -315,6 +441,21 @@ export const CallInterface: React.FC = () => {
             </>
           )}
         </div>
+
+        {/* Join Call Button for Channel Calls */}
+        {isChannelCall && isIncomingCall && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={joinCall}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-full font-medium transition-colors"
+            >
+              Join Channel Call
+            </button>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              Join the ongoing call with {callerInfo.participants} participants
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
