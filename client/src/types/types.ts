@@ -590,3 +590,14 @@ export interface AppNotification {
   duration?: number;
   title?: string;
 }
+
+export interface ChannelCallData {
+  _id: string;
+  name: string;
+  type: "channel";
+  participants: (User | string)[];
+  isPrivate: boolean;
+  admins: (User | string)[];
+  createdBy?: User | string;
+  description?: string;
+}
