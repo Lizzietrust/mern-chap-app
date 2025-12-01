@@ -1,10 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import {
-  CallContext,
-  type CallState,
-  type CallContextType,
-  type ChannelCallData,
-} from "./call-context";
+import { CallContext, type CallContextType } from "./call-context";
+import type { CallState, ChannelCallData } from "../../types/call";
 import type { User } from "../../types/types";
 import { useApp } from "../appcontext/index";
 
