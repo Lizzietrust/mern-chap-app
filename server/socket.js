@@ -217,20 +217,31 @@ const setupSocket = (server) => {
   };
 
   const setupCallHandlers = (socket) => {
+    // Direct call handler
     socket.on("start_call", (data) => {
       const { receiverId, type, caller, offer } = data;
       console.log(`📞 Direct call from ${caller._id} to ${receiverId}`);
 
-      socket.to(receiverId).emit("incoming_call", {
+      const receiverSocket = connectedUsers.get(receiverId);
+      if (!receiverSocket) {
+        console.log(`❌ Receiver ${receiverId} is not connected`);
+        socket.emit("receiver_offline", { receiverId });
+        return;
+      }
+
+      // Emit incoming call event
+      socket.to(receiverSocket.socketId).emit("incoming_call", {
         caller: caller,
         type: type,
       });
 
+      // Send WebRTC offer after delay
       if (offer) {
         setTimeout(() => {
-          socket.to(receiverId).emit("offer", {
+          socket.to(receiverSocket.socketId).emit("offer", {
             offer: offer,
             callerId: socket.userId,
+            callType: "direct",
           });
           console.log(`📨 Sent WebRTC offer to ${receiverId}`);
         }, 1000);
@@ -241,10 +252,14 @@ const setupSocket = (server) => {
       const { channelId, type, caller, offer } = data;
       console.log(`📞 Channel call from ${caller._id} in channel ${channelId}`);
 
+      // Get channel using Chat model
       const channel = await getChannelById(channelId);
       if (!channel) {
         console.error(`❌ Channel ${channelId} not found`);
-        socket.emit("channelCallError", { message: "Channel not found" });
+        socket.emit("channelCallError", {
+          message: "Channel not found",
+          channelId: channelId,
+        });
         return;
       }
 
@@ -252,29 +267,47 @@ const setupSocket = (server) => {
         (admin) => admin._id.toString() === caller._id.toString()
       );
 
-      if (!isAdmin) {
+      if (
+        !isAdmin &&
+        caller._id.toString() !== channel.createdBy?._id?.toString()
+      ) {
         console.error(
-          `❌ User ${caller._id} is not admin of channel ${channelId}`
+          `❌ User ${caller._id} is not authorized to start calls in channel ${channelId}`
         );
         socket.emit("channelCallError", {
-          message: "Only admins can start channel calls",
+          message: "Only admins and channel creator can start calls",
+          channelId: channelId,
         });
         return;
       }
 
+      const hasActiveCall = false;
+
+      if (hasActiveCall) {
+        socket.emit("channelCallError", {
+          message: "There's already an active call in this channel",
+          channelId: channelId,
+        });
+        return;
+      }
+
+      // Notify all channel members except the caller
       const membersToNotify = channel.members.filter(
         (member) => member._id.toString() !== caller._id.toString()
       );
 
       console.log(`📢 Notifying ${membersToNotify.length} channel members`);
 
+      let notifiedCount = 0;
+      let offlineCount = 0;
+
       membersToNotify.forEach((member) => {
         const memberSocket = connectedUsers.get(member._id.toString());
         if (memberSocket) {
           socket.to(memberSocket.socketId).emit("incomingChannelCall", {
-            caller,
+            caller: caller,
             type,
-            callType: "channel",
+            callMode: "channel",
             channelData: {
               _id: channel._id,
               name: channel.name,
@@ -286,19 +319,31 @@ const setupSocket = (server) => {
             },
           });
           console.log(`📨 Sent channel call notification to ${member._id}`);
+          notifiedCount++;
         } else {
           console.log(`⚠️ Member ${member._id} is not connected`);
+          offlineCount++;
         }
       });
 
+      // Send summary to caller
+      socket.emit("channelCallStarted", {
+        channelId,
+        notifiedCount,
+        offlineCount,
+        totalMembers: membersToNotify.length,
+      });
+
       if (offer) {
-        const firstMember = membersToNotify.find((member) =>
+        const firstOnlineMember = membersToNotify.find((member) =>
           connectedUsers.has(member._id.toString())
         );
 
-        if (firstMember) {
+        if (firstOnlineMember) {
           setTimeout(() => {
-            const memberSocket = connectedUsers.get(firstMember._id.toString());
+            const memberSocket = connectedUsers.get(
+              firstOnlineMember._id.toString()
+            );
             if (memberSocket) {
               socket.to(memberSocket.socketId).emit("offer", {
                 offer: offer,
@@ -306,10 +351,25 @@ const setupSocket = (server) => {
                 callType: "channel",
                 channelId: channelId,
               });
-              console.log(`📨 Sent WebRTC offer to ${firstMember._id}`);
+              console.log(`📨 Sent WebRTC offer to ${firstOnlineMember._id}`);
             }
           }, 1000);
+        } else {
+          console.log("⚠️ No online members to send WebRTC offer to");
         }
+      }
+    });
+
+    // Listen for the new event name (incomingDirectCall)
+    socket.on("incomingDirectCall", (data) => {
+      // For backward compatibility, forward to existing handler
+      const receiverSocket = connectedUsers.get(data.receiverId);
+      if (receiverSocket) {
+        socket.to(receiverSocket.socketId).emit("incoming_call", {
+          caller: data.caller,
+          type: data.type,
+        });
+        console.log(`📨 Forwarded incomingDirectCall to ${data.receiverId}`);
       }
     });
 
@@ -320,6 +380,26 @@ const setupSocket = (server) => {
       const channel = await getChannelById(channelId);
       if (!channel) {
         console.error(`❌ Channel ${channelId} not found`);
+        socket.emit("channelCallError", {
+          message: "Channel not found",
+          channelId: channelId,
+        });
+        return;
+      }
+
+      // Check if user is a member of the channel
+      const isMember = channel.members.some(
+        (member) => member._id.toString() === user._id.toString()
+      );
+
+      if (!isMember) {
+        console.error(
+          `❌ User ${user._id} is not a member of channel ${channelId}`
+        );
+        socket.emit("channelCallError", {
+          message: "You are not a member of this channel",
+          channelId: channelId,
+        });
         return;
       }
 
@@ -333,9 +413,17 @@ const setupSocket = (server) => {
           socket.to(memberSocket.socketId).emit("userJoinedChannelCall", {
             channelId,
             user,
+            timestamp: new Date(),
           });
           console.log(`📢 Notified ${member._id} that user joined call`);
         }
+      });
+
+      // Confirm to joiner
+      socket.emit("channelCallJoined", {
+        channelId,
+        channelName: channel.name,
+        memberCount: otherMembers.length,
       });
     });
 
@@ -358,6 +446,7 @@ const setupSocket = (server) => {
           socket.to(memberSocket.socketId).emit("channelCallAccepted", {
             channelId,
             user,
+            timestamp: new Date(),
           });
           console.log(`📢 Notified ${member._id} that call was accepted`);
         }
@@ -383,10 +472,19 @@ const setupSocket = (server) => {
           socket.to(memberSocket.socketId).emit("channelCallRejected", {
             channelId,
             userId: socket.userId,
+            timestamp: new Date(),
           });
           console.log(`📢 Notified ${member._id} that call was rejected`);
         }
       });
+
+      const callerSocket = connectedUsers.get(socket.userId);
+      if (callerSocket) {
+        socket.emit("callRejectedNotification", {
+          channelId,
+          rejecterId: socket.userId,
+        });
+      }
     });
 
     socket.on("endChannelCall", async (data) => {
@@ -408,6 +506,8 @@ const setupSocket = (server) => {
           socket.to(memberSocket.socketId).emit("channelCallEnded", {
             channelId,
             userId: socket.userId,
+            timestamp: new Date(),
+            endedBy: socket.user,
           });
           console.log(`📢 Notified ${member._id} that call ended`);
         }
@@ -420,8 +520,16 @@ const setupSocket = (server) => {
         `✅ Direct call accepted by ${socket.userId} for caller ${callerId}`
       );
 
-      socket.to(callerId).emit("call_accepted");
-      console.log(`📤 Notified caller ${callerId} that call was accepted`);
+      const callerSocket = connectedUsers.get(callerId);
+      if (callerSocket) {
+        socket.to(callerSocket.socketId).emit("call_accepted", {
+          acceptorId: socket.userId,
+          timestamp: new Date(),
+        });
+        console.log(`📤 Notified caller ${callerId} that call was accepted`);
+      } else {
+        console.log(`⚠️ Caller ${callerId} is no longer connected`);
+      }
     });
 
     socket.on("reject_call", (data) => {
@@ -430,16 +538,32 @@ const setupSocket = (server) => {
         `❌ Direct call rejected by ${socket.userId} for caller ${callerId}`
       );
 
-      socket.to(callerId).emit("call_rejected");
-      console.log(`📤 Notified caller ${callerId} that call was rejected`);
+      const callerSocket = connectedUsers.get(callerId);
+      if (callerSocket) {
+        socket.to(callerSocket.socketId).emit("call_rejected", {
+          rejecterId: socket.userId,
+          timestamp: new Date(),
+        });
+        console.log(`📤 Notified caller ${callerId} that call was rejected`);
+      } else {
+        console.log(`⚠️ Caller ${callerId} is no longer connected`);
+      }
     });
 
     socket.on("end_call", (data) => {
       const { receiverId } = data;
       console.log(`📞 Direct call ended by ${socket.userId}`);
 
-      socket.to(receiverId).emit("call_ended");
-      console.log(`📤 Notified receiver ${receiverId} that call ended`);
+      const receiverSocket = connectedUsers.get(receiverId);
+      if (receiverSocket) {
+        socket.to(receiverSocket.socketId).emit("call_ended", {
+          endedBy: socket.userId,
+          timestamp: new Date(),
+        });
+        console.log(`📤 Notified receiver ${receiverId} that call ended`);
+      } else {
+        console.log(`⚠️ Receiver ${receiverId} is no longer connected`);
+      }
     });
 
     socket.on("offer", (data) => {
@@ -533,7 +657,44 @@ const setupSocket = (server) => {
       const { receiverId } = data;
       console.log(`⏰ Call timeout from ${socket.userId} to ${receiverId}`);
 
-      socket.to(receiverId).emit("call_timeout");
+      const receiverSocket = connectedUsers.get(receiverId);
+      if (receiverSocket) {
+        socket.to(receiverSocket.socketId).emit("call_timeout", {
+          callerId: socket.userId,
+          timestamp: new Date(),
+        });
+        console.log(`📤 Notified receiver ${receiverId} of call timeout`);
+      }
+    });
+
+    socket.on("getChannelCallParticipants", async (data) => {
+      const { channelId } = data;
+      console.log(`👥 Getting participants for channel ${channelId}`);
+
+      const channel = await getChannelById(channelId);
+      if (!channel) {
+        socket.emit("channelParticipantsError", {
+          message: "Channel not found",
+          channelId: channelId,
+        });
+        return;
+      }
+
+      // Get online members
+      const onlineMembers = channel.members.filter((member) =>
+        connectedUsers.has(member._id.toString())
+      );
+
+      const offlineMembers = channel.members.filter(
+        (member) => !connectedUsers.has(member._id.toString())
+      );
+
+      socket.emit("channelCallParticipants", {
+        channelId,
+        totalMembers: channel.members.length,
+        onlineMembers,
+        offlineMembers,
+      });
     });
   };
 
@@ -770,6 +931,25 @@ const setupSocket = (server) => {
 
     socket.join(socket.userId);
     console.log(`🏠 User ${socket.userId} joined room: ${socket.userId}`);
+
+    // Join user to their channel rooms
+    socket.on("joinUserChannels", async () => {
+      try {
+        const userChannels = await Chat.find({
+          type: "channel",
+          members: socket.userId,
+        }).select("_id");
+
+        userChannels.forEach((channel) => {
+          socket.join(channel._id.toString());
+          console.log(
+            `🏠 User ${socket.userId} joined channel room: ${channel._id}`
+          );
+        });
+      } catch (error) {
+        console.error("Error joining user channels:", error);
+      }
+    });
 
     setupMessageStatusHandlers(socket, io);
     setupChatHandlers(socket);
