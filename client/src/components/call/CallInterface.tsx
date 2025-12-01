@@ -1,8 +1,7 @@
 import React from "react";
 import { useCallContext } from "../../hooks/useCallContext";
-import type { ChannelCallData } from "../../contexts/call/call-context";
+import type { ChannelCallData } from "../../types/call";
 import type { User } from "../../types/types";
-import type { CallState } from "../../types/call";
 
 export const CallInterface: React.FC = () => {
   const {
@@ -47,6 +46,46 @@ export const CallInterface: React.FC = () => {
       .join("");
   };
 
+  // Helper function to extract name from User object
+  const getUserName = (user: User): string => {
+    if (user.firstName && user.lastName) {
+      return `${user.firstName} ${user.lastName}`;
+    }
+    if (user.name) return user.name;
+    if (user.firstName) return user.firstName;
+    return "Unknown";
+  };
+
+  // Updated function to get caller's name from channel data
+  const getCallerName = (channelData: ChannelCallData): string => {
+    if (channelData.caller) {
+      return getUserName(channelData.caller);
+    }
+
+    // Check admins array as fallback
+    if (channelData.admins && Array.isArray(channelData.admins)) {
+      for (const admin of channelData.admins) {
+        if (
+          typeof admin === "object" &&
+          admin !== null &&
+          "firstName" in admin
+        ) {
+          return getUserName(admin as User);
+        }
+      }
+    }
+
+    // Check createdBy as final fallback
+    if (channelData.createdBy && typeof channelData.createdBy === "object") {
+      if ("firstName" in channelData.createdBy) {
+        return getUserName(channelData.createdBy as User);
+      }
+    }
+
+    // Fallback to "Admin"
+    return "Admin";
+  };
+
   const getCallerInfo = () => {
     if (!callReceiver) {
       return {
@@ -60,17 +99,21 @@ export const CallInterface: React.FC = () => {
     if (isChannelCall) {
       const channelData = callReceiver as ChannelCallData;
       const channelName = channelData.name || "Channel Call";
+
+      // Get the actual caller's name
+      const startedBy = getCallerName(channelData);
+
       return {
         name: channelName,
-        avatar: null, 
+        avatar: null,
         initials: getChannelInitials(channelName),
         participants: participants.length,
         isChannel: true,
-        startedBy: (callState as CallState).callerName || "Admin",
+        startedBy,
       };
     } else {
       const userData = callReceiver as User;
-      const userName = userData.name || "Unknown User";
+      const userName = getUserName(userData);
       return {
         name: userName,
         avatar: userData.avatar || null,
@@ -82,6 +125,14 @@ export const CallInterface: React.FC = () => {
   };
 
   const callerInfo = getCallerInfo();
+
+  console.log("Call Interface Debug:", {
+    callReceiver,
+    callMode,
+    isChannelCall,
+    channelData: isChannelCall ? (callReceiver as ChannelCallData) : null,
+    callerInfo,
+  });
 
   const getCallStatusText = () => {
     if (isIncomingCall) {
@@ -99,13 +150,6 @@ export const CallInterface: React.FC = () => {
     }
     return typeText;
   };
-
-  // const getCallStartedByText = () => {
-  //   if (isChannelCall && callerInfo.startedBy) {
-  //     return `Started by ${callerInfo.startedBy}`;
-  //   }
-  //   return null;
-  // };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
@@ -176,8 +220,10 @@ export const CallInterface: React.FC = () => {
               </h4>
               <div className="flex flex-wrap justify-center gap-2 max-h-32 overflow-y-auto">
                 {participants.slice(0, 6).map((participant) => {
-                  const participantInitials =
-                    participant.name?.charAt(0).toUpperCase() || "U";
+                  const participantName = getUserName(participant);
+                  const participantInitials = participantName
+                    .charAt(0)
+                    .toUpperCase();
                   return (
                     <div
                       key={participant._id}
@@ -187,7 +233,7 @@ export const CallInterface: React.FC = () => {
                         {participant.avatar ? (
                           <img
                             src={participant.avatar}
-                            alt={participant.name}
+                            alt={participantName}
                             className="w-full h-full object-cover"
                           />
                         ) : (
@@ -197,7 +243,7 @@ export const CallInterface: React.FC = () => {
                         )}
                       </div>
                       <span className="text-xs mt-1 text-gray-600 dark:text-gray-400 max-w-16 truncate">
-                        {participant.name}
+                        {participantName}
                       </span>
                     </div>
                   );
@@ -311,8 +357,10 @@ export const CallInterface: React.FC = () => {
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
                   {participants.slice(0, 8).map((participant) => {
-                    const participantInitials =
-                      participant.name?.charAt(0).toUpperCase() || "U";
+                    const participantName = getUserName(participant);
+                    const participantInitials = participantName
+                      .charAt(0)
+                      .toUpperCase();
                     return (
                       <div
                         key={participant._id}
@@ -323,7 +371,7 @@ export const CallInterface: React.FC = () => {
                             {participantInitials}
                           </span>
                         </div>
-                        <span className="text-sm">{participant.name}</span>
+                        <span className="text-sm">{participantName}</span>
                       </div>
                     );
                   })}
