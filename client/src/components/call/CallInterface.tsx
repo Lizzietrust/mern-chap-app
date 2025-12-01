@@ -37,23 +37,36 @@ export const CallInterface: React.FC = () => {
 
   const isChannelCall = callMode === "channel";
 
+  // Function to get initials from channel name
+  const getChannelInitials = (channelName: string): string => {
+    return channelName
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase())
+      .slice(0, 2)
+      .join("");
+  };
+
   const getCallerInfo = () => {
     if (!callReceiver) {
-      return { name: "Unknown", avatar: "/default-avatar.png" };
+      return { name: "Unknown", avatar: null, initials: "U" };
     }
 
     if (isChannelCall) {
       const channelData = callReceiver as ChannelCallData;
+      const channelName = channelData.name || "Channel Call";
       return {
-        name: channelData.name || "Channel Call",
-        avatar: "/channel-avatar.png",
+        name: channelName,
+        avatar: null, // No avatar for channels
+        initials: getChannelInitials(channelName),
         participants: participants.length,
       };
     } else {
       const userData = callReceiver as User;
+      const userName = userData.name || "Unknown User";
       return {
-        name: userData.name || "Unknown User",
-        avatar: userData.avatar || "/default-avatar.png",
+        name: userName,
+        avatar: userData.avatar || null,
+        initials: userName.charAt(0).toUpperCase(),
         participants: 1,
       };
     }
@@ -81,7 +94,7 @@ export const CallInterface: React.FC = () => {
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-4xl w-full">
         {/* Call Header */}
         <div className="mb-6 text-center">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center overflow-hidden">
             {callerInfo.avatar ? (
               <img
                 src={callerInfo.avatar}
@@ -89,17 +102,24 @@ export const CallInterface: React.FC = () => {
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-blue-500 text-white text-2xl font-semibold">
-                {callerInfo.name?.charAt(0)?.toUpperCase() || "U"}
+              <div className="w-full h-full flex items-center justify-center text-white text-2xl font-bold">
+                {callerInfo.initials}
               </div>
             )}
           </div>
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
             {callerInfo.name}
           </h3>
-          <p className="text-gray-600 dark:text-gray-400">
-            {getCallStatusText()}
-          </p>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isChannelCall ? "bg-purple-500" : "bg-blue-500"
+              }`}
+            ></span>
+            <p className="text-gray-600 dark:text-gray-400">
+              {getCallStatusText()}
+            </p>
+          </div>
           <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
             {getCallTypeText()}
           </p>
@@ -123,32 +143,36 @@ export const CallInterface: React.FC = () => {
                 Participants
               </h4>
               <div className="flex flex-wrap justify-center gap-2 max-h-32 overflow-y-auto">
-                {participants.slice(0, 6).map((participant) => (
-                  <div
-                    key={participant._id}
-                    className="flex flex-col items-center"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden">
-                      {participant.avatar ? (
-                        <img
-                          src={participant.avatar}
-                          alt={participant.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-xs font-medium">
-                          {participant.name?.charAt(0)?.toUpperCase()}
-                        </span>
-                      )}
+                {participants.slice(0, 6).map((participant) => {
+                  const participantInitials =
+                    participant.name?.charAt(0).toUpperCase() || "U";
+                  return (
+                    <div
+                      key={participant._id}
+                      className="flex flex-col items-center"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center overflow-hidden">
+                        {participant.avatar ? (
+                          <img
+                            src={participant.avatar}
+                            alt={participant.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs font-medium text-white">
+                            {participantInitials}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs mt-1 text-gray-600 dark:text-gray-400 max-w-16 truncate">
+                        {participant.name}
+                      </span>
                     </div>
-                    <span className="text-xs mt-1 text-gray-600 dark:text-gray-400 max-w-16 truncate">
-                      {participant.name}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
                 {participants.length > 6 && (
                   <div className="flex flex-col items-center">
-                    <div className="w-10 h-10 rounded-full bg-gray-400 dark:bg-gray-500 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center">
                       <span className="text-xs font-medium text-white">
                         +{participants.length - 6}
                       </span>
@@ -182,10 +206,8 @@ export const CallInterface: React.FC = () => {
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white">
                   <div className="text-center">
-                    <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-gray-600 flex items-center justify-center">
-                      <span className="text-2xl">
-                        {callerInfo.name?.charAt(0)?.toUpperCase() || "U"}
-                      </span>
+                    <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                      <span className="text-2xl">{callerInfo.initials}</span>
                     </div>
                     <p>Connecting...</p>
                   </div>
@@ -213,7 +235,7 @@ export const CallInterface: React.FC = () => {
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white">
                   <div className="text-center">
-                    <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-gray-600 flex items-center justify-center">
+                    <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-gradient-to-br from-gray-600 to-gray-700 flex items-center justify-center">
                       <span className="text-2xl">You</span>
                     </div>
                     <p>Your camera</p>
@@ -230,7 +252,7 @@ export const CallInterface: React.FC = () => {
         {/* Audio Only View */}
         {callType === "audio" && isOnCall && (
           <div className="text-center mb-6">
-            <div className="w-32 h-32 mx-auto mb-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+            <div className="w-32 h-32 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
               {callerInfo.avatar ? (
                 <img
                   src={callerInfo.avatar}
@@ -238,8 +260,8 @@ export const CallInterface: React.FC = () => {
                   className="w-full h-full object-cover rounded-full"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-blue-500 text-white text-4xl font-semibold rounded-full">
-                  {callerInfo.name?.charAt(0)?.toUpperCase() || "U"}
+                <div className="w-full h-full flex items-center justify-center text-white text-4xl font-bold rounded-full">
+                  {callerInfo.initials}
                 </div>
               )}
             </div>
@@ -256,19 +278,23 @@ export const CallInterface: React.FC = () => {
                   Active participants:
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
-                  {participants.slice(0, 8).map((participant) => (
-                    <div
-                      key={participant._id}
-                      className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full"
-                    >
-                      <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
-                        <span className="text-xs text-white">
-                          {participant.name?.charAt(0)?.toUpperCase()}
-                        </span>
+                  {participants.slice(0, 8).map((participant) => {
+                    const participantInitials =
+                      participant.name?.charAt(0).toUpperCase() || "U";
+                    return (
+                      <div
+                        key={participant._id}
+                        className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center">
+                          <span className="text-xs text-white">
+                            {participantInitials}
+                          </span>
+                        </div>
+                        <span className="text-sm">{participant.name}</span>
                       </div>
-                      <span className="text-sm">{participant.name}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -282,7 +308,7 @@ export const CallInterface: React.FC = () => {
             <>
               <button
                 onClick={acceptCall}
-                className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center hover:bg-green-600 transition-colors"
+                className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center hover:bg-green-600 transition-colors shadow-lg"
                 title="Accept Call"
               >
                 <svg
@@ -301,7 +327,7 @@ export const CallInterface: React.FC = () => {
               </button>
               <button
                 onClick={rejectCall}
-                className="w-14 h-14 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                className="w-14 h-14 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                 title="Reject Call"
               >
                 <svg
@@ -325,7 +351,7 @@ export const CallInterface: React.FC = () => {
           {isOutgoingCall && (
             <button
               onClick={endCall}
-              className="w-14 h-14 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+              className="w-14 h-14 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
               title="Cancel Call"
             >
               <svg
@@ -350,7 +376,7 @@ export const CallInterface: React.FC = () => {
               {callType === "video" && (
                 <button
                   onClick={toggleVideo}
-                  className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
+                  className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors shadow-lg ${
                     isLocalVideoEnabled
                       ? "bg-gray-600 hover:bg-gray-700"
                       : "bg-red-600 hover:bg-red-700"
@@ -386,7 +412,7 @@ export const CallInterface: React.FC = () => {
 
               <button
                 onClick={toggleAudio}
-                className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
+                className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors shadow-lg ${
                   isLocalAudioEnabled
                     ? "bg-gray-600 hover:bg-gray-700"
                     : "bg-red-600 hover:bg-red-700"
@@ -421,7 +447,7 @@ export const CallInterface: React.FC = () => {
 
               <button
                 onClick={endCall}
-                className="w-14 h-14 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                className="w-14 h-14 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                 title="End Call"
               >
                 <svg
@@ -447,7 +473,7 @@ export const CallInterface: React.FC = () => {
           <div className="mt-6 text-center">
             <button
               onClick={joinCall}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-full font-medium transition-colors"
+              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-3 rounded-full font-medium transition-all duration-300 shadow-lg hover:shadow-xl"
             >
               Join Channel Call
             </button>
