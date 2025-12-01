@@ -316,6 +316,7 @@ const setupSocket = (server) => {
               isPrivate: channel.isPrivate,
               admins: channel.admins,
               createdBy: channel.createdBy,
+              caller: caller,
             },
           });
           console.log(`📨 Sent channel call notification to ${member._id}`);
@@ -362,7 +363,6 @@ const setupSocket = (server) => {
 
     // Listen for the new event name (incomingDirectCall)
     socket.on("incomingDirectCall", (data) => {
-      // For backward compatibility, forward to existing handler
       const receiverSocket = connectedUsers.get(data.receiverId);
       if (receiverSocket) {
         socket.to(receiverSocket.socketId).emit("incoming_call", {
