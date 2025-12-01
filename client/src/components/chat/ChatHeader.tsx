@@ -872,7 +872,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
         )}
 
         {/* Participants Button - Only for channels */}
-        {isChannel && onParticipants && (
+        {/* {isChannel && onParticipants && (
           <button
             onClick={onParticipants}
             title="View participants"
@@ -894,7 +894,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
               />
             </svg>
           </button>
-        )}
+        )} */}
       </div>
     );
 
