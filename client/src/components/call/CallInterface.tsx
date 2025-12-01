@@ -2,6 +2,7 @@ import React from "react";
 import { useCallContext } from "../../hooks/useCallContext";
 import type { ChannelCallData } from "../../contexts/call/call-context";
 import type { User } from "../../types/types";
+import type { CallState } from "../../types/call";
 
 export const CallInterface: React.FC = () => {
   const {
@@ -48,7 +49,12 @@ export const CallInterface: React.FC = () => {
 
   const getCallerInfo = () => {
     if (!callReceiver) {
-      return { name: "Unknown", avatar: null, initials: "U" };
+      return {
+        name: "Unknown",
+        avatar: null,
+        initials: "U",
+        isChannel: false,
+      };
     }
 
     if (isChannelCall) {
@@ -56,9 +62,11 @@ export const CallInterface: React.FC = () => {
       const channelName = channelData.name || "Channel Call";
       return {
         name: channelName,
-        avatar: null, // No avatar for channels
+        avatar: null, 
         initials: getChannelInitials(channelName),
         participants: participants.length,
+        isChannel: true,
+        startedBy: (callState as CallState).callerName || "Admin",
       };
     } else {
       const userData = callReceiver as User;
@@ -68,6 +76,7 @@ export const CallInterface: React.FC = () => {
         avatar: userData.avatar || null,
         initials: userName.charAt(0).toUpperCase(),
         participants: 1,
+        isChannel: false,
       };
     }
   };
@@ -75,7 +84,9 @@ export const CallInterface: React.FC = () => {
   const callerInfo = getCallerInfo();
 
   const getCallStatusText = () => {
-    if (isIncomingCall) return "Incoming call";
+    if (isIncomingCall) {
+      return isChannelCall ? "Channel call incoming" : "Incoming call";
+    }
     if (isOutgoingCall) return "Calling...";
     if (isOnCall) return "On call";
     return "Call";
@@ -88,6 +99,13 @@ export const CallInterface: React.FC = () => {
     }
     return typeText;
   };
+
+  // const getCallStartedByText = () => {
+  //   if (isChannelCall && callerInfo.startedBy) {
+  //     return `Started by ${callerInfo.startedBy}`;
+  //   }
+  //   return null;
+  // };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
@@ -107,9 +125,23 @@ export const CallInterface: React.FC = () => {
               </div>
             )}
           </div>
+
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
             {callerInfo.name}
+            {isChannelCall && (
+              <span className="ml-2 text-sm bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-1 rounded-full">
+                Channel
+              </span>
+            )}
           </h3>
+
+          {/* Show who started the channel call */}
+          {isChannelCall && callerInfo.startedBy && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
+              Started by {callerInfo.startedBy}
+            </p>
+          )}
+
           <div className="flex items-center justify-center gap-2 mb-2">
             <span
               className={`w-2 h-2 rounded-full ${
@@ -479,6 +511,7 @@ export const CallInterface: React.FC = () => {
             </button>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
               Join the ongoing call with {callerInfo.participants} participants
+              {callerInfo.startedBy && ` started by ${callerInfo.startedBy}`}
             </p>
           </div>
         )}
