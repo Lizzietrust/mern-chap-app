@@ -199,13 +199,13 @@ export function UserProfilePage() {
 
   const handleAudioCall = () => {
     if (enhancedUserProfile) {
-      startCall(enhancedUserProfile, "audio");
+      startCall(enhancedUserProfile, "audio", "direct");
     }
   };
 
   const handleVideoCall = () => {
     if (enhancedUserProfile) {
-      startCall(enhancedUserProfile, "video");
+      startCall(enhancedUserProfile, "video", "direct");
     }
   };
 
