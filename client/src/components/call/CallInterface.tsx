@@ -33,6 +33,7 @@ export const CallInterface: React.FC = () => {
     isLocalVideoEnabled,
     isLocalAudioEnabled,
     participants,
+    callStatus,
   } = callState;
 
   const isChannelCall = callMode === "channel";
@@ -132,14 +133,27 @@ export const CallInterface: React.FC = () => {
     isChannelCall,
     channelData: isChannelCall ? (callReceiver as ChannelCallData) : null,
     callerInfo,
+    callStatus,
   });
 
+  // Update the getCallStatusText function
   const getCallStatusText = () => {
     if (isIncomingCall) {
       return isChannelCall ? "Channel call incoming" : "Incoming call";
     }
-    if (isOutgoingCall) return "Calling...";
-    if (isOnCall) return "On call";
+    if (isOutgoingCall) {
+      if (isChannelCall && !isOnCall) {
+        return "Starting channel call...";
+      }
+      return "Calling...";
+    }
+    if (isOnCall) {
+      // Show admin status if they started the call
+      if (isChannelCall && callStatus === "ongoing") {
+        return "In call (Admin)";
+      }
+      return "On call";
+    }
     return "Call";
   };
 
@@ -150,6 +164,10 @@ export const CallInterface: React.FC = () => {
     }
     return typeText;
   };
+
+  // Update the participant count logic
+  const activeParticipants =
+    isChannelCall && isOnCall ? participants.length + 1 : participants.length;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
@@ -204,7 +222,7 @@ export const CallInterface: React.FC = () => {
           {isChannelCall && isOnCall && (
             <div className="mt-3">
               <p className="text-sm text-green-600 dark:text-green-400">
-                {participants.length} people in call
+                {activeParticipants} people in call (including you)
               </p>
             </div>
           )}
