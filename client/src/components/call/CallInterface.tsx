@@ -539,7 +539,7 @@ export const CallInterface: React.FC = () => {
                 )}
               </div>
             </div>
-            <div className="mt-8 text-center">
+            <div className="mt-6 text-center">
               <h2 className="text-3xl font-bold text-white mb-2">
                 {callerInfo.name}
               </h2>
@@ -559,7 +559,7 @@ export const CallInterface: React.FC = () => {
             </div>
 
             {/* Audio Visualization */}
-            <div className="mt-12 flex items-center gap-1">
+            <div className="mt-4 flex items-center gap-1">
               {[...Array(20)].map((_, i) => (
                 <div
                   key={i}
