@@ -15,11 +15,18 @@ interface IncomingChannelCallData {
   type: "audio" | "video";
   callMode: "channel";
   channelData: ChannelCallData;
+  callRoomId?: string;
 }
 
 interface UserJoinedChannelCallData {
   user: User;
   channelId: string;
+}
+
+interface AdminAutoJoinedCallData {
+  channelId: string;
+  callRoomId: string;
+  type: "audio" | "video";
 }
 
 export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -31,6 +38,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
+  const callRoomIdRef = useRef<string | null>(null);
 
   const [callState, setCallState] = useState<CallState>({
     isIncomingCall: false,
@@ -61,6 +69,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       peerConnection.current.close();
       peerConnection.current = null;
     }
+    callRoomIdRef.current = null;
   }, []);
 
   const updateCallParticipants = useCallback((user: User) => {
@@ -116,8 +125,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
 
     if (socket && callState.callReceiver) {
       if (callState.callMode === "channel") {
-        socket.emit("end_channel_call", {
+        socket.emit("endChannelCall", {
           channelId: callState.callReceiver._id,
+          callRoomId: callRoomIdRef.current,
         });
       } else {
         socket.emit("end_call", {
@@ -173,6 +183,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
           socket.emit("ice-candidate-channel", {
             candidate: event.candidate,
             channelId: callState.callReceiver._id,
+            callRoomId: callRoomIdRef.current,
           });
         } else {
           socket.emit("ice-candidate", {
@@ -200,6 +211,54 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     return pc;
   }, [socket, callState.callReceiver, callState.callMode, endCall]);
 
+  // Handle admin auto-join for channel calls
+  useEffect(() => {
+    if (socket) {
+      const handleAdminAutoJoin = async (data: AdminAutoJoinedCallData) => {
+        const { callRoomId, type } = data;
+        console.log(`👥 Admin auto-joined call room: ${callRoomId}`);
+
+        // Store the call room ID
+        callRoomIdRef.current = callRoomId;
+
+        try {
+          // Create peer connection for admin
+          peerConnection.current = createPeerConnection();
+
+          // Get media stream for the admin
+          const stream = await getLocalStream(type);
+          addLocalStreamToPeerConnection(stream);
+
+          // Update call state to show admin is now in the call
+          setCallState((prev) => ({
+            ...prev,
+            isOnCall: true,
+            isOutgoingCall: false,
+            callStatus: "ongoing",
+            localStream: stream,
+          }));
+
+          console.log("✅ Admin successfully joined channel call");
+        } catch (error) {
+          console.error("❌ Error in admin auto-join:", error);
+          endCall();
+        }
+      };
+
+      socket.on("adminAutoJoinedCall", handleAdminAutoJoin);
+
+      return () => {
+        socket.off("adminAutoJoinedCall", handleAdminAutoJoin);
+      };
+    }
+  }, [
+    socket,
+    createPeerConnection,
+    getLocalStream,
+    addLocalStreamToPeerConnection,
+    endCall,
+  ]);
+
   const startCall = useCallback(
     async (
       target: User | ChannelCallData,
@@ -217,7 +276,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (callMode === "channel") {
         const channelData = target as ChannelCallData;
-
         participants = channelData.participants.map((participant) => {
           if (typeof participant === "string") {
             return {
@@ -242,39 +300,57 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       );
 
       try {
-        peerConnection.current = createPeerConnection();
+        if (callMode === "channel") {
+          setCallState({
+            isIncomingCall: false,
+            isOutgoingCall: true,
+            isOnCall: false,
+            callReceiver: target,
+            callType: type,
+            callMode: callMode,
+            localStream: null,
+            remoteStream: null,
+            isLocalVideoEnabled: type === "video",
+            isLocalAudioEnabled: true,
+            isRemoteVideoEnabled: true,
+            participants,
+            callStatus: "calling",
+          });
 
-        const stream = await getLocalStream(type);
-        addLocalStreamToPeerConnection(stream);
-
-        setCallState({
-          isIncomingCall: false,
-          isOutgoingCall: true,
-          isOnCall: false,
-          callReceiver: target,
-          callType: type,
-          callMode: callMode,
-          localStream: stream,
-          remoteStream: null,
-          isLocalVideoEnabled: type === "video",
-          isLocalAudioEnabled: true,
-          isRemoteVideoEnabled: true,
-          participants,
-          callStatus: "calling",
-        });
-
-        const offer = await peerConnection.current.createOffer();
-        await peerConnection.current.setLocalDescription(offer);
-
-        if (socket && state.user) {
-          if (callMode === "channel") {
+          // Emit startChannelCall event - server will auto-join admin
+          if (socket && state.user) {
             socket.emit("startChannelCall", {
               channelId: target._id,
               type,
               caller: state.user,
-              offer: offer,
             });
-          } else {
+          }
+        } else {
+          peerConnection.current = createPeerConnection();
+
+          const stream = await getLocalStream(type);
+          addLocalStreamToPeerConnection(stream);
+
+          setCallState({
+            isIncomingCall: false,
+            isOutgoingCall: true,
+            isOnCall: false,
+            callReceiver: target,
+            callType: type,
+            callMode: callMode,
+            localStream: stream,
+            remoteStream: null,
+            isLocalVideoEnabled: type === "video",
+            isLocalAudioEnabled: true,
+            isRemoteVideoEnabled: true,
+            participants,
+            callStatus: "calling",
+          });
+
+          const offer = await peerConnection.current.createOffer();
+          await peerConnection.current.setLocalDescription(offer);
+
+          if (socket && state.user) {
             socket.emit("start_call", {
               receiverId: target._id,
               type,
@@ -304,6 +380,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       type: "audio" | "video";
       callMode: "direct" | "channel";
       channelData?: ChannelCallData;
+      callRoomId?: string;
     }) => {
       console.log("📞 Incoming call received:", data);
 
@@ -313,6 +390,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         data.callMode === "channel"
           ? (data.channelData?.participants as User[]) || []
           : [data.caller as User];
+
+      // Store call room ID for channel calls
+      if (data.callMode === "channel" && data.callRoomId) {
+        callRoomIdRef.current = data.callRoomId;
+      }
 
       setCallState({
         isIncomingCall: true,
@@ -356,14 +438,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
           localStream: stream,
         }));
 
-        if (state.socket && state.user) {
+        if (socket && state.user) {
           if (callState.callMode === "channel") {
-            state.socket.emit("joinChannelCall", {
+            socket.emit("joinChannelCall", {
               channelId: callState.callReceiver._id,
               user: state.user,
+              callRoomId: callRoomIdRef.current,
             });
           } else {
-            state.socket.emit("accept_call", {
+            socket.emit("accept_call", {
               callerId: callState.callReceiver._id,
             });
           }
@@ -378,7 +461,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     callState.callReceiver,
     callState.callType,
     callState.callMode,
-    state.socket,
+    socket,
     state.user,
     createPeerConnection,
     getLocalStream,
@@ -392,27 +475,44 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       if (!callState.callReceiver || !callState.callType) return;
 
-      peerConnection.current = createPeerConnection();
+      // For channel calls, join the call room
+      if (callState.callMode === "channel") {
+        peerConnection.current = createPeerConnection();
+        const stream = await getLocalStream(callState.callType);
+        addLocalStreamToPeerConnection(stream);
 
-      const stream = await getLocalStream(callState.callType);
-      addLocalStreamToPeerConnection(stream);
+        setCallState((prev) => ({
+          ...prev,
+          isIncomingCall: false,
+          isOnCall: true,
+          isOutgoingCall: false,
+          localStream: stream,
+          callStatus: "ongoing",
+        }));
 
-      setCallState((prev) => ({
-        ...prev,
-        isIncomingCall: false,
-        isOnCall: true,
-        isOutgoingCall: false,
-        localStream: stream,
-        callStatus: "ongoing",
-      }));
-
-      if (socket && callState.callReceiver && state.user) {
-        if (callState.callMode === "channel") {
-          socket.emit("acceptChannelCall", {
+        if (socket && callState.callReceiver && state.user) {
+          socket.emit("joinChannelCall", {
             channelId: callState.callReceiver._id,
             user: state.user,
+            callRoomId: callRoomIdRef.current,
           });
-        } else {
+        }
+      } else {
+        // Direct call logic
+        peerConnection.current = createPeerConnection();
+        const stream = await getLocalStream(callState.callType);
+        addLocalStreamToPeerConnection(stream);
+
+        setCallState((prev) => ({
+          ...prev,
+          isIncomingCall: false,
+          isOnCall: true,
+          isOutgoingCall: false,
+          localStream: stream,
+          callStatus: "ongoing",
+        }));
+
+        if (socket && callState.callReceiver && state.user) {
           socket.emit("accept_call", {
             callerId: callState.callReceiver._id,
           });
@@ -440,6 +540,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       if (callState.callMode === "channel") {
         socket.emit("rejectChannelCall", {
           channelId: callState.callReceiver._id,
+          callRoomId: callRoomIdRef.current,
         });
       } else {
         socket.emit("reject_call", {
@@ -467,35 +568,29 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [socket, callState.callReceiver, callState.callMode, cleanupMediaStreams]);
 
   useEffect(() => {
-    if (state.socket) {
-      state.socket.on("incomingDirectCall", (data: IncomingDirectCallData) => {
+    if (socket) {
+      socket.on("incomingDirectCall", (data: IncomingDirectCallData) => {
         handleIncomingCall({
           ...data,
           callMode: "direct" as const,
         });
       });
 
-      state.socket.on(
-        "incomingChannelCall",
-        (data: IncomingChannelCallData) => {
-          handleIncomingCall(data);
-        }
-      );
+      socket.on("incomingChannelCall", (data: IncomingChannelCallData) => {
+        handleIncomingCall(data);
+      });
 
-      state.socket.on(
-        "userJoinedChannelCall",
-        (data: UserJoinedChannelCallData) => {
-          updateCallParticipants(data.user);
-        }
-      );
+      socket.on("userJoinedChannelCall", (data: UserJoinedChannelCallData) => {
+        updateCallParticipants(data.user);
+      });
 
       return () => {
-        state.socket?.off("incomingDirectCall");
-        state.socket?.off("incomingChannelCall");
-        state.socket?.off("userJoinedChannelCall");
+        socket?.off("incomingDirectCall");
+        socket?.off("incomingChannelCall");
+        socket?.off("userJoinedChannelCall");
       };
     }
-  }, [state.socket, handleIncomingCall, updateCallParticipants]);
+  }, [socket, handleIncomingCall, updateCallParticipants]);
 
   useEffect(() => {
     if (!socket) return;
@@ -519,9 +614,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     const handleIncomingChannelCallEvent = async (data: {
-      channel: ChannelCallData;
+      channelData: ChannelCallData;
       type: "audio" | "video";
       caller: User;
+      callRoomId?: string;
     }) => {
       console.log("📞 Incoming channel call received:", data);
 
@@ -529,7 +625,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         caller: data.caller,
         type: data.type,
         callMode: "channel",
-        channelData: data.channel,
+        channelData: data.channelData,
+        callRoomId: data.callRoomId,
       });
     };
 
@@ -543,14 +640,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
 
           if (socket && callState.callReceiver) {
             if (callState.callMode === "channel") {
-              socket.emit("channel-offer", {
+              socket.emit("offer", {
                 offer,
+                receiverId: callState.callReceiver._id,
+                callType: "channel",
                 channelId: callState.callReceiver._id,
+                callRoomId: callRoomIdRef.current,
               });
             } else {
               socket.emit("offer", {
                 offer,
                 receiverId: callState.callReceiver._id,
+                callType: "direct",
               });
             }
           }
@@ -612,6 +713,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     const handleOffer = async (data: {
       offer: RTCSessionDescriptionInit;
       callerId: string;
+      callType?: string;
+      channelId?: string;
+      callRoomId?: string;
     }) => {
       console.log("📨 Received offer");
       if (!peerConnection.current) return;
@@ -626,6 +730,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
           socket.emit("answer", {
             answer,
             callerId: data.callerId,
+            callType: data.callType || "direct",
+            channelId: data.channelId,
+            callRoomId: data.callRoomId,
           });
         }
       } catch (error) {
@@ -635,6 +742,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const handleAnswer = async (data: {
       answer: RTCSessionDescriptionInit;
+      receiverId?: string;
+      callType?: string;
+      channelId?: string;
+      callRoomId?: string;
     }) => {
       console.log("📨 Received answer");
       if (!peerConnection.current) return;
@@ -648,6 +759,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const handleIceCandidate = async (data: {
       candidate: RTCIceCandidateInit;
+      senderId?: string;
+      channelId?: string;
+      callRoomId?: string;
     }) => {
       console.log("❄️ Received ICE candidate");
       if (!peerConnection.current) return;
@@ -662,7 +776,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     socket.on("incoming_call", handleIncomingCallEvent);
-    socket.on("incoming_channel_call", handleIncomingChannelCallEvent);
+    socket.on("incomingChannelCall", handleIncomingChannelCallEvent);
     socket.on("call_accepted", handleCallAccepted);
     socket.on("call_rejected", handleCallRejected);
     socket.on("call_ended", handleCallEnded);
@@ -673,7 +787,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
 
     return () => {
       socket.off("incoming_call", handleIncomingCallEvent);
-      socket.off("incoming_channel_call", handleIncomingChannelCallEvent);
+      socket.off("incomingChannelCall", handleIncomingChannelCallEvent);
       socket.off("call_accepted", handleCallAccepted);
       socket.off("call_rejected", handleCallRejected);
       socket.off("call_ended", handleCallEnded);
