@@ -252,7 +252,6 @@ const setupSocket = (server) => {
       const { channelId, type, caller, offer } = data;
       console.log(`📞 Channel call from ${caller._id} in channel ${channelId}`);
 
-      // Get channel using Chat model
       const channel = await getChannelById(channelId);
       if (!channel) {
         console.error(`❌ Channel ${channelId} not found`);
@@ -263,35 +262,29 @@ const setupSocket = (server) => {
         return;
       }
 
+      // Check if user is admin
       const isAdmin = channel.admins.some(
         (admin) => admin._id.toString() === caller._id.toString()
       );
 
-      if (
-        !isAdmin &&
-        caller._id.toString() !== channel.createdBy?._id?.toString()
-      ) {
+      if (!isAdmin) {
         console.error(
-          `❌ User ${caller._id} is not authorized to start calls in channel ${channelId}`
+          `❌ User ${caller._id} is not admin of channel ${channelId}`
         );
         socket.emit("channelCallError", {
-          message: "Only admins and channel creator can start calls",
+          message: "Only admins can start channel calls",
           channelId: channelId,
         });
         return;
       }
 
-      const hasActiveCall = false;
+      // Auto-join the admin to the call room
+      const callRoomId = `channel-call-${channelId}`;
+      socket.join(callRoomId);
+      console.log(
+        `👥 Admin ${caller._id} auto-joined call room: ${callRoomId}`
+      );
 
-      if (hasActiveCall) {
-        socket.emit("channelCallError", {
-          message: "There's already an active call in this channel",
-          channelId: channelId,
-        });
-        return;
-      }
-
-      // Notify all channel members except the caller
       const membersToNotify = channel.members.filter(
         (member) => member._id.toString() !== caller._id.toString()
       );
@@ -305,7 +298,7 @@ const setupSocket = (server) => {
         const memberSocket = connectedUsers.get(member._id.toString());
         if (memberSocket) {
           socket.to(memberSocket.socketId).emit("incomingChannelCall", {
-            caller: caller,
+            caller,
             type,
             callMode: "channel",
             channelData: {
@@ -316,8 +309,9 @@ const setupSocket = (server) => {
               isPrivate: channel.isPrivate,
               admins: channel.admins,
               createdBy: channel.createdBy,
-              caller: caller,
+              caller,
             },
+            callRoomId,
           });
           console.log(`📨 Sent channel call notification to ${member._id}`);
           notifiedCount++;
@@ -333,31 +327,20 @@ const setupSocket = (server) => {
         notifiedCount,
         offlineCount,
         totalMembers: membersToNotify.length,
+        callRoomId,
       });
 
-      if (offer) {
-        const firstOnlineMember = membersToNotify.find((member) =>
-          connectedUsers.has(member._id.toString())
-        );
+      socket.emit("adminAutoJoinedCall", {
+        channelId,
+        callRoomId,
+        type,
+      });
 
-        if (firstOnlineMember) {
-          setTimeout(() => {
-            const memberSocket = connectedUsers.get(
-              firstOnlineMember._id.toString()
-            );
-            if (memberSocket) {
-              socket.to(memberSocket.socketId).emit("offer", {
-                offer: offer,
-                callerId: socket.userId,
-                callType: "channel",
-                channelId: channelId,
-              });
-              console.log(`📨 Sent WebRTC offer to ${firstOnlineMember._id}`);
-            }
-          }, 1000);
-        } else {
-          console.log("⚠️ No online members to send WebRTC offer to");
-        }
+      // Send WebRTC offer if provided
+      if (offer) {
+        console.log(
+          "📨 WebRTC offer received, waiting for participants to join"
+        );
       }
     });
 
@@ -403,38 +386,73 @@ const setupSocket = (server) => {
         return;
       }
 
-      const otherMembers = channel.members.filter(
-        (member) => member._id.toString() !== user._id.toString()
-      );
+      // Join the call room
+      const callRoomId = `channel-call-${channelId}`;
+      socket.join(callRoomId);
+      console.log(`👥 User ${user._id} joined call room: ${callRoomId}`);
 
-      otherMembers.forEach((member) => {
-        const memberSocket = connectedUsers.get(member._id.toString());
-        if (memberSocket) {
-          socket.to(memberSocket.socketId).emit("userJoinedChannelCall", {
-            channelId,
-            user,
-            timestamp: new Date(),
-          });
-          console.log(`📢 Notified ${member._id} that user joined call`);
-        }
+      // Notify all other participants in the call room
+      socket.to(callRoomId).emit("userJoinedChannelCall", {
+        channelId,
+        user,
+        callRoomId,
+        timestamp: new Date(),
+      });
+
+      // Get current participants in the call room
+      const participantsInRoom = [];
+      const room = io.sockets.adapter.rooms.get(callRoomId);
+      if (room) {
+        const socketIds = Array.from(room);
+        socketIds.forEach((socketId) => {
+          const socket = io.sockets.sockets.get(socketId);
+          if (socket && socket.userId !== user._id.toString()) {
+            participantsInRoom.push({
+              _id: socket.userId,
+              firstName: socket.user?.firstName || "",
+              lastName: socket.user?.lastName || "",
+              name:
+                socket.user?.firstName && socket.user?.lastName
+                  ? `${socket.user.firstName} ${socket.user.lastName}`
+                  : socket.user?.name || "User",
+              image: socket.user?.image || null,
+              isOnline: true,
+            });
+          }
+        });
+      }
+
+      // Send current participants to the new joiner
+      socket.emit("channelCallParticipants", {
+        channelId,
+        callRoomId,
+        participants: participantsInRoom,
       });
 
       // Confirm to joiner
       socket.emit("channelCallJoined", {
         channelId,
         channelName: channel.name,
-        memberCount: otherMembers.length,
+        memberCount: participantsInRoom.length + 1,
+        callRoomId,
       });
     });
 
     socket.on("acceptChannelCall", async (data) => {
-      const { channelId, user } = data;
+      const { channelId, user, callRoomId } = data;
       console.log(
         `✅ Channel call accepted by ${user._id} in channel ${channelId}`
       );
 
       const channel = await getChannelById(channelId);
       if (!channel) return;
+
+      if (callRoomId) {
+        socket.join(callRoomId);
+        console.log(
+          `👥 User ${user._id} joined call room for accept: ${callRoomId}`
+        );
+      }
 
       const otherMembers = channel.members.filter(
         (member) => member._id.toString() !== user._id.toString()
@@ -447,6 +465,7 @@ const setupSocket = (server) => {
             channelId,
             user,
             timestamp: new Date(),
+            callRoomId,
           });
           console.log(`📢 Notified ${member._id} that call was accepted`);
         }
@@ -454,7 +473,7 @@ const setupSocket = (server) => {
     });
 
     socket.on("rejectChannelCall", async (data) => {
-      const { channelId } = data;
+      const { channelId, callRoomId } = data;
       console.log(
         `❌ Channel call rejected by ${socket.userId} in channel ${channelId}`
       );
@@ -473,10 +492,17 @@ const setupSocket = (server) => {
             channelId,
             userId: socket.userId,
             timestamp: new Date(),
+            callRoomId,
           });
           console.log(`📢 Notified ${member._id} that call was rejected`);
         }
       });
+
+      // Leave the call room if joined
+      if (callRoomId) {
+        socket.leave(callRoomId);
+        console.log(`👋 User ${socket.userId} left call room: ${callRoomId}`);
+      }
 
       const callerSocket = connectedUsers.get(socket.userId);
       if (callerSocket) {
@@ -488,7 +514,7 @@ const setupSocket = (server) => {
     });
 
     socket.on("endChannelCall", async (data) => {
-      const { channelId } = data;
+      const { channelId, callRoomId } = data;
       console.log(
         `📞 Channel call ended by ${socket.userId} in channel ${channelId}`
       );
@@ -508,10 +534,17 @@ const setupSocket = (server) => {
             userId: socket.userId,
             timestamp: new Date(),
             endedBy: socket.user,
+            callRoomId,
           });
           console.log(`📢 Notified ${member._id} that call ended`);
         }
       });
+
+      // Leave the call room
+      if (callRoomId) {
+        socket.leave(callRoomId);
+        console.log(`👋 User ${socket.userId} left call room: ${callRoomId}`);
+      }
     });
 
     socket.on("accept_call", (data) => {
@@ -567,7 +600,7 @@ const setupSocket = (server) => {
     });
 
     socket.on("offer", (data) => {
-      const { offer, receiverId, callType, channelId } = data;
+      const { offer, receiverId, callType, channelId, callRoomId } = data;
       console.log(`📨 Forwarding offer from ${socket.userId} to ${receiverId}`);
 
       const receiverSocket = connectedUsers.get(receiverId);
@@ -578,6 +611,7 @@ const setupSocket = (server) => {
           callerId: socket.userId,
           callType: callType || "direct",
           channelId: channelId,
+          callRoomId: callRoomId,
         });
         console.log(`✅ Offer forwarded to ${receiverId}`);
       } else {
@@ -587,7 +621,7 @@ const setupSocket = (server) => {
     });
 
     socket.on("answer", (data) => {
-      const { answer, callerId, callType, channelId } = data;
+      const { answer, callerId, callType, channelId, callRoomId } = data;
       console.log(`📨 Forwarding answer from ${socket.userId} to ${callerId}`);
 
       const callerSocket = connectedUsers.get(callerId);
@@ -598,6 +632,7 @@ const setupSocket = (server) => {
           receiverId: socket.userId,
           callType: callType || "direct",
           channelId: channelId,
+          callRoomId: callRoomId,
         });
         console.log(`✅ Answer forwarded to ${callerId}`);
       } else {
@@ -628,7 +663,7 @@ const setupSocket = (server) => {
     });
 
     socket.on("ice-candidate-channel", async (data) => {
-      const { candidate, channelId } = data;
+      const { candidate, channelId, callRoomId } = data;
       console.log(
         `❄️ Forwarding ICE candidate from ${socket.userId} to channel ${channelId}`
       );
@@ -636,21 +671,33 @@ const setupSocket = (server) => {
       const channel = await getChannelById(channelId);
       if (!channel) return;
 
-      const otherMembers = channel.members.filter(
-        (member) => member._id.toString() !== socket.userId
-      );
+      // If callRoomId is provided, broadcast to the call room
+      if (callRoomId) {
+        socket.to(callRoomId).emit("ice-candidate", {
+          candidate: candidate,
+          senderId: socket.userId,
+          channelId: channelId,
+          callRoomId: callRoomId,
+        });
+        console.log(`✅ ICE candidate broadcasted to call room ${callRoomId}`);
+      } else {
+        // Fallback to individual members
+        const otherMembers = channel.members.filter(
+          (member) => member._id.toString() !== socket.userId
+        );
 
-      otherMembers.forEach((member) => {
-        const memberSocket = connectedUsers.get(member._id.toString());
-        if (memberSocket) {
-          socket.to(memberSocket.socketId).emit("ice-candidate", {
-            candidate: candidate,
-            senderId: socket.userId,
-            channelId: channelId,
-          });
-          console.log(`✅ ICE candidate forwarded to ${member._id}`);
-        }
-      });
+        otherMembers.forEach((member) => {
+          const memberSocket = connectedUsers.get(member._id.toString());
+          if (memberSocket) {
+            socket.to(memberSocket.socketId).emit("ice-candidate", {
+              candidate: candidate,
+              senderId: socket.userId,
+              channelId: channelId,
+            });
+            console.log(`✅ ICE candidate forwarded to ${member._id}`);
+          }
+        });
+      }
     });
 
     socket.on("call_timeout", (data) => {
@@ -668,7 +715,7 @@ const setupSocket = (server) => {
     });
 
     socket.on("getChannelCallParticipants", async (data) => {
-      const { channelId } = data;
+      const { channelId, callRoomId } = data;
       console.log(`👥 Getting participants for channel ${channelId}`);
 
       const channel = await getChannelById(channelId);
@@ -689,11 +736,28 @@ const setupSocket = (server) => {
         (member) => !connectedUsers.has(member._id.toString())
       );
 
+      // Get participants in the call room if callRoomId is provided
+      let callRoomParticipants = [];
+      if (callRoomId) {
+        const room = io.sockets.adapter.rooms.get(callRoomId);
+        if (room) {
+          const socketIds = Array.from(room);
+          callRoomParticipants = socketIds
+            .map((socketId) => {
+              const socket = io.sockets.sockets.get(socketId);
+              return socket ? socket.userId : null;
+            })
+            .filter((id) => id !== null);
+        }
+      }
+
       socket.emit("channelCallParticipants", {
         channelId,
         totalMembers: channel.members.length,
         onlineMembers,
         offlineMembers,
+        callRoomParticipants,
+        callRoomId,
       });
     });
   };
