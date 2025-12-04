@@ -26,4 +26,6 @@ export interface ChannelCallData {
   admins: (User | string)[];
   createdBy?: User | string;
   caller?: User;
+  avatar?: string;
+  images?: string;
 }
