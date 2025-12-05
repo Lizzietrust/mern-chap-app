@@ -16,7 +16,6 @@ import {
 } from "../../types/types";
 import { useApp } from "../../contexts/appcontext/index";
 import { useCallContext } from "../../hooks/useCallContext";
-import { MdOutlineNotificationsNone } from "react-icons/md";
 import { useNavigate } from "react-router-dom";
 
 const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
@@ -825,9 +824,9 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
         )}
 
         {/* Notification Button */}
-        <button
+        {/* <button
           onClick={() => {
-            /* Add notification handler */
+            
           }}
           title="Notifications"
           className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
@@ -835,7 +834,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
           }`}
         >
           <MdOutlineNotificationsNone className="w-6 h-6" />
-        </button>
+        </button> */}
 
         {/* Call Button - Show for direct chats with valid participants */}
         {shouldShowCallButton && renderCallButton()}
@@ -960,7 +959,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
             )}
 
             {/* Notification Option */}
-            <button
+            {/* <button
               onClick={() => handleMobileAction(() => {})}
               className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
                 isDark ? "text-gray-300" : "text-gray-700"
@@ -982,7 +981,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
                 </svg>
                 <span>Notifications</span>
               </div>
-            </button>
+            </button> */}
 
             {/* Call Options - Show for direct chats with valid participants */}
             {shouldShowCallButton && (
