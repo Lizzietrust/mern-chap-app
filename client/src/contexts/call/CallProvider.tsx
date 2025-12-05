@@ -317,7 +317,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
             callStatus: "calling",
           });
 
-          // Emit startChannelCall event - server will auto-join admin
           if (socket && state.user) {
             socket.emit("startChannelCall", {
               channelId: target._id,
@@ -326,6 +325,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
             });
           }
         } else {
+          // Direct call logic remains the same
           peerConnection.current = createPeerConnection();
 
           const stream = await getLocalStream(type);
