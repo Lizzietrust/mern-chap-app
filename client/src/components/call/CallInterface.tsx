@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useCallContext } from "../../hooks/useCallContext";
 import type { ChannelCallData } from "../../types/call";
 import type { User } from "../../types/types";
 import {
-  // Phone,
   PhoneOff,
   Video,
   VideoOff,
@@ -11,7 +10,6 @@ import {
   MicOff,
   UserPlus,
   Users,
-  // MessageCircle,
   Maximize2,
   Minimize2,
   Settings,
@@ -56,6 +54,10 @@ export const CallInterface: React.FC = () => {
   const [audioLevel, setAudioLevel] = useState(50);
   const [callDuration, setCallDuration] = useState(0);
 
+  // Refs for video elements
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+
   const shouldShowCallInterface =
     callState.isIncomingCall || callState.isOutgoingCall || callState.isOnCall;
 
@@ -71,6 +73,58 @@ export const CallInterface: React.FC = () => {
     }
     return () => clearInterval(interval);
   }, [callState.isOnCall]);
+
+  useEffect(() => {
+    if (callState.localStream && localVideoRef.current) {
+      console.log("📹 Setting LOCAL video stream - CALLER'S OWN VIDEO");
+
+      // Only update if the stream has changed
+      if (localVideoRef.current.srcObject !== callState.localStream) {
+        console.log("🔁 Updating local video srcObject");
+        localVideoRef.current.srcObject = callState.localStream;
+      }
+
+      // Mute audio for local preview to prevent echo
+      localVideoRef.current.muted = true;
+
+      // Play the video
+      localVideoRef.current
+        .play()
+        .then(() =>
+          console.log("✅ Local video playing - CALLER SEES THEMSELVES")
+        )
+        .catch((e) => {
+          console.log("❌ Local video play error:", e);
+          console.log("Error details:", e.name, e.message);
+        });
+    } else if (!callState.localStream && localVideoRef.current) {
+      console.log("❌ No local stream, clearing video");
+      localVideoRef.current.srcObject = null;
+    }
+  }, [callState.localStream]);
+
+  useEffect(() => {
+    if (callState.remoteStream && remoteVideoRef.current) {
+      console.log("📹 Setting REMOTE video stream - RECEIVER'S VIDEO");
+
+      // Only update if the stream has changed
+      if (remoteVideoRef.current.srcObject !== callState.remoteStream) {
+        console.log("🔁 Updating remote video srcObject");
+        remoteVideoRef.current.srcObject = callState.remoteStream;
+      }
+
+      // Don't mute remote audio
+      remoteVideoRef.current.muted = false;
+
+      remoteVideoRef.current
+        .play()
+        .then(() => console.log("✅ Remote video playing"))
+        .catch((e) => console.log("❌ Remote video play error:", e));
+    } else if (!callState.remoteStream && remoteVideoRef.current) {
+      console.log("❌ No remote stream, clearing video");
+      remoteVideoRef.current.srcObject = null;
+    }
+  }, [callState.remoteStream]);
 
   // Handle fullscreen toggle
   const toggleFullscreen = () => {
@@ -104,12 +158,15 @@ export const CallInterface: React.FC = () => {
     isOutgoingCall,
     isOnCall,
     localStream,
-    // remoteStream,
+    remoteStream,
     isLocalVideoEnabled,
     isLocalAudioEnabled,
     participants,
     callStatus,
   } = callState;
+
+  const shouldShowVideoInterface =
+    callType === "video" && (isOutgoingCall || isOnCall);
 
   const isChannelCall = callMode === "channel";
   const currentUserId = getCurrentUserId();
@@ -186,7 +243,7 @@ export const CallInterface: React.FC = () => {
 
       return {
         name: channelName,
-        avatar: channelData.avatar || null,
+        avatar: null,
         initials: getChannelInitials(channelName),
         participants: filteredParticipants.length,
         isChannel: true,
@@ -241,11 +298,12 @@ export const CallInterface: React.FC = () => {
       ? filteredParticipants.length + 1
       : filteredParticipants.length;
 
+  const videoCount = isChannelCall ? filteredParticipants.length + 1 : 2;
+
   const getGridCols = () => {
-    const count = filteredParticipants.length + 1;
-    if (count <= 2) return "grid-cols-1 md:grid-cols-2";
-    if (count <= 4) return "grid-cols-2";
-    if (count <= 6) return "grid-cols-3";
+    if (videoCount <= 2) return "grid-cols-1 md:grid-cols-2";
+    if (videoCount <= 4) return "grid-cols-2";
+    if (videoCount <= 6) return "grid-cols-3";
     return "grid-cols-4";
   };
 
@@ -397,57 +455,163 @@ export const CallInterface: React.FC = () => {
       {/* Main Content */}
       <div className="absolute inset-0 pt-20 pb-32 px-4 overflow-hidden">
         {/* Video/Audio Content */}
-        {callType === "video" && isOnCall ? (
+        {shouldShowVideoInterface ? (
           <div className="h-full flex flex-col">
-            {/* Remote Participants Grid */}
+            {/* Video Grid - Always show both local and remote for one-on-one calls */}
             <div className={`grid ${getGridCols()} gap-4 flex-1`}>
-              {/* Remote Streams */}
-              {filteredParticipants.map((participant) => {
-                const participantName = getUserName(participant);
-                const participantInitials = participantName
-                  .charAt(0)
-                  .toUpperCase();
-                return (
-                  <div
-                    key={participant._id}
-                    className="relative bg-gray-800 rounded-xl overflow-hidden group"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20" />
-                    <div className="absolute inset-0 flex items-center justify-center">
+              {/* For one-on-one calls: ALWAYS show remote video if available */}
+              {!isChannelCall && callReceiver && (
+                <div className="relative bg-gray-800 rounded-xl overflow-hidden group">
+                  {remoteStream ? (
+                    <video
+                      autoPlay
+                      playsInline
+                      muted={false}
+                      ref={remoteVideoRef}
+                      className="w-full h-full object-cover bg-black"
+                      onError={(e) => {
+                        console.log("❌ Remote video error:", e);
+                      }}
+                      onLoadedMetadata={() =>
+                        console.log("✅ Remote video metadata loaded")
+                      }
+                      onCanPlay={() => {
+                        console.log("✅ Remote video can play");
+                      }}
+                      onPlay={() => {
+                        console.log(
+                          "🎬 Remote video playing - RECEIVER'S VIDEO"
+                        );
+                      }}
+                    />
+                  ) : (
+                    // Fallback UI when no remote video stream yet
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20 flex items-center justify-center">
                       <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center">
                         <span className="text-3xl text-white font-bold">
-                          {participantInitials}
+                          {callerInfo.initials}
                         </span>
                       </div>
                     </div>
-                    <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
-                      <div className="flex items-center justify-between">
-                        <span className="text-white font-medium">
-                          {participantName}
+                  )}
+                  <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white font-medium">
+                        {callerInfo.name}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            remoteStream ? "bg-green-500" : "bg-yellow-500"
+                          }`}
+                        />
+                        <span className="text-xs text-gray-300">
+                          {remoteStream ? "Live" : "Connecting..."}
                         </span>
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs text-gray-300">Live</span>
-                        </div>
                       </div>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              )}
 
-              {/* Local Video */}
+              {/* For channel calls: Show all participants */}
+              {isChannelCall &&
+                filteredParticipants.map((participant) => {
+                  const participantName = getUserName(participant);
+                  const participantInitials = participantName
+                    .charAt(0)
+                    .toUpperCase();
+
+                  return (
+                    <div
+                      key={participant._id}
+                      className="relative bg-gray-800 rounded-xl overflow-hidden group"
+                    >
+                      {/* For channel calls, you'd need to handle multiple remote streams */}
+                      <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20 flex items-center justify-center">
+                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center">
+                          <span className="text-3xl text-white font-bold">
+                            {participantInitials}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
+                        <div className="flex items-center justify-between">
+                          <span className="text-white font-medium">
+                            {participantName}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full bg-green-500" />
+                            <span className="text-xs text-gray-300">Live</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
               <div className="relative bg-gray-800 rounded-xl overflow-hidden border-2 border-blue-500">
                 {localStream && isLocalVideoEnabled ? (
                   <video
                     autoPlay
                     playsInline
-                    muted
-                    ref={(video) => {
-                      if (video && localStream) {
-                        video.srcObject = localStream;
+                    muted={false}
+                    ref={localVideoRef}
+                    className="w-full h-full object-cover bg-black"
+                    onError={(e) => {
+                      console.log("❌ Local video error:", e);
+
+                      const target = e.target as HTMLVideoElement;
+                      if (target.error) {
+                        console.log("Error code:", target.error.code);
+                        console.log("Error message:", target.error.message);
+
+                        // Decode error codes
+                        const errorMessages: Record<number, string> = {
+                          1: "MEDIA_ERR_ABORTED - The user canceled the video",
+                          2: "MEDIA_ERR_NETWORK - A network error occurred",
+                          3: "MEDIA_ERR_DECODE - The video couldn't be decoded",
+                          4: "MEDIA_ERR_SRC_NOT_SUPPORTED - The video format is not supported",
+                        };
+
+                        console.log(
+                          "Error meaning:",
+                          errorMessages[target.error.code] || "Unknown error"
+                        );
                       }
                     }}
-                    className="w-full h-full object-cover"
+                    onLoadedMetadata={() => {
+                      console.log("✅ Local video metadata loaded");
+                      if (localVideoRef.current) {
+                        console.log(
+                          "📏 Video dimensions:",
+                          localVideoRef.current.videoWidth,
+                          "x",
+                          localVideoRef.current.videoHeight
+                        );
+                      }
+                    }}
+                    onCanPlay={() => {
+                      console.log(
+                        "✅ Local video can play - CALLER'S SELF-VIEW"
+                      );
+                      // Try to play if it's paused
+                      if (localVideoRef.current?.paused) {
+                        localVideoRef.current
+                          .play()
+                          .then(() => console.log("🎬 Force play succeeded"))
+                          .catch((e) =>
+                            console.log("❌ Force play failed:", e)
+                          );
+                      }
+                    }}
+                    onPlay={() => {
+                      console.log(
+                        "🎬 Local video playing - CALLER SEES THEMSELVES"
+                      );
+                    }}
+                    onPause={() => console.log("⏸️ Local video paused")}
+                    onStalled={() => console.log("⚠️ Local video stalled")}
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
@@ -467,6 +631,29 @@ export const CallInterface: React.FC = () => {
                   <span className="text-white text-sm">You</span>
                 </div>
               </div>
+            </div>
+
+            {/* Debug info */}
+            <div className="absolute bottom-4 right-4 text-xs text-gray-400 bg-black/50 p-2 rounded">
+              <div>Local stream: {localStream ? "✅" : "❌"}</div>
+              <div>Remote stream: {remoteStream ? "✅" : "❌"}</div>
+              <div>
+                Local video enabled: {isLocalVideoEnabled ? "✅" : "❌"}
+              </div>
+              <div>
+                Remote video enabled:{" "}
+                {callState.isRemoteVideoEnabled ? "✅" : "❌"}
+              </div>
+              <div>
+                Caller role:{" "}
+                {isOutgoingCall
+                  ? "📞 Caller"
+                  : isIncomingCall
+                  ? "📥 Receiver"
+                  : "📱 In call"}
+              </div>
+              <div>Call type: {isChannelCall ? "Channel" : "One-on-One"}</div>
+              <div>Video count: {videoCount}</div>
             </div>
 
             {/* Participants Sidebar */}
