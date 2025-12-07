@@ -218,18 +218,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         const { callRoomId, type } = data;
         console.log(`👥 Admin auto-joined call room: ${callRoomId}`);
 
-        // Store the call room ID
         callRoomIdRef.current = callRoomId;
 
         try {
-          // Create peer connection for admin
           peerConnection.current = createPeerConnection();
-
-          // Get media stream for the admin
           const stream = await getLocalStream(type);
           addLocalStreamToPeerConnection(stream);
 
-          // Update call state to show admin is now in the call
           setCallState((prev) => ({
             ...prev,
             isOnCall: true,
@@ -325,7 +320,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
             });
           }
         } else {
-          // Direct call logic remains the same
           peerConnection.current = createPeerConnection();
 
           const stream = await getLocalStream(type);
@@ -391,7 +385,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
           ? (data.channelData?.participants as User[]) || []
           : [data.caller as User];
 
-      // Store call room ID for channel calls
       if (data.callMode === "channel" && data.callRoomId) {
         callRoomIdRef.current = data.callRoomId;
       }
@@ -475,7 +468,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       if (!callState.callReceiver || !callState.callType) return;
 
-      // For channel calls, join the call room
       if (callState.callMode === "channel") {
         peerConnection.current = createPeerConnection();
         const stream = await getLocalStream(callState.callType);
@@ -498,7 +490,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
           });
         }
       } else {
-        // Direct call logic
         peerConnection.current = createPeerConnection();
         const stream = await getLocalStream(callState.callType);
         addLocalStreamToPeerConnection(stream);
@@ -807,14 +798,25 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
   const toggleVideo = useCallback(() => {
     if (localStreamRef.current) {
       const videoTracks = localStreamRef.current.getVideoTracks();
+
       videoTracks.forEach((track) => {
         track.enabled = !track.enabled;
+        console.log(`📹 Video track ${track.enabled ? "enabled" : "disabled"}`);
       });
 
-      setCallState((prev) => ({
-        ...prev,
-        isLocalVideoEnabled: !prev.isLocalVideoEnabled,
-      }));
+      // Force state update to trigger re-render
+      setCallState((prev) => {
+        const newVideoState = !prev.isLocalVideoEnabled;
+        console.log(`🔄 Updating video state to: ${newVideoState}`);
+
+        return {
+          ...prev,
+          isLocalVideoEnabled: newVideoState,
+          localStream: prev.localStream
+            ? new MediaStream(prev.localStream.getTracks())
+            : null,
+        };
+      });
     }
   }, []);
 
