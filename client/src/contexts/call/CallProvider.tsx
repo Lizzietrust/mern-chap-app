@@ -211,6 +211,39 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     return pc;
   }, [socket, callState.callReceiver, callState.callMode, endCall]);
 
+  // Handle remote video state changes
+  const handleRemoteVideoStateChanged = useCallback(
+    (data: { isVideoEnabled: boolean }) => {
+      console.log(`📹 Remote video state changed: ${data.isVideoEnabled}`);
+      setCallState((prev) => ({
+        ...prev,
+        isRemoteVideoEnabled: data.isVideoEnabled,
+      }));
+    },
+    []
+  );
+
+  // Handle remote audio state changes
+  const handleRemoteAudioStateChanged = useCallback(
+    (data: { isAudioEnabled: boolean }) => {
+      console.log(`🎤 Remote audio state changed: ${data.isAudioEnabled}`);
+    },
+    []
+  );
+
+  // Setup socket listeners for remote media state changes
+  useEffect(() => {
+    if (socket) {
+      socket.on("remoteVideoStateChanged", handleRemoteVideoStateChanged);
+      socket.on("remoteAudioStateChanged", handleRemoteAudioStateChanged);
+
+      return () => {
+        socket.off("remoteVideoStateChanged", handleRemoteVideoStateChanged);
+        socket.off("remoteAudioStateChanged", handleRemoteAudioStateChanged);
+      };
+    }
+  }, [socket, handleRemoteVideoStateChanged, handleRemoteAudioStateChanged]);
+
   // Handle admin auto-join for channel calls
   useEffect(() => {
     if (socket) {
@@ -799,14 +832,35 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     if (localStreamRef.current) {
       const videoTracks = localStreamRef.current.getVideoTracks();
 
+      if (videoTracks.length === 0) {
+        console.warn("⚠️ No video tracks available");
+        return;
+      }
+
       videoTracks.forEach((track) => {
         track.enabled = !track.enabled;
         console.log(`📹 Video track ${track.enabled ? "enabled" : "disabled"}`);
       });
 
-      // Force state update to trigger re-render
+      const newVideoState = !callState.isLocalVideoEnabled;
+
+      // Emit video state change to the other peer via socket
+      if (socket && callState.callReceiver) {
+        if (callState.callMode === "channel") {
+          socket.emit("videoStateChanged", {
+            channelId: callState.callReceiver._id,
+            callRoomId: callRoomIdRef.current,
+            isVideoEnabled: newVideoState,
+          });
+        } else {
+          socket.emit("videoStateChanged", {
+            receiverId: callState.callReceiver._id,
+            isVideoEnabled: newVideoState,
+          });
+        }
+      }
+
       setCallState((prev) => {
-        const newVideoState = !prev.isLocalVideoEnabled;
         console.log(`🔄 Updating video state to: ${newVideoState}`);
 
         return {
@@ -818,21 +872,56 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         };
       });
     }
-  }, []);
+  }, [
+    socket,
+    callState.callReceiver,
+    callState.callMode,
+    callState.isLocalVideoEnabled,
+  ]);
 
   const toggleAudio = useCallback(() => {
     if (localStreamRef.current) {
       const audioTracks = localStreamRef.current.getAudioTracks();
+
+      if (audioTracks.length === 0) {
+        console.warn("⚠️ No audio tracks available");
+        return;
+      }
+
       audioTracks.forEach((track) => {
         track.enabled = !track.enabled;
+        console.log(`🎤 Audio track ${track.enabled ? "enabled" : "disabled"}`);
       });
+
+      const newAudioState = !callState.isLocalAudioEnabled;
+
+      // Emit audio state change to the other peer via socket
+      if (socket && callState.callReceiver) {
+        if (callState.callMode === "channel") {
+          socket.emit("audioStateChanged", {
+            channelId: callState.callReceiver._id,
+            callRoomId: callRoomIdRef.current,
+            isAudioEnabled: newAudioState,
+          });
+        } else {
+          socket.emit("audioStateChanged", {
+            receiverId: callState.callReceiver._id,
+            isAudioEnabled: newAudioState,
+          });
+        }
+      }
 
       setCallState((prev) => ({
         ...prev,
-        isLocalAudioEnabled: !prev.isLocalAudioEnabled,
+        isLocalAudioEnabled: newAudioState,
       }));
     }
-  }, []);
+  }, [
+    socket,
+    callState.callReceiver,
+    callState.callMode,
+    callState.isLocalAudioEnabled,
+  ]);
 
   const value: CallContextType = {
     callState,
