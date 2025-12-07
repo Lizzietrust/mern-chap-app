@@ -217,6 +217,64 @@ const setupSocket = (server) => {
   };
 
   const setupCallHandlers = (socket) => {
+    // Video state change handler
+    socket.on("videoStateChanged", (data) => {
+      const { receiverId, channelId, callRoomId, isVideoEnabled } = data;
+      console.log(
+        `📹 Video state changed by ${socket.userId}: ${isVideoEnabled}`
+      );
+
+      if (channelId && callRoomId) {
+        // Channel call - broadcast to all in the call room
+        socket.to(callRoomId).emit("remoteVideoStateChanged", {
+          userId: socket.userId,
+          isVideoEnabled,
+        });
+        console.log(`📤 Broadcasted video state to call room ${callRoomId}`);
+      } else if (receiverId) {
+        // Direct call - send to specific receiver
+        const receiverSocket = connectedUsers.get(receiverId);
+        if (receiverSocket) {
+          socket.to(receiverSocket.socketId).emit("remoteVideoStateChanged", {
+            userId: socket.userId,
+            isVideoEnabled,
+          });
+          console.log(`📤 Sent video state to ${receiverId}`);
+        } else {
+          console.log(`⚠️ Receiver ${receiverId} is not connected`);
+        }
+      }
+    });
+
+    // Audio state change handler
+    socket.on("audioStateChanged", (data) => {
+      const { receiverId, channelId, callRoomId, isAudioEnabled } = data;
+      console.log(
+        `🎤 Audio state changed by ${socket.userId}: ${isAudioEnabled}`
+      );
+
+      if (channelId && callRoomId) {
+        // Channel call - broadcast to all in the call room
+        socket.to(callRoomId).emit("remoteAudioStateChanged", {
+          userId: socket.userId,
+          isAudioEnabled,
+        });
+        console.log(`📤 Broadcasted audio state to call room ${callRoomId}`);
+      } else if (receiverId) {
+        // Direct call - send to specific receiver
+        const receiverSocket = connectedUsers.get(receiverId);
+        if (receiverSocket) {
+          socket.to(receiverSocket.socketId).emit("remoteAudioStateChanged", {
+            userId: socket.userId,
+            isAudioEnabled,
+          });
+          console.log(`📤 Sent audio state to ${receiverId}`);
+        } else {
+          console.log(`⚠️ Receiver ${receiverId} is not connected`);
+        }
+      }
+    });
+
     // Direct call handler
     socket.on("start_call", (data) => {
       const { receiverId, type, caller, offer } = data;
