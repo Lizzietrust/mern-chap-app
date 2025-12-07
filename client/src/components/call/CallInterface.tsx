@@ -95,7 +95,25 @@ export const CallInterface: React.FC = () => {
         )
         .catch((e) => {
           console.log("❌ Local video play error:", e);
-          console.log("Error details:", e.name, e.message);
+
+          const target = e.target as HTMLVideoElement;
+          if (target.error) {
+            console.log("Error code:", target.error.code);
+            console.log("Error message:", target.error.message);
+
+            // Decode error codes
+            const errorMessages: Record<number, string> = {
+              1: "MEDIA_ERR_ABORTED - The user canceled the video",
+              2: "MEDIA_ERR_NETWORK - A network error occurred",
+              3: "MEDIA_ERR_DECODE - The video couldn't be decoded",
+              4: "MEDIA_ERR_SRC_NOT_SUPPORTED - The video format is not supported",
+            };
+
+            console.log(
+              "Error meaning:",
+              errorMessages[target.error.code] || "Unknown error"
+            );
+          }
         });
     } else if (!callState.localStream && localVideoRef.current) {
       console.log("❌ No local stream, clearing video");
@@ -161,6 +179,7 @@ export const CallInterface: React.FC = () => {
     remoteStream,
     isLocalVideoEnabled,
     isLocalAudioEnabled,
+    isRemoteVideoEnabled,
     participants,
     callStatus,
   } = callState;
@@ -459,10 +478,10 @@ export const CallInterface: React.FC = () => {
           <div className="h-full flex flex-col">
             {/* Video Grid - Always show both local and remote for one-on-one calls */}
             <div className={`grid ${getGridCols()} gap-4 flex-1`}>
-              {/* For one-on-one calls: ALWAYS show remote video if available */}
+              {/* For one-on-one calls: Show remote video */}
               {!isChannelCall && callReceiver && (
                 <div className="relative bg-gray-800 rounded-xl overflow-hidden group">
-                  {remoteStream ? (
+                  {remoteStream && isRemoteVideoEnabled ? (
                     <video
                       autoPlay
                       playsInline
@@ -485,12 +504,19 @@ export const CallInterface: React.FC = () => {
                       }}
                     />
                   ) : (
-                    // Fallback UI when no remote video stream yet
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20 flex items-center justify-center">
-                      <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center">
-                        <span className="text-3xl text-white font-bold">
-                          {callerInfo.initials}
-                        </span>
+                    // Fallback UI when remote video is off or no stream
+                    <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center mx-auto mb-3">
+                          <span className="text-3xl text-white font-bold">
+                            {callerInfo.initials}
+                          </span>
+                        </div>
+                        <p className="text-gray-400">
+                          {remoteStream && !isRemoteVideoEnabled
+                            ? "Camera is off"
+                            : "Connecting..."}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -502,11 +528,19 @@ export const CallInterface: React.FC = () => {
                       <div className="flex items-center gap-1">
                         <div
                           className={`w-2 h-2 rounded-full ${
-                            remoteStream ? "bg-green-500" : "bg-yellow-500"
+                            remoteStream && isRemoteVideoEnabled
+                              ? "bg-green-500"
+                              : remoteStream
+                              ? "bg-yellow-500"
+                              : "bg-gray-500"
                           }`}
                         />
                         <span className="text-xs text-gray-300">
-                          {remoteStream ? "Live" : "Connecting..."}
+                          {remoteStream && isRemoteVideoEnabled
+                            ? "Live"
+                            : remoteStream
+                            ? "Video off"
+                            : "Connecting..."}
                         </span>
                       </div>
                     </div>
@@ -528,6 +562,7 @@ export const CallInterface: React.FC = () => {
                       className="relative bg-gray-800 rounded-xl overflow-hidden group"
                     >
                       {/* For channel calls, you'd need to handle multiple remote streams */}
+                      {/* Currently showing placeholder - you'd need to handle multiple remote streams */}
                       <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20 flex items-center justify-center">
                         <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center">
                           <span className="text-3xl text-white font-bold">
@@ -550,12 +585,13 @@ export const CallInterface: React.FC = () => {
                   );
                 })}
 
+              {/* Local video preview */}
               <div className="relative bg-gray-800 rounded-xl overflow-hidden border-2 border-blue-500">
                 {localStream && isLocalVideoEnabled ? (
                   <video
                     autoPlay
                     playsInline
-                    muted={false}
+                    muted={true}
                     ref={localVideoRef}
                     className="w-full h-full object-cover bg-black"
                     onError={(e) => {
@@ -595,7 +631,7 @@ export const CallInterface: React.FC = () => {
                       console.log(
                         "✅ Local video can play - CALLER'S SELF-VIEW"
                       );
-                      // Try to play if it's paused
+
                       if (localVideoRef.current?.paused) {
                         localVideoRef.current
                           .play()
@@ -641,8 +677,7 @@ export const CallInterface: React.FC = () => {
                 Local video enabled: {isLocalVideoEnabled ? "✅" : "❌"}
               </div>
               <div>
-                Remote video enabled:{" "}
-                {callState.isRemoteVideoEnabled ? "✅" : "❌"}
+                Remote video enabled: {isRemoteVideoEnabled ? "✅" : "❌"}
               </div>
               <div>
                 Caller role:{" "}
