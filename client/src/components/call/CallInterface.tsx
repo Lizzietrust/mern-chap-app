@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useCallContext } from "../../hooks/useCallContext";
+import { useApp } from "../../contexts/appcontext/index";
 import type { ChannelCallData } from "../../types/call";
 import type { User } from "../../types/types";
 import {
@@ -48,6 +49,8 @@ export const CallInterface: React.FC = () => {
     joinCall,
   } = useCallContext();
 
+  const { state: appState } = useApp();
+
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showParticipants, setShowParticipants] = useState(true);
@@ -60,6 +63,16 @@ export const CallInterface: React.FC = () => {
 
   const shouldShowCallInterface =
     callState.isIncomingCall || callState.isOutgoingCall || callState.isOnCall;
+
+  // Get current user info
+  const currentUser = appState.user;
+  const currentUserAvatar = currentUser?.image || currentUser?.avatar || null;
+  const currentUserName = currentUser
+    ? currentUser.firstName && currentUser.lastName
+      ? `${currentUser.firstName} ${currentUser.lastName}`
+      : currentUser.name || currentUser.firstName || "You"
+    : "You";
+  const currentUserInitials = currentUserName.charAt(0).toUpperCase();
 
   // Timer for call duration
   useEffect(() => {
@@ -273,7 +286,7 @@ export const CallInterface: React.FC = () => {
       const userName = getUserName(userData);
       return {
         name: userName,
-        avatar: userData.avatar || null,
+        avatar: userData.image || userData.avatar || null,
         initials: userName.charAt(0).toUpperCase(),
         participants: 1,
         isChannel: false,
@@ -282,6 +295,8 @@ export const CallInterface: React.FC = () => {
   };
 
   const callerInfo = getCallerInfo();
+
+  console.log({ callerInfo });
 
   const getCallStatusText = () => {
     if (isIncomingCall) {
@@ -338,16 +353,16 @@ export const CallInterface: React.FC = () => {
       <div className="absolute top-0 left-0 right-0 p-4 z-20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-              {callerInfo.avatar ? (
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center overflow-hidden">
+              {currentUserAvatar ? (
                 <img
-                  src={callerInfo.avatar}
-                  alt={callerInfo.name}
-                  className="w-full h-full rounded-full object-cover"
+                  src={currentUserAvatar}
+                  alt="You"
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 <span className="text-white font-semibold">
-                  {callerInfo.initials}
+                  {currentUserInitials}
                 </span>
               )}
             </div>
@@ -507,10 +522,18 @@ export const CallInterface: React.FC = () => {
                     // Fallback UI when remote video is off or no stream
                     <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
                       <div className="text-center">
-                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center mx-auto mb-3">
-                          <span className="text-3xl text-white font-bold">
-                            {callerInfo.initials}
-                          </span>
+                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center mx-auto mb-3 overflow-hidden">
+                          {callerInfo.avatar ? (
+                            <img
+                              src={callerInfo.avatar}
+                              alt={callerInfo.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-3xl text-white font-bold">
+                              {callerInfo.initials}
+                            </span>
+                          )}
                         </div>
                         <p className="text-gray-400">
                           {remoteStream && !isRemoteVideoEnabled
@@ -555,6 +578,8 @@ export const CallInterface: React.FC = () => {
                   const participantInitials = participantName
                     .charAt(0)
                     .toUpperCase();
+                  const participantAvatar =
+                    participant.image || participant.avatar || null;
 
                   return (
                     <div
@@ -564,10 +589,18 @@ export const CallInterface: React.FC = () => {
                       {/* For channel calls, you'd need to handle multiple remote streams */}
                       {/* Currently showing placeholder - you'd need to handle multiple remote streams */}
                       <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20 flex items-center justify-center">
-                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center">
-                          <span className="text-3xl text-white font-bold">
-                            {participantInitials}
-                          </span>
+                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center overflow-hidden">
+                          {participantAvatar ? (
+                            <img
+                              src={participantAvatar}
+                              alt={participantName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-3xl text-white font-bold">
+                              {participantInitials}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
@@ -652,14 +685,20 @@ export const CallInterface: React.FC = () => {
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
                     <div className="text-center">
-                      <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center mx-auto mb-3">
-                        <span className="text-2xl text-white font-bold">
-                          You
-                        </span>
+                      <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center mx-auto mb-3 overflow-hidden">
+                        {currentUserAvatar ? (
+                          <img
+                            src={currentUserAvatar}
+                            alt="You"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-3xl text-white font-bold">
+                            {currentUserInitials}
+                          </span>
+                        )}
                       </div>
-                      <p className="text-gray-400">
-                        {isLocalVideoEnabled ? "Camera is on" : "Camera is off"}
-                      </p>
+                      <p className="text-gray-400">Camera is off</p>
                     </div>
                   </div>
                 )}
@@ -670,7 +709,7 @@ export const CallInterface: React.FC = () => {
             </div>
 
             {/* Debug info */}
-            <div className="absolute bottom-4 right-4 text-xs text-gray-400 bg-black/50 p-2 rounded">
+            {/* <div className="absolute bottom-4 right-4 text-xs text-gray-400 bg-black/50 p-2 rounded">
               <div>Local stream: {localStream ? "✅" : "❌"}</div>
               <div>Remote stream: {remoteStream ? "✅" : "❌"}</div>
               <div>
@@ -689,7 +728,7 @@ export const CallInterface: React.FC = () => {
               </div>
               <div>Call type: {isChannelCall ? "Channel" : "One-on-One"}</div>
               <div>Video count: {videoCount}</div>
-            </div>
+            </div> */}
 
             {/* Participants Sidebar */}
             {isChannelCall && showParticipants && (
@@ -705,10 +744,18 @@ export const CallInterface: React.FC = () => {
                 </div>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-800/50">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                      <span className="text-xs text-white font-semibold">
-                        You
-                      </span>
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center overflow-hidden">
+                      {currentUserAvatar ? (
+                        <img
+                          src={currentUserAvatar}
+                          alt="You"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs text-white font-semibold">
+                          {currentUserInitials}
+                        </span>
+                      )}
                     </div>
                     <span className="text-white text-sm">You (Host)</span>
                     <Crown className="w-4 h-4 text-yellow-500 ml-auto" />
@@ -718,15 +765,26 @@ export const CallInterface: React.FC = () => {
                     const participantInitials = participantName
                       .charAt(0)
                       .toUpperCase();
+                    const participantAvatar =
+                      participant.image || participant.avatar || null;
+
                     return (
                       <div
                         key={participant._id}
                         className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-800/50 transition-colors"
                       >
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-blue-500 flex items-center justify-center">
-                          <span className="text-xs text-white font-semibold">
-                            {participantInitials}
-                          </span>
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-blue-500 flex items-center justify-center overflow-hidden">
+                          {participantAvatar ? (
+                            <img
+                              src={participantAvatar}
+                              alt={participantName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-xs text-white font-semibold">
+                              {participantInitials}
+                            </span>
+                          )}
                         </div>
                         <span className="text-gray-300 text-sm">
                           {participantName}
@@ -747,7 +805,7 @@ export const CallInterface: React.FC = () => {
           <div className="h-full flex flex-col items-center justify-center">
             <div className="relative">
               <div className="absolute inset-0 animate-ping bg-gradient-to-br from-blue-500/20 to-purple-600/20 rounded-full" />
-              <div className="w-48 h-48 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center relative">
+              <div className="w-48 h-48 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center relative overflow-hidden">
                 {callerInfo.avatar ? (
                   <img
                     src={callerInfo.avatar}
@@ -799,7 +857,7 @@ export const CallInterface: React.FC = () => {
           <div className="h-full flex flex-col items-center justify-center">
             <div className="relative mb-8">
               <div className="absolute inset-0 animate-ping bg-gradient-to-br from-blue-500/20 to-purple-600/20 rounded-full" />
-              <div className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center relative">
+              <div className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center relative overflow-hidden">
                 {callerInfo.avatar ? (
                   <img
                     src={callerInfo.avatar}
@@ -870,15 +928,26 @@ export const CallInterface: React.FC = () => {
                     const participantInitials = participantName
                       .charAt(0)
                       .toUpperCase();
+                    const participantAvatar =
+                      participant.image || participant.avatar || null;
+
                     return (
                       <div
                         key={participant._id}
                         className="flex flex-col items-center group"
                       >
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-blue-500 flex items-center justify-center relative">
-                          <span className="text-white font-semibold">
-                            {participantInitials}
-                          </span>
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-blue-500 flex items-center justify-center relative overflow-hidden">
+                          {participantAvatar ? (
+                            <img
+                              src={participantAvatar}
+                              alt={participantName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-white font-semibold">
+                              {participantInitials}
+                            </span>
+                          )}
                           <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-gray-900" />
                         </div>
                         <span className="text-xs text-gray-400 mt-1 max-w-16 truncate">
