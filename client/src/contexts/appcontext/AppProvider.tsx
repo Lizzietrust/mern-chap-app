@@ -31,7 +31,9 @@ export function AppProvider({ children }: AppProviderProps) {
   const [socket, setSocket] = useState<Socket | null>(null);
 
   useEffect(() => {
-    const newSocket = io("http://localhost:5000");
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    const newSocket = io(apiUrl);
 
     newSocket.on("connect", () => {
       console.log("Connected to server with ID:", newSocket.id);
