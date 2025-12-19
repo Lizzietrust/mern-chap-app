@@ -115,6 +115,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
   const addLocalStreamToPeerConnection = useCallback((stream: MediaStream) => {
     if (!peerConnection.current) return;
 
+    // Clear existing senders first to avoid duplicate tracks
+    const senders = peerConnection.current.getSenders();
+    senders.forEach((sender) => {
+      if (sender.track) {
+        peerConnection.current!.removeTrack(sender);
+      }
+    });
+
+    // Add new tracks
     stream.getTracks().forEach((track) => {
       peerConnection.current!.addTrack(track, stream);
     });
@@ -837,12 +846,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         return;
       }
 
+      const wasEnabled = videoTracks[0].enabled;
+      const newVideoState = !wasEnabled;
+
       videoTracks.forEach((track) => {
-        track.enabled = !track.enabled;
+        track.enabled = newVideoState;
         console.log(`📹 Video track ${track.enabled ? "enabled" : "disabled"}`);
       });
-
-      const newVideoState = !callState.isLocalVideoEnabled;
 
       // Emit video state change to the other peer via socket
       if (socket && callState.callReceiver) {
@@ -860,6 +870,43 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       }
 
+      // FIXED: Handle peer connection renegotiation when turning video back on
+      if (newVideoState && peerConnection.current && callState.isOnCall) {
+        console.log("🔄 Video turned back on - checking sender");
+
+        // Get existing video sender
+        const senders = peerConnection.current.getSenders();
+        const videoSender = senders.find(
+          (sender) => sender.track && sender.track.kind === "video"
+        );
+
+        if (videoSender && videoTracks[0]) {
+          console.log("✅ Found video sender, replacing track");
+          // Replace the track with the newly enabled one
+          videoSender
+            .replaceTrack(videoTracks[0])
+            .then(() => {
+              console.log("✅ Video track replaced successfully");
+            })
+            .catch((error) => {
+              console.error("❌ Error replacing video track:", error);
+            });
+        } else if (videoTracks[0]) {
+          console.log("⚠️ No video sender found, adding new track");
+          // If no video sender exists, add the track to the peer connection
+          try {
+            peerConnection.current.addTrack(
+              videoTracks[0],
+              localStreamRef.current!
+            );
+            console.log("✅ Video track added to peer connection");
+          } catch (error) {
+            console.error("❌ Error adding video track:", error);
+          }
+        }
+      }
+
+      // Force state update to trigger re-render
       setCallState((prev) => {
         console.log(`🔄 Updating video state to: ${newVideoState}`);
 
@@ -876,7 +923,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     socket,
     callState.callReceiver,
     callState.callMode,
-    callState.isLocalVideoEnabled,
+    callState.isOnCall,
   ]);
 
   const toggleAudio = useCallback(() => {
